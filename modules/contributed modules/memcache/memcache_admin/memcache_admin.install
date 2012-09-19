@@ -1,0 +1,13 @@
+<?php
+
+/**
+ * @file update functions for memcache_admin.
+ */
+
+/**
+ * Flush caches and rebuild menu to allow new stats pages to appear.
+ */
+function memcache_admin_update_7001() {
+  drupal_flush_all_caches();
+  menu_rebuild();
+}

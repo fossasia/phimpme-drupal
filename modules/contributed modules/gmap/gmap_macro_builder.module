@@ -1,0 +1,198 @@
+<?php
+
+/**
+ * @file
+ * GMap Macro Builder
+ *
+ * A dynamic interface to assist in the creation of gmap macro tags.
+ */
+
+/**
+ * Implemenation of hook_help().
+ */
+function gmap_macro_builder_help($path, $arg) {
+  switch ($path) {
+    case 'map/macro':
+      return t('You can use this interface to create a map macro suitable for pasting into a node or any other place that accepts a GMap macro.');
+  }
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function gmap_macro_builder_permission() {
+  return array(
+    'create gmap macro' =>  array(
+      'title' => t('Create gmap macro'),
+      'description' => t('Allows user to create a gmap macro for insertion into content.'),
+    )
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function gmap_macro_builder_menu() {
+  $items['map/macro'] = array(
+    'type' => MENU_NORMAL_ITEM,
+    'title' => 'Build a GMap macro',
+    'access arguments' => array('create gmap macro'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('gmap_macro_builder_form'),
+  );
+  return $items;
+}
+
+/**
+ * Macro builder form.
+ * @param &$form_state
+ *   The $form_state array.
+ * @param $settings
+ *   Additional settings to apply to the macro map.
+ * @param $hide
+ *   Fields to hide from the map. (See code for details.)
+ *   Suggestions for better ways of doing this welcome!
+ */
+function gmap_macro_builder_form($form, &$form_state, $settings = array(), $hide = array()) {
+  $path = drupal_get_path('module', 'gmap');
+
+  $form['macroform'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Gmap macro creation'),
+    '#theme' => 'gmap_macro',
+  );
+
+  $form['macroform']['mapdiv'] = array(
+    '#type' => 'gmap',
+    '#map' => 'macro_map',
+    '#settings' => array_merge(array(
+      'points' => array(),
+      'pointsOverlays' => array(),
+      'behavior' => array(
+        'dynmarkers' => TRUE,
+      ),
+    ), $settings),
+  );
+
+  $defaults = array_merge(gmap_defaults(), $settings);
+
+  $form['macroform']['overlayedit'] = array(
+    '#type' => 'gmap_overlay_edit',
+    '#map' => 'macro_map',
+  );
+  $form['macroform']['mapid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Map id attribute'),
+    '#description' => t('If you need to access this map from a script, you can assign a map ID here.'),
+    '#default_value' => '',
+  );
+  gmap_widget_setup($form['macroform']['mapid'], 'mapid', 'macro_map');
+
+  // @@@ TODO: Roll this next section into an element, it's duplicated from the settings ui.
+  $baselayers = array();
+
+  gmap_module_invoke('baselayers', $baselayers);
+
+  $options = array();
+  foreach ($baselayers as $name => $layers) {
+    $options[$name] = array();
+    foreach ($layers as $k => $v) {
+      // @@@TODO: Only show the enabled ones?
+      $options[$name][$k] = $v['title'];
+    }
+  }
+
+  $form['macroform']['maptype'] = array(
+    '#type' => 'select',
+    '#title' => t('Map type'),
+    '#default_value' => $defaults['maptype'],
+    '#options' => $options,
+  );
+  gmap_widget_setup($form['macroform']['maptype'], 'maptype', 'macro_map');
+
+  // @@@TODO: We need to allow choosing an alternate set of baselayers...
+
+  $form['macroform']['controltype'] = array(
+    '#type' => 'select',
+    '#title' => t('Controls'),
+    '#options' => drupal_map_assoc(array('None', 'Small', 'Large')),
+    '#required' => FALSE,
+    '#default_value' => $defaults['controltype'],
+  );
+  gmap_widget_setup($form['macroform']['controltype'], 'controltype', 'macro_map');
+
+  $form['macroform']['address'] = array(
+    '#type' => 'gmap_address',
+    '#map' => 'macro_map',
+    '#title' => t('Address'),
+    '#default_value' => '',
+  );
+  $form['macroform']['latlong'] = array(
+    '#type' => 'gmap_latlon',
+    '#map' => 'macro_map',
+    '#title' => t('The Latitude and Longitude of the centre of the map'),
+    '#default_value' => $defaults['latlong'],
+    '#size' => 50,
+  );
+  $form['macroform']['width'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Map width'),
+    '#default_value' => $defaults['width'],
+    '#size' => 25,
+    '#maxlength' => 25,
+    '#description' => t('The map width, as a CSS length or percentage. Examples: <em>50px</em>, <em>5em</em>, <em>2.5in</em>, <em>95%</em>'),
+  );
+  gmap_widget_setup($form['macroform']['width'], 'width', 'macro_map');
+
+  $form['macroform']['height'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Map height'),
+    '#default_value' => $defaults['height'],
+    '#size' => 25,
+    '#maxlength' => 25,
+    '#description' => t('The map height, as a CSS length or percentage. Examples: <em>50px</em>, <em>5em</em>, <em>2.5in</em>, <em>95%</em>'),
+  );
+  gmap_widget_setup($form['macroform']['height'], 'height', 'macro_map');
+
+  $form['macroform']['alignment'] = array(
+    '#type' => 'select',
+    '#title' => t('Alignment'),
+    '#options' => drupal_map_assoc(array('None', 'Right', 'Left', 'Center')),
+    '#attached' => array(
+      'js' => array(
+        "$path/js/align.js" => array('weight' => 2),
+      ),
+    ),
+  );
+  gmap_widget_setup($form['macroform']['alignment'], 'align', 'macro_map');
+
+  $form['macroform']['zoom'] = array(
+    '#type' => 'select',
+    '#title' => t('The current magnification of the map'),
+    '#default_value' => $defaults['zoom'],
+    '#options' => drupal_map_assoc(range(0, 17)),
+  );
+  gmap_widget_setup($form['macroform']['zoom'], 'zoom', 'macro_map');
+
+  $form['macroform']['macro'] = array(
+    '#type' => 'gmap_macrotext',
+    '#map' => 'macro_map',
+    '#default_value' => '',
+    '#title' => t('Macro text'),
+  );
+
+  foreach ($hide as $field => $mode) {
+    if (isset($form['macroform'][$field])) {
+      if ($mode == 1) {
+        $form['macroform'][$field]['#type'] = 'hidden';
+        $form['macroform'][$field]['#value'] = $form['macroform'][$field]['#default_value'];
+      }
+      elseif ($mode == 2) {
+        $form['macroform'][$field]['#prefix'] = '<div style="display: none;">';
+        $form['macroform'][$field]['#suffix'] = '</div>';
+      }
+    }
+  }
+
+  return $form;
+}

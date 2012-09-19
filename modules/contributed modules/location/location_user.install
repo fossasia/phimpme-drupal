@@ -1,0 +1,14 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the location_user module.
+ */
+
+/**
+ * Implentation of hook_uninstall().
+ */
+function location_user_uninstall() {
+  // Delete user settings.
+  variable_del('location_settings_user');
+}

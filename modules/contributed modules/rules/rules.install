@@ -1,0 +1,436 @@
+<?php
+
+/**
+ * @file Rules - Installation file.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function rules_install() {
+  module_load_include('inc', 'rules', 'modules/events');
+  // Set the modules' weight to 20, see
+  // http://drupal.org/node/445084#comment-1533280 for the reasoning.
+  db_query("UPDATE {system} SET weight = 20 WHERE name = 'rules'");
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function rules_uninstall() {
+  variable_del('rules_empty_sets');
+  variable_del('rules_debug');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function rules_schema() {
+  $schema['rules_config'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'The internal identifier for any configuration.',
+      ),
+      'name' => array(
+        'type' => 'varchar',
+        'length' => '64',
+        'not null' => TRUE,
+        'description' => 'The name of the configuration.',
+      ),
+      'label' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'description' => 'The label of the configuration.',
+        'default' => 'unlabeled',
+      ),
+     'plugin' => array(
+        'type' => 'varchar',
+        'length' => 127,
+        'not null' => TRUE,
+        'description' => 'The name of the plugin of this configuration.',
+      ),
+      'active' => array(
+        'description' => 'Boolean indicating whether the configuration is active. Usage depends on how the using module makes use of it.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Weight of the configuration. Usage depends on how the using module makes use of it.',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        // Set the default to ENTITY_CUSTOM without using the constant as it is
+        // not safe to use it at this point.
+        'default' => 0x01,
+        'size' => 'tiny',
+        'description' => 'The exportable status of the entity.',
+      ),
+      'dirty' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Dirty configurations fail the integrity check, e.g. due to missing dependencies.',
+      ),
+      'module' => array(
+        'description' => 'The name of the providing module if the entity has been defined in code.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+      ),
+      'access_exposed' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Whether to use a permission to control access for using components.',
+      ),
+      'data' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+        'description' => 'Everything else, serialized.',
+      ),
+    ),
+    'primary key' => array('id'),
+    'unique keys' => array(
+      'name' => array('name'),
+    ),
+    'indexes' => array(
+      'plugin' => array('plugin'),
+    ),
+  );
+  $schema['rules_trigger'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The primary identifier of the configuration.',
+      ),
+      'event' => array(
+        'type' => 'varchar',
+        'length' => '127',
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The name of the event on which the configuration should be triggered.',
+      ),
+    ),
+    'primary key' => array('id', 'event'),
+    'foreign keys' => array(
+      'id' => array('rules_config' => 'id'),
+    ),
+  );
+  $schema['rules_tags'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The primary identifier of the configuration.',
+      ),
+      'tag' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'description' => 'The tag string associated with this configuration',
+      ),
+    ),
+    'primary key' => array('id', 'tag'),
+    'foreign keys' => array(
+      'id' => array('rules_config' => 'id'),
+    ),
+  );
+  $schema['rules_dependencies'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The primary identifier of the configuration.',
+      ),
+      'module' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'description' => 'The name of the module that is required for the configuration.',
+      ),
+    ),
+    'primary key' => array('id', 'module'),
+    'indexes' => array(
+      'module' => array('module'),
+    ),
+    'foreign keys' => array(
+      'id' => array('rules_config' => 'id'),
+    ),
+  );
+  $schema['cache_rules'] = drupal_get_schema_unprocessed('system', 'cache');
+  $schema['cache_rules']['description'] = 'Cache table for the rules engine to store configured items.';
+  return $schema;
+}
+
+/**
+ * Upgrade from Rules 6.x-1.x to 7.x.
+ */
+function rules_update_7200() {
+  // Create the new db tables first.
+  $schema['rules_config'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'The internal identifier for any configuration.',
+      ),
+      'name' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'description' => 'The name of the configuration.',
+      ),
+      'label' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'description' => 'The label of the configuration.',
+        'default' => 'unlabeled',
+      ),
+     'plugin' => array(
+        'type' => 'varchar',
+        'length' => 127,
+        'not null' => TRUE,
+        'description' => 'The name of the plugin of this configuration.',
+      ),
+      'active' => array(
+        'description' => 'Boolean indicating whether the configuration is active. Usage depends on how the using module makes use of it.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Weight of the configuration. Usage depends on how the using module makes use of it.',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        // Set the default to ENTITY_CUSTOM without using the constant as it is
+        // not safe to use it at this point.
+        'default' => 0x01,
+        'size' => 'tiny',
+        'description' => 'The exportable status of the entity.',
+      ),
+      'module' => array(
+        'description' => 'The name of the providing module if the entity has been defined in code.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+      ),
+      'data' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+        'description' => 'Everything else, serialized.',
+      ),
+    ),
+    'primary key' => array('id'),
+    'unique keys' => array(
+      'name' => array('name'),
+    ),
+  );
+  $schema['rules_trigger'] = array(
+    'fields' => array(
+      'id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The primary identifier of the configuration.',
+      ),
+      'event' => array(
+        'type' => 'varchar',
+        'length' => '127',
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The name of the event on which the configuration should be triggered.',
+      ),
+    ),
+    'primary key' => array('id', 'event'),
+    'foreign keys' => array(
+      'id' => array('rules_config' => 'id'),
+    ),
+  );
+  db_create_table('rules_config', $schema['rules_config']);
+  db_create_table('rules_trigger', $schema['rules_trigger']);
+  // The cache table already exists, but changed. So re-create it.
+  db_drop_table('cache_rules');
+  $schema['cache_rules'] = drupal_get_schema_unprocessed('system', 'cache');
+  $schema['cache_rules']['description'] = 'Cache table for the rules engine to store configured items.';
+  db_create_table('cache_rules', $schema['cache_rules']);
+  // Remove deprecated variables.
+  variable_del('rules_inactive_sets');
+  variable_del('rules_show_fixed');
+  variable_del('rules_hide_token_message');
+  variable_del('rules_counter');
+
+  return t('The database tables for Rules 2.x have been created. The old tables from Rules 1.x are still available and contain your rules, which are not updated yet.');
+}
+
+/**
+ * Add in the exportable entity db columns as required by the entity API.
+ */
+function rules_update_7201() {
+  // Previously this was update 7200, so check whether we need to run it really.
+  // The update has been moved as 7200 needs to be the 6.x-7.x upgrade.
+  if (!db_field_exists('rules_config', 'status')) {
+    db_add_field('rules_config', 'status', array(
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => ENTITY_CUSTOM,
+      'size' => 'tiny',
+      'description' => 'The exportable status of the entity.',
+    ));
+    // The module column did already exist before.
+  }
+}
+
+/**
+ * Add an index for the rules configuration plugin column.
+ */
+function rules_update_7202() {
+  db_add_index('rules_config', 'plugin', array('plugin'));
+}
+
+/**
+ * Fix the length of the rules_config.name column.
+ */
+function rules_update_7203() {
+  db_drop_unique_key('rules_config', 'name');
+  $keys = array(
+    'unique keys' => array(
+      'name' => array('name'),
+    ),
+  );
+  db_change_field('rules_config', 'name', 'name', array(
+    'type' => 'varchar',
+    'length' => '64',
+    'not null' => TRUE,
+    'description' => 'The name of the configuration.',
+  ), $keys);
+}
+
+/**
+ * Add a table for rules-config tags.
+ */
+function rules_update_7204() {
+  if (!db_table_exists('rules_tags')) {
+    $schema['rules_tags'] = array(
+      'fields' => array(
+        'id' => array(
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'description' => 'The primary identifier of the configuration.',
+        ),
+        'tag' => array(
+          'type' => 'varchar',
+          'length' => '255',
+          'not null' => TRUE,
+          'description' => 'The tag string associated with this configuration',
+        ),
+      ),
+      'primary key' => array('id', 'tag'),
+      'foreign keys' => array(
+        'id' => array('rules_config' => 'id'),
+      ),
+    );
+    db_create_table('rules_tags', $schema['rules_tags']);
+  }
+}
+
+/**
+ * Add the rules_dependencies table and the rules_config.dirty column.
+ */
+function rules_update_7205() {
+  if (!db_table_exists('rules_dependencies')) {
+    $schema['rules_dependencies'] = array(
+      'fields' => array(
+        'id' => array(
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'description' => 'The primary identifier of the configuration.',
+        ),
+        'module' => array(
+          'type' => 'varchar',
+          'length' => '255',
+          'not null' => TRUE,
+          'description' => 'The name of the module that is required for the configuration.',
+        ),
+      ),
+      'primary key' => array('id', 'module'),
+      'indexes' => array(
+        'module' => array('module'),
+      ),
+      'foreign keys' => array(
+        'id' => array('rules_config' => 'id'),
+      ),
+    );
+    db_create_table('rules_dependencies', $schema['rules_dependencies']);
+  }
+  if (!db_field_exists('rules_config', 'dirty')) {
+    db_add_field('rules_config', 'dirty', array(
+      'type' => 'int',
+      'not null' => TRUE,
+      'default' => 0,
+      'size' => 'tiny',
+    ));
+  }
+}
+
+/**
+ * Flush all caches.
+ */
+function rules_update_7206() {
+  // The update system is going to flush all caches anyway, so nothing to do.
+}
+
+/**
+ * Flush all caches.
+ */
+function rules_update_7207() {
+  // The update system is going to flush all caches anyway, so nothing to do.
+}
+
+/**
+ * Flush all caches to update the data_is_empty condition info.
+ */
+function rules_update_7208() {
+  // The update system is going to flush all caches anyway, so nothing to do.
+}
+
+/**
+ * Creates a flag that enables a permission for using components.
+ */
+function rules_update_7209() {
+  // Create a access exposed flag column.
+  db_add_field('rules_config', 'access_exposed', array(
+    'type' => 'int',
+    'not null' => TRUE,
+    'default' => 0,
+    'size' => 'tiny',
+    'description' => 'Whether to use a permission to control access for using components.',
+  ));
+}

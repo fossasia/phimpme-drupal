@@ -1,0 +1,242 @@
+<?php
+/**
+ * @file
+ * Variable API module - Realms
+ */
+
+/**
+ * Implementation of hook_boot()
+ * 
+ * We set variable realm and language code as early as possible in the page request.
+ */
+function variable_realm_boot() {
+  variable_realm();
+  variable_realm_status('global', 'default');
+  variable_realm_weight('global', 0);
+}
+
+/**
+ * Get variable realm data by reference.
+ * 
+ * The first time this function is inoked we initialize the realm system and store global variables
+ * 
+ * @param $realm
+ *   Optional realm to get
+ * @param $key
+ *   Optional realm key to get
+ */
+function &variable_realm($realm = NULL, $key = NULL) {
+  static $variable_realm;
+  if (!isset($variable_realm)) {
+    $variable_realm = &drupal_static(__FUNCTION__);
+    $variable_realm['global']['default'] = $GLOBALS['conf'];
+  }
+  if ($realm && $key) {
+    if (!isset($variable_realm[$realm][$key])) {
+      $variable_realm[$realm][$key] = array();
+    }
+    return $variable_realm[$realm][$key];
+  }
+  else {
+    return $variable_realm;
+  }
+}
+
+/**
+ * Build current realm
+ * 
+ * Buids an array of variables for the current realm with higher weights overriding lower weights.
+ */
+function variable_realm_build() {
+  $variables = array();
+  foreach (variable_realm_current() as $realm => $key) {
+    if ($values = variable_realm($realm, $key)) {
+      $variables = array_merge($variables, $values);
+    }
+  }
+  return $variables;
+}
+
+/**
+ * Get value from realm
+ */
+function variable_realm_get($realm, $key, $name = NULL, $default = NULL) {
+  $variables = variable_realm($realm, $key);
+  return isset($variables[$name]) ? $variables[$name] : $default;
+}
+
+/**
+ * Set values for variable realm
+ * 
+ * @param $realm
+ *   Realm name
+ * @param $key
+ *   Realm key
+ * @param $values
+ *   Array of variable values
+ * @param $weight
+ *   Optional explicit weight for this realm, will default to 10
+ * @param $rebuild
+ *   Whether to rebuild domains immediately
+ */
+function variable_realm_add($realm, $key, $values = array(), $weight = NULL, $rebuild = TRUE) {
+  $variables = &variable_realm();
+
+  if (isset($values)) {
+    $variables[$realm][$key] = $values;
+  }
+  elseif (!isset($variables[$realm][$key])) {
+    $variables[$realm][$key] = array();
+    // Make sure we've got a weight for this realm
+    variable_realm_weight($realm, $weight);
+  }
+  // Rebuild only if this is the current realm
+  if ($rebuild) {
+    variable_realm_rebuild($realm, $key);
+  }
+}
+
+/**
+ * Set variable value for realm, for page request only
+ */
+function variable_realm_set($realm, $key, $name, $value, $rebuild = TRUE) {
+  $variables = &variable_realm();
+
+  $variable_realm[$realm][$key][$name] = $value;
+  $serialize = !is_int($value) && !is_string($value);
+  if ($rebuild) {
+    variable_realm_rebuild($realm, $key);
+  }
+}
+
+/**
+ * Delete variable from realm
+ */
+function variable_realm_del($realm, $key, $name, $rebuild = TRUE) {
+  $variables = &variable_realm();
+  if (isset($variables[$realm][$key][$name])) {
+    unset($variables[$realm][$key][$name]);
+    if ($rebuild) {
+      variable_realm_rebuild($realm, $key);
+    }
+  }
+}
+
+/**
+ * Get current realm values ordered by weights
+ * 
+ * @return array
+ *   Ordered array of name => value pairs, only realms that are set
+ */
+function variable_realm_current() {
+  $realms = variable_realm_weight();
+  $current = array_combine($realms, $realms);
+  // Filter the result so we don't return unset realms
+  return array_filter(array_map('variable_realm_status', $current));
+}
+
+/**
+ * Get original global variable
+ */
+function variable_realm_global_get($name, $default = NULL) {
+  return variable_realm_get('global', 'default', $name, $default);
+}
+
+/**
+ * Switch global variable
+ * 
+ * @param $name
+ *   Optional global variable name. If not set, it will reset all global variables to its original value.
+ * @param $value
+ *   Optional new value for global variable. If not set, it will reset the variable to its original value.
+ * @param $rebuild
+ *   Whether to rebuild the current global $conf
+ */
+function variable_realm_global_set($name, $value = NULL, $rebuild = TRUE) {
+  variable_set($name, $value);
+  variable_realm_set_value('global', 'default', $name, $value, $rebuild);
+}
+
+/**
+ * Set / get current realm values
+ * 
+ * @param $realm
+ *   Optional realm name
+ * @param $key
+ *   Optional realm value to set a status for this realm. FALSE to disable this realm.
+ */
+function variable_realm_status($realm = NULL, $key = NULL) {
+  $status = &drupal_static(__FUNCTION__, array());
+  if ($realm && isset($key)) {
+    $status[$realm] = $key;
+    // Make sure we have a weight for this one too
+    variable_realm_weight($realm);
+  }
+  if ($realm) {
+    return isset($status[$realm]) ? $status[$realm] : NULL;
+  }
+  else {
+    return $status;
+  }
+}
+
+/**
+ * Switch current variable realms
+ */
+function variable_realm_switch($realm, $key, $variables = NULL, $weight = NULL) {
+  variable_realm_add($realm, $key, $variables, $weight, FALSE);
+  variable_realm_status($realm, $key);
+  variable_realm_rebuild();
+}
+
+/**
+ * Get / set realm weights
+ * 
+ * The default realm will have a weight of 0. Realms with higher weights will override global variables.
+ * 
+ * @param $realm
+ *   Realm name
+ * @param $weight
+ *   Optional numeric value for realm weight
+ * @param $default
+ *   Default weight to set if no $weight is set
+ * @return array()
+ *   Ordered realm names
+ */
+function variable_realm_weight($realm = NULL, $weight = NULL, $default = 10) {
+  $current = &drupal_static(__FUNCTION__, array());
+  if ($realm && !isset($current[$realm]) || isset($weight)) {
+    $current[$realm] = isset($weight) ? $weight : $default;
+    ksort($current);
+  }
+  // This will always return ordered keys
+  return array_keys($current);
+}
+
+/**
+ * Rebuild current variable realm
+ * 
+ * If there are $realm and $key parameters, the rebuild will happen only if this is the current realm key
+ * 
+ * @param $realm
+ *   Optional realm name that has been set
+ * @param $key
+ *   Optional realm value that has been set
+ */
+function variable_realm_rebuild($realm = NULL, $key = NULL) {
+  if (!$realm || !$key || variable_realm_status($realm) == $key) {
+    $GLOBALS['conf'] = variable_realm_build();
+  }
+}
+
+/**
+ * Reset realms, deleting currently set ones
+ * 
+ * If no parameters passed, it will reset global variables to original values
+ */
+function variable_realm_reset($realms = array()) {
+  $status = &drupal_static('variable_realm_status');
+  // We need at least some value for the global realm
+  $status = $realms + array('global', 'default');
+  variable_realm_rebuild();
+}

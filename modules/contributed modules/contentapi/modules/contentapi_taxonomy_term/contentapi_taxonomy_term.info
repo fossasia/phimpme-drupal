@@ -1,0 +1,12 @@
+name = "Content API Taxonomy Terms"
+description = "Services to gather information about the Taxonomy Terms"
+package = "Services - resources"
+core = 7.x
+dependencies[] = contentapi_taxonomy_vocab
+
+; Information added by drupal.org packaging script on 2012-01-24
+version = "7.x-1.0-alpha3"
+core = "7.x"
+project = "contentapi"
+datestamp = "1327367738"
+

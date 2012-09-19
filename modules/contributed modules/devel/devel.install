@@ -1,0 +1,88 @@
+<?php
+
+/**
+ * Implements hook_enable().
+ */
+function devel_enable() {
+  $t = get_t();
+
+  // New module weights in core: put devel as the very last in the chain.
+  db_update('system')
+    ->fields(array(
+      'weight' => 88,
+    ))
+    ->condition('type', 'module')
+    ->condition('name', 'devel')
+    ->execute();
+
+  // Create a custom menu, if Menu module is enabled.
+  // @see devel_modules_installed()
+  if (module_exists('menu')) {
+    $menu = array(
+      'menu_name' => 'devel',
+      'title' => $t('Development'),
+      'description' => $t('Development link'),
+    );
+    menu_save($menu);
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function devel_uninstall() {
+  variable_del('devel_form_weights');
+  variable_del('devel_execution');
+  variable_del('dev_timer');
+  variable_del('devel_query_display');
+  variable_del('devel_redirect_page');
+  variable_del('devel_api_url');
+  variable_del('dev_mem');
+  variable_del('devel_error_handler');
+  variable_del('devel_switch_user_list_size');
+  variable_del('devel_switch_user_include_anon');
+  variable_del('devel_switch_user_show_form');
+
+  // Delete the development menu.
+  if (module_exists('menu')) {
+    if ($devel_menu = menu_load('devel')) {
+      menu_delete($devel_menu);
+    }
+  }
+}
+
+/**
+ * Remove feature for storing queries. Cleanup deprecated tables and variables.
+ */
+function devel_update_7000() {
+  db_drop_table('devel_queries');
+  db_drop_table('devel_times');
+}
+
+/**
+ * Rebuild the menus since everything is defined by devel_menu().
+ */
+function devel_update_7001() {
+  db_delete('menu_links')
+    ->condition('module', 'devel')
+    ->execute();
+  variable_set('menu_rebuild_needed', TRUE);
+  return t('Devel module menu links will be rebuilt.');
+}
+
+/**
+ * Remove deprecated variables - dev_query, devel_code_coverage
+ */
+function devel_update_7002() {
+  variable_del('dev_query'); // Sad trombone. http://drupalcode.org/viewvc/drupal/drupal/includes/database.mysql.inc?revision=1.2&view=markup
+  variable_del('devel_code_coverage');
+}
+
+/**
+ * As per issue #813132: change schablon.com to white for krumo.
+ */
+function devel_update_7003() {
+  if (variable_get('devel_krumo_skin', 'white') == 'schablon.com') {
+    variable_set('devel_krumo_skin', 'white');
+  }
+}

@@ -1,0 +1,37 @@
+/* QT style selection form */
+
+div.quicktabs-preview {
+  border: none;
+  width: 250px;
+  height: 80px;
+}
+
+#quicktabs-styles .quicktabs-tabstyles .form-item {
+  width: 280px;
+  float: left;
+  margin: 0 10px 10px 0;
+  border: 1px solid #ccc;
+  background-color: #fff;
+}
+#quicktabs-styles .quicktabs-tabstyles .form-item .option {
+  display: block;
+  background-color: #bfe3ff;
+  font: bold 12px/18px verdana;
+  color: #0a5793;
+}
+#quicktabs-styles .quicktabs-tabstyles .form-item .option:hover {
+  background-color: #aadaff;
+  cursor: pointer;
+  color: #003863;
+}
+#quicktabs-styles .quicktabs-tabstyles .form-item .option .form-radio {
+  margin-right: 5px;
+  float: left;
+  height: 15px;
+  margin-top: 2px;
+}
+#quicktabs-styles .quicktabs_wrapper {
+  margin: 5px;
+  font: bold 12px/170% Verdana;
+}
+

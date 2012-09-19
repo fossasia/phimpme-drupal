@@ -1,0 +1,48 @@
+<?php
+
+/**
+ * @file
+ * Enable adding the special Moon, Mars, and Sky map types to a google map.
+ */
+
+function gmap_extrabaselayers_gmap($op, &$map = null) {
+  switch ($op) {
+    case 'pre_theme_map':
+      // @@@
+      drupal_add_js(drupal_get_path('module', 'gmap_extrabaselayers') .'/gmap_extrabaselayers.js', array('weight' => 10));
+      break;
+
+    case 'baselayers':
+      $map['Google Moon']['G_MOON_ELEVATION_MAP'] = array(
+        'title' => t('elevation: Moon elevation map.'),
+        'default' => FALSE,
+        'help' => t('Google Moon shaded terrain map. Internal name: G_MOON_ELEVATION_MAP'),
+      );
+      $map['Google Moon']['G_MOON_VISIBLE_MAP'] = array(
+        'title' => t('visible: Moon imagery map.'),
+        'default' => FALSE,
+        'help' => t('Photographs taken from orbit around the moon. Internal name: G_MOON_VISIBLE_MAP'),
+      );
+      $map['Google Mars']['G_MARS_ELEVATION_MAP'] = array(
+        'title' => t('Elevation: Mars elevation map.'),
+        'default' => FALSE,
+        'help' => t('Google Mars shaded relief map. Internal name: G_MARS_ELEVATION_MAP'),
+      );
+      $map['Google Mars']['G_MARS_VISIBLE_MAP'] = array(
+        'title' => t('Visible: Mars imagery map.'),
+        'default' => FALSE,
+        'help' => t('Photographs taken from orbit around Mars. Internal name: G_MARS_VISIBLE_MAP'),
+      );
+      $map['Google Mars']['G_MARS_INFRARED_MAP'] = array(
+        'title' => t('Infrared: Mars infrared map.'),
+        'default' => FALSE,
+        'help' => t('Google Mars shaded infrared map. Internal name: G_MARS_INFRARED_MAP'),
+      );
+/*      $map['Google Sky']['G_SKY_VISIBLE_MAP'] = array(
+        'title' => t('visible: Sky map.'),
+        'default' => FALSE,
+        'help' => t('Sky map. Note: You will need to do your own setup currently to use this. Internal name: G_SKY_VISIBLE_MAP'),
+      );*/
+
+  }
+}

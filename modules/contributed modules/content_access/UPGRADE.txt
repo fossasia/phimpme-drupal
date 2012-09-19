@@ -1,0 +1,24 @@
+
+Upgrade from 5.x
+----------------
+
+You can easily upgrade from drupal 5 installations. After upgrading your drupal installation
+just install the latest module and run update.php - it will automatically run the upgrade routine
+which is update 6001.
+
+After that the content access permissions for your site needs to be rebuilt. Just go to your
+site and follow the instructions.
+
+
+Notes for workflow-ng users
+----------------------------
+The workflow-ng integration has been properly upgraded to its 6.x version, the rules module.
+However it has been a bit refactored: The 'Set content permissions' action has been removed in
+favor of the 'Grant content permissions by role' and 'Revoke content permissions by role' as
+this gives us more flexibility.
+
+So the automatic upgrade of your configured rules converts the 'Set content permissions' action
+to an 'Grant content permissions by role' action. If this doesn't fit, you'll have to edit it
+manually.
+
+All other conditions and actions have their equivalent in rules and will be automatically converted.

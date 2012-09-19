@@ -1,0 +1,152 @@
+
+/**
+ *  API documentation for the Media module.
+ */
+
+The Media module provides a robust API for developers to extend functionality
+in useful and novel ways.
+
+CAUTION: This is pretty old!
+
+Architecture
+------------
+
+To understand the API, it is first important to understand the underlying
+architecture and the decisions behind its current implementation.
+
+Stream Wrappers
+---------------
+
+First, the Media module makes heavy use of the core Stream Wrappers now
+provided with Drupal 7. Streams are classes that encapsulate PHP file
+functions, allowing an automatic override when calling the basic function.
+For instance, a wrapper implementing an Amazon S3 Stream might override the
+file_get_contents() using ->stream_open(), or a Flickr Stream Wrapper might
+implement its own ->getExternalUrl to return the HTML URI for a specific
+Flickr image.
+
+See http://api.drupal.org/file/includes/stream_wrappers.inc/7 for more
+information about Stream Wrappers in Drupal.
+
+Schemes
+-------
+
+All Stream Wrappers will be registered to handle a specific scheme, which is
+the part of a URI before ://, such as core Drupal's public:// and private://
+schemes. (Technically, a scheme only requires :, but a bug in PHP 5.2
+requires ://, so Drupal currently keeps the same requirement.)
+
+The target after the scheme:// will be a unique identifier that the
+implementing Stream Wrapper will use to determine the file resource being
+accessed. For instance, public://my-document.txt might refer to a local file
+stored in the server at /sites/example.com/files/my-document.txt, while a URI
+of youtube://fe3fg8u34i might be the video stored at
+http://youtube.com/v/fe3fg8u34i, and flickr://photoset/224 might use a lookup
+table to determine this is a photoset accessed at
+http://flickr.com/user/markam/photoset/325hsd89.
+
+All files in Drupal are stored in the database with this unique URI, in
+addition to its unique serial FID. In general, file objects are accessed
+and loaded by the URI, which will automatically use the correct stream wrapper
+implementation for its scheme.
+
+File Field Widget
+-----------------
+
+The Media module extends the core File field to make use of its browser for
+editors, which is in turn exposed for other modules to extend. It does this
+by create a new widget definition, defining a File (media) 'generic' file
+widget, and suppressing the original File widget definition to avoid
+confusion. All existing file fields will be converted to this new widget on
+installation of the module, and if uninstalled, any defined media_generic file
+fields will be reverted to their original definition to avoid loss of data.
+
+Media Formatters
+----------------
+
+By default, the File (media) widget will use the original display behavior,
+which is to display a generic icon followed by a link to the file. However, in
+many (if not most) cases, a site administrator will want to display media in
+very specific ways. For instance, they might want an image uploaded to be
+displayed as a cropped thumbnail, as with any Flickr images attached to that
+field, while a YouTube video might be displayed as a thumbnail that pops up
+in a Shadowbox, and finally a PDF might be displayed in an iFrame. And that's
+only when it's displayed in a node teaser...
+
+To manage the various display formatting needs of an editor, the Media module
+offers a Media Style API for other modules to implement and extend. Media
+Styles of various mimetypes are grouped together and made available as new
+formatters for field display, whether for a node, a comment, in a view, or
+elsewhere.
+
+To implement a new Media Style, a module needs to register itself for a
+specific mimetype, with the following hook. Note that Media styles will be
+properly namespaced by the module, to avoid conflicts.
+
+function hook_media_styles($mimetype = NULL) {
+  switch ($mimetype) {
+    case 'video/x-youtube':
+      return array(
+        'youtube_video' => t('YouTube Video'),
+        'youtube_thumbnail' => t('YouTube Thumbnail'),
+        'youtube_shadowbox' => t('YouTube Shadowbox'),
+        'youtube_link' => t('Youtube (link to original)'),
+    case 'image/x-flickr':
+      $styles = array(
+        'flickr__original' => t('Flickr (Original size)'),
+      );
+      foreach (image_styles() as $style_name => $style) {
+        $styles[$style_name] = t('Flickr (@style)', array('@style' => $style->name));
+      }
+      return $styles;
+  }
+}
+
+These styles will be available from the Media Styles configuration page, where
+multiple formatters can be grouped together to create new formatter Style
+bundles, available and intelligently applied to files of the appropriate
+mimetypes.
+
+For instance, a new Media Style might be created, named 'Small image', which
+will bundle an Image style for the various image mimetypes, another for Flickr
+images, a shadowbox for YouTube thumbnails, and a fallback to a size styled
+File icon. Then this style would be made available as a display formatter, and
+the Media module will apply the correct style for the mimetype of the
+particular instance.
+
+A module may also define default Media styles to be made available, by
+implementing hook_media_default_style_bundles(). Unlike the individual Media Styles,
+Media Style bundles are not namespaced by module. If two or more modules use
+the same Style bundle names, the behavior is undefined. Also note that the
+administrator may override a specific Style bundle, for instance by replacing
+the Style for a specific mimetype.
+
+function hook_media_default_style_bundles() {
+  return array(
+    'shadowbox_images' => array(
+      'label' => t('Shadowbox images'),
+      'mimetypes' => array(
+        'image/*' => 'mymodule_image_shadowbox',
+        'video/*' => 'mymodule_video_shadowbox',
+        '*' => 'mymodule_default_shadowbox',
+      ),
+    ),
+  );
+}
+
+@TODO
+convert existing file fields to media_generic on hook_install
+convert existing media_generic to file fields on hook_uninstall
+allow theme_file_icon file directory override in widget display settings
+  (Requires http://drupal.org/node/650732)
+create new default file icons and set its folder as the new default
+maybe instead/in addition have fallbacks if icon not present?
+rename image style square_thumbnail to use the media_ namespace
+review Media Styles for feasibility, usability, and architecture
+create Media Styles UI .inc file
+look at hook_field_info_alter to see if we can affect file widget that way
+CLEAN CRUFT (lots of functions that no longer apply or need to be rethought)
+why do we want to override the file field widget again?
+should we also move 'media_styles' to its own module, perhaps file_styles?
+in media_field_formatter_info(),
+  should 'field types' => array('media_generic', 'file'), be only one or other?

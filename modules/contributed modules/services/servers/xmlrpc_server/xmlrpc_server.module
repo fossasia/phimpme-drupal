@@ -1,0 +1,108 @@
+<?php
+/**
+ * @file
+ *  Enable XML-RPC for services module.
+ *
+ * Resource definitions get converted to RPC-style procedure names, but
+ * otherwise this is really just a wrapper around the core xmlrpc server.
+ * These procedures are renamed as <resource>.<method>. So the node
+ * resource's retrieve method has an XMLRPC procedure name of node.retrieve,
+ * the user resource's login action has an XMLRPC procedure name of
+ * user.login, etc.
+ */
+
+/**
+ * Implementation of hook_server_info().
+ */
+function xmlrpc_server_server_info() {
+  return array(
+    'name' => 'XMLRPC',
+  );
+}
+
+/**
+ * Implementation of hook_server().
+ */
+function xmlrpc_server_server() {
+  require_once './includes/xmlrpc.inc';
+  require_once './includes/xmlrpcs.inc';
+
+  return xmlrpc_server(array_merge(xmlrpc_server_xmlrpc(), module_invoke_all('xmlrpc')));
+}
+
+/**
+ * Return an array of all defined services methods and callbacks.
+ *
+ * @see xmlrpc_server()
+ */
+function xmlrpc_server_xmlrpc() {
+  $callbacks = array();
+
+  $resources = services_get_resources(services_get_server_info('endpoint', ''));
+  if (!empty($resources)) {
+    // Translate all resources
+    foreach ($resources as $name => $def) {
+      foreach (services_resources_as_procedures($def) as $method) {
+        $callbacks[$method['method']] = 'xmlrpc_server_call_wrapper';
+      }
+    }
+  }
+
+  return $callbacks;
+}
+
+/**
+ * Pass XMLRPC server requests to the appropriate services method.
+ *
+ * This function can take varying parameters as are appropriate to
+ * the service in question.
+ */
+function xmlrpc_server_call_wrapper() {
+  $xmlrpc_server = xmlrpc_server_get();
+  $method_name = $xmlrpc_server->message->methodname;
+  $args = func_get_args();
+  $endpoint = services_get_server_info('endpoint', '');
+  $controller = services_controller_get($method_name, $endpoint);
+  try {
+    // Add in default arguments if arguments still dont exist.
+    if (isset($controller['args'])  && is_array($controller['args'])) {
+      foreach ($controller['args'] as $index => $arg) {
+        if ($arg['optional'] && isset($arg['default value']) && !isset($args[$index])) {
+          $args[$index] = $arg['default value'];
+        }
+        elseif ($arg['optional'] == FALSE && !isset($args[$index])) {
+          return services_error(t('Missing required argument @arg', array('@arg' => $arg['name'])), 401);
+        }
+      }
+    }
+    return services_controller_execute($controller, $args);
+  }
+  catch (Exception $e) {
+    $code = $e->getCode();
+    switch($code) {
+      case 204:
+        drupal_add_http_header('HTTP/1.0 204 No Content', $exception->getMessage());
+        break;
+      case 304:
+        drupal_add_http_header('HTTP/1.0 304 Not Modified', $exception->getMessage());
+        break;
+      case 401:
+        drupal_add_http_header('Status', '401 Unauthorized: ' . $e->getMessage());
+        break;
+      case 404:
+        drupal_add_http_header('Status', '404 Not found: ' . $e->getMessage());
+        break;
+      case 406:
+        drupal_add_http_header('Status', '406 Not Acceptable: ' . $e->getMessage());
+        break;
+      default:
+        if ($code >= 400 && $code < 600) {
+          drupal_add_http_header('Status', $code . ' ' . $e->getMessage());
+        }
+        else {
+          drupal_add_http_header('Status', '500 An error occurred: (' . $code . ') ' . $e->getMessage());
+        }
+        break;
+    }
+  }
+}

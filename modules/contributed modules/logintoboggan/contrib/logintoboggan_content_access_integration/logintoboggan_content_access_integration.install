@@ -1,0 +1,60 @@
+<?php
+
+/**
+ * Implementation of hook_enable().
+ *
+ * Check if the LoginToboggan 'Non-validated' role is used, and node access
+ * permissions may need to be rebuilt.
+ *
+ * @todo Automatically rebuild records only for content types that will need it.
+ */
+function logintoboggan_content_access_integration_enable(){
+
+  if (logintoboggan_validating_id() == DRUPAL_AUTHENTICATED_RID) {
+    return;
+  }
+
+  $rebuild = array();
+  foreach (content_access_get_settings() as $permission => $content_types) {
+    foreach ($content_types as $content_type => $roles) {
+      if (!is_array($roles)){
+        // This is not actually a node access permission (e.g. per_node).
+        continue;
+      }
+
+      // If permissions were set for Anonymous and Authenticated but not
+      // Non-authenticated, Non-Authenticated was erroneously given access, and
+      // will be denied on next rebuild.
+      $roles_set = array_diff(array(DRUPAL_AUTHENTICATED_RID, DRUPAL_ANONYMOUS_RID), $roles);
+      if (empty($roles_set) && !in_array(logintoboggan_validating_id(), $roles)) {
+        drupal_set_message(
+          t(
+            'The "@content_type" content type has the "@permission" permission set for Anonymous and Authenticated roles, but not Non-Authenticated.  ' .
+            'You should grant this permission to the Non-Authenticated role if all users should continue to have access.  ',
+             array( '@content_type' => $content_type, '@permission' => $permission)
+          ) .
+          l(t('Go to the Access Control Settings page.'), 'admin/content/node-type/' . $content_type . '/access'),
+          'warning'
+         );
+      }
+
+      if (in_array($content_type, $rebuild)) {
+        // We already checked this content type for another permission.
+        continue;
+      }
+
+      // If permissions were set for Authenticated and Non-authenticated roles,
+      // the Non-authenticated role would not have been added to the
+      // node access records.  (Except if Anonymous is set too, where in both
+      // cases the permissions should be optimized to 'all').
+      $roles_set = array_diff(array(DRUPAL_AUTHENTICATED_RID, logintoboggan_validating_id()), $roles);
+      if (empty($roles_set) && !in_array(DRUPAL_ANONYMOUS_RID, $roles)) {
+        $rebuild[] = $content_type;
+      }
+    }
+  }
+
+  if ($rebuild) {
+    node_access_needs_rebuild(TRUE);
+  }
+}

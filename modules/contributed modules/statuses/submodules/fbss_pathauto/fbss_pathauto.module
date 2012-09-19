@@ -1,0 +1,141 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Pathauto with Statuses.
+ */
+
+/**
+ * Creates a new alias for a status.
+ *
+ * @param $status
+ *   A status object.
+ * @param $op
+ *   A Pathauto operation ('insert', 'update', 'return', or 'bulkupdate').
+ */
+function fbss_pathauto_create_alias($status, $op) {
+  $src = 'statuses/' . $status->sid;
+  if ($status->type == 'user') {
+    $type = ($status->recipient == $status->sender) ? 'self' : 'other';
+  }
+  else {
+    $type = $status->type;
+  }
+  module_load_include('inc', 'pathauto');
+  pathauto_create_alias('fbss_pathauto', $op, $src, array('statuses' => $status), $type);
+}
+
+/**
+ * Save aliases for multiple statuses at once.
+ *
+ * @param $sids
+ *   An array of status IDs.
+ * @param $op
+ *   A Pathauto operation ('insert', 'update', 'return', or 'bulkupdate').
+ */
+function fbss_pathauto_update_aliases($sids, $op) {
+  foreach ($sids as $sid) {
+    $status = facebook_status_load($sid);
+    if ($status->type == 'user') {
+      $type = ($status->recipient == $status->sender) ? 'self' : 'other';
+    }
+    else {
+      $type = $status->type;
+    }
+    if (!pathauto_pattern_load_by_entity('statuses', $types)) {
+      return;
+    }
+    fbss_pathauto_create_alias($status, $op);
+  }
+}
+
+/**
+ * Implements hook_statuses_delete().
+ */
+function fbss_pathauto_statuses_delete($status) {
+  pathauto_path_delete_all('statuses/'. $status->sid);
+}
+
+/**
+ * Implements hook_statuses_save().
+ */
+function fbss_pathauto_statuses_save($status, $context, $edit = FALSE) {
+  $op = $edit ? 'update' : 'insert';
+  fbss_pathauto_create_alias($status, $op);
+}
+
+/**
+ * Implements hook_pathauto().
+ */
+function fbss_pathauto_pathauto($op) {
+  if ($op != 'settings') {
+    return;
+  }
+  $patternitems = array();
+  foreach (statuses_all_contexts() as $type => $context) {
+    $patternitems[$type] = t('Status messages to a @title stream', array('@title' => $context['title']));
+  }
+  // Special case for the user type.
+  unset($patternitems['user']);
+  $patternitems['other'] = t('Status messages to other users');
+  $patternitems['self'] = t('Own status updates');
+  return (object) array(
+    'module' => 'fbss_pathauto',
+    'token_type' => 'statuses',
+    'groupheader' => t('Statuses settings'),
+    'patterndefault' => '', // No aliases should be generated
+    'patterndescr' => t('Default path pattern (applies to all status types with blank patterns below)'),
+    'patternitems' => $patternitems,
+    'batch_update_callback' => 'fbss_pathauto_bulk_update_batch_process',
+    'batch_file' => drupal_get_path('module', 'fbss_pathauto') . '/fbss_pathauto.module',
+  );
+}
+
+/**
+ * Bulk updates status aliases in a batch process.
+ *
+ * Inspired by the node implementation in pathauto.pathauto.inc.
+ */
+function fbss_pathauto_bulk_update_batch_process(&$context) {
+  if (!isset($context['sandbox']['current'])) {
+    $context['sandbox']['count'] = 0;
+    $context['sandbox']['current'] = 0;
+  }
+  
+  $query = db_select('statuses', 's');
+  $query->leftJoin('url_alias', 'ua', "CONCAT('statuses/', s.sid) = ua.source");
+  $query->addField('s', 'sid');
+  $query->isNull('ua.source');
+  $query->condition('s.sid', $context['sandbox']['current'], '>');
+  $query->orderBy('s.sid');
+  $query->addTag('pathauto_bulk_update');
+  
+  if (!isset($context['sandbox']['total'])) {
+    $context['sandbox']['total'] = $query->countQuery()->execute()->fetchField();
+    if (!$context['sandbox']['total']) {
+      $context['finished'] = 1;
+      return;
+    }
+  }
+  
+  $query->range(0, 25);
+  $sids = $query->execute()->fetchCol();
+  
+  fbss_pathauto_update_aliases($sids, 'bulkupdate');
+  $context['sandbox']['count'] += count($sids);
+  $context['sandbox']['current'] = max($sids);
+  $context['message'] = t('Updated alias for status @sid.', array('@sid' => end($sids)));
+  
+  if ($context['sandbox']['count'] != $context['sandbox']['total']) {
+    $context['finished'] = $context['sandbox']['count'] / $context['sandbox']['total'];
+  }
+}
+
+/**
+ * Implements hook_path_alias_types().
+ */
+function fbss_pathauto_path_alias_types() {
+  return array(
+    'statuses/' => t('Statuses'),
+  );
+}

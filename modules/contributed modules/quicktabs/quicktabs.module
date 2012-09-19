@@ -1,0 +1,630 @@
+<?php
+
+/**
+ * Implements hook_help().
+ */
+function quicktabs_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#quicktabs':
+      $output = '<p>' . t('The Quicktabs module allows you to create blocks of tabbed content. Clicking on the tabs makes the corresponding content display instantly (it uses jQuery). The content for each tabbed section can be a node, view, block or another Quicktabs instance. You can create an unlimited number of Quicktabs instances, each of which will automatically have an associated block.') . '</p>';
+      $output .= '<p>' . t('The <a href="@quicktabs">quicktabs page</a> displays all quicktabs currently available on your site. Create new quicktabs using the <a href="@add-quicktab">add quicktab page</a> (the block containing a new quicktab must also be enabled on the <a href="@blocks">blocks administration page</a>).', array('@quicktabs' => url('admin/structure/quicktabs'), '@add-quicktab' => url('admin/structure/quicktab/add'), '@blocks' => url('admin/structure/block'))) . '</p>';
+      return $output;
+  }
+  if ($path == 'admin/structure/quicktabs' && module_exists('block')) {
+    return '<p>' . t('Each Quicktabs instance has a corresponding block that is managed on the <a href="@blocks">blocks administration page</a>.', array('@blocks' => url('admin/structure/block'))) . '</p>';
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function quicktabs_menu() {
+  $items['admin/structure/quicktabs'] = array(
+    'title' => 'Quicktabs',
+    'description' => 'Create blocks of tabbed content.',
+    'page callback' => 'quicktabs_list',
+    'access callback' => 'user_access',
+    'access arguments' => array('administer quicktabs'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'quicktabs.admin.inc',
+  );
+  $items['admin/structure/quicktabs/list'] = array(
+    'title' => 'List quicktabs',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['admin/structure/quicktabs/add'] = array(
+    'title' => 'Add Quicktabs Instance',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('quicktabs_form', 'add'),
+    'access arguments' => array('administer quicktabs'),
+    'type' => MENU_LOCAL_ACTION,
+    'file' => 'quicktabs.admin.inc',
+  );
+  $items['admin/structure/quicktabs/manage/%quicktabs'] = array(
+    'title' => 'Edit quicktab',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('quicktabs_form', 'edit', 4),
+    'access arguments' => array('administer quicktabs'),
+    'file' => 'quicktabs.admin.inc',
+  );
+  $items['admin/structure/quicktabs/manage/%quicktabs/edit'] = array(
+    'title' => 'Edit quicktab',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'context' => MENU_CONTEXT_INLINE,
+  );
+  $items['admin/structure/quicktabs/manage/%quicktabs/delete'] = array(
+    'title' => 'Delete quicktab',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('quicktabs_block_delete', 4),
+    'access arguments' => array('administer quicktabs'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'quicktabs.admin.inc',
+  );
+  $items['admin/structure/quicktabs/manage/%quicktabs/clone'] = array(
+    'title' => 'Clone quicktab',
+    'page callback' => 'quicktabs_clone',
+    'page arguments' => array(4),
+    'access arguments' => array('administer quicktabs'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'quicktabs.admin.inc',
+  );
+  $items['admin/structure/quicktabs/manage/%quicktabs/export'] = array(
+    'title' => 'Export',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('quicktabs_export_form', 4),
+    'access arguments' => array('administer quicktabs'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'quicktabs.admin.inc',
+  );
+  $items['quicktabs/ajax'] = array(
+    'page callback' => 'quicktabs_ajax',
+    'access callback' => 'user_access',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+
+/**
+ * Implements hook_permission().
+ */
+function quicktabs_permission() {
+  return array(
+    'administer quicktabs' => array(
+      'title' => t('Administer Quicktabs'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function quicktabs_theme() {
+  return array(
+    'quicktabs_admin_form_tabs' => array(
+      'render element' => 'tabs',
+      'file' => 'quicktabs.admin.inc',
+    ),
+    'qt_ui_tabs' => array(
+      'render element' => 'element',
+    ),
+    'qt_ui_tabs_tabset' => array(
+      'render element' => 'tabset',
+    ),
+    'qt_quicktabs' => array(
+      'render element' => 'element',
+    ),
+    'qt_quicktabs_tabset' => array(
+      'render element' => 'tabset',
+    ),
+    'qt_accordion' => array(
+      'render element' => 'element',
+    ),
+    'quicktabs_tab_access_denied' => array(
+      'variables' => array('tab'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function quicktabs_block_info() {
+  $blocks = array();
+  foreach (quicktabs_load_multiple() as $qt_name => $quicktabs) {
+    $blocks[$qt_name]['info'] = $quicktabs->title;
+  }
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function quicktabs_block_view($delta = '') {
+  $block = array();
+  if ($qt = quicktabs_build_quicktabs($delta)) {
+    if (isset($qt['content']) && !empty($qt['content'])) {
+      $block['content'] = $qt['content'];
+      $block['content']['#contextual_links']['quicktabs'] = array('admin/structure/quicktabs/manage', array($delta));
+      $block['subject'] = check_plain($qt['#title']);
+    }
+  }
+  return $block;
+}
+
+/**
+ * Constructs a Quicktabs instance.
+ *
+ * This function can be called by other modules to programmatically build a
+ * quicktabs instance.
+ *
+ * @param name. The machine name of the Quicktabs instance to build - if a name
+ *  is passed that does not correspond to an existing instance, then it is taken
+ *  to be a completely custom instance and is built from only the custom tabs
+ *  that are passed in.
+ *
+ * @param settings. An array of settings that will override the options of the Quicktabs
+ *  instance from the database, or if no existing instance is being used, these
+ *  will override the default settings. Possible keys are 'style', 'hide_empty_tabs',
+ *  ajax', 'default_tab', 'renderer', 'title' and 'options'.
+ *
+ * @param custom_tabs. An array representing custom tab contents, which will be
+ *  appended to the Quicktabs instance from the database, or if no existing instance
+ *  is being used, the custom tabs will be the entire contents. An example custom_tabs
+ *  array would be array(array('title' => 'custom', 'contents' => array('#markup' =>
+ *  t('Some markup'), 'weight' => 5));
+ *
+ * @return A render array that can be used as block content in hook_block_view 
+ *  (see quicktabs_block_view()), but can also just be added to the page array
+ *  during hook_page_alter, or output anywhere else where it's sure to get
+ *  passed through drupal_render().
+ */
+function quicktabs_build_quicktabs($name, $settings = array(), $custom_tabs = array()) {
+  if ($info = quicktabs_load($name)) {
+    // Allow other modules to alter the Quicktabs instance before it gets output.
+    drupal_alter('quicktabs', $info);
+    $info = (array) $info;
+    $settings = array_merge($info, $settings);
+    $contents = $settings['tabs'];
+    unset($settings['tabs'], $settings['machine_name']);
+  }
+  elseif (!empty($custom_tabs)) {
+    // We'll be creating a custom Quicktabs instance. Make sure we're using an
+    // alphanumeric name.
+    $name = preg_replace('/[^[a-zA-Z]_]/', '_', $name);
+    $contents = array();
+  }
+  else {
+    // If $name doesn't correspond to an existing Quicktabs instance, and there
+    // are no custom tabs to render, then we have nothing to do.
+    return array();
+  }
+  $renderer = isset($settings['renderer']) ? $settings['renderer'] : 'quicktabs';
+  unset($settings['renderer']);
+  foreach ($custom_tabs as &$tab) {
+    $tab += array(
+      'type' => 'prerendered',
+      'weight' => 0,
+    );
+  }
+  $contents = array_merge($custom_tabs, $contents);
+  $weight = array();
+  foreach ($contents as $key => $item) {
+    // Load the plugin responsible for rendering this item, if it is not a
+    // prerendered tab.
+    if ($item['type'] != 'prerendered') {
+      ctools_plugin_load_class('quicktabs', 'contents', $item['type'], 'handler');
+    }
+  
+    // Add item's weight to our weights array so that we can then sort by weight.
+    $weight[$key] = $item['weight'];
+    
+    // Make sure we're not going to try to load the same QuickSet instance
+    // inside itself.
+    if ($item['type'] == 'qtabs' && $item['machine_name'] == $name) {
+      unset($contents[$key]);
+      unset($weight[$key]);
+    }
+  }
+  // Only sort by weight if the tabs haven't already been sorted by some other
+  // mechanism, e.g. Views in the case of the Views style plugin.
+  if (!isset($settings['sorted']) || !$settings['sorted']) {
+    array_multisort($weight, SORT_ASC, $contents);
+  }
+  else {
+    unset($settings['sorted']);
+  }
+  if ($qt = quickset_renderer_factory($name, $contents, $renderer, $settings)) {
+    $renderable_qt = array('#title' => $qt->getTitle(), 'content' => $qt->render());
+    return $renderable_qt;
+  }
+  return array();
+}
+
+/**
+ * Ajax callback for tab content.
+ *
+ * @param name The machine name of the quicktabs instance.
+ *
+ * @param index The tab index we're returning content for.
+ *
+ * @param type The type of content we're rendering.
+ *
+ * @return a json-formatted ajax commands array.
+ */
+function quicktabs_ajax($name, $index, $type) {
+
+  $args = func_get_args();
+  $variable_args = array_slice($args, 3);
+  // Add the Quicktabs machine name to the args we pass to the content renderer
+  array_unshift($variable_args, $name);
+
+  $data = QuickSet::ajaxRenderContent($type, $variable_args);
+  
+  $commands = array();
+  $tabpage_id = 'quicktabs-tabpage-'. $name .'-' . $index;
+  $commands[] = ajax_command_append('#quicktabs-container-'. $name, '<div id="' . $tabpage_id .'" class="quicktabs-tabpage">'. $data .'</div>');
+  $page = array('#type' => 'ajax', '#commands' => $commands);
+  ajax_deliver($page);
+}
+
+/**
+ * Load the quicktabs data for a particular instance.
+ */
+function quicktabs_load($name) {
+  $qts = quicktabs_load_multiple(array($name));
+  return isset($qts[$name]) ? $qts[$name] : NULL;
+}
+
+/**
+ * Load the quicktabs data.
+ */
+function quicktabs_load_multiple($names = array()) {
+  ctools_include('export');
+  $defaults = empty($names) ? ctools_export_load_object('quicktabs', 'all') : ctools_export_load_object('quicktabs', 'names', $names);
+  return $defaults;
+}
+
+/**
+ * Exports the specified Quicktabs instance with translatable strings.
+ */
+function quicktabs_export($qt, $indent = '') {
+  $output = ctools_export_object('quicktabs', $qt, $indent);
+  $translatables = array();
+  if (!empty($qt->title)) {
+    $translatables[] = $qt->title;
+  }
+  foreach ($qt->tabs as $tab) {
+    $translatables[] = $tab['title'];
+  }
+  $translatables = array_filter(array_unique($translatables));
+  if (!empty($translatables)) {
+    $output .= "\n";
+    $output .= "{$indent}// Translatables\n";
+    $output .= "{$indent}// Included for use with string extractors like potx.\n";
+    sort($translatables);
+    foreach ($translatables as $string) {
+      $output .= "{$indent}t(" . ctools_var_export($string) . ");\n";
+    }
+    $output .= "\n";
+  }
+  return $output;
+}
+
+/**
+* Implements hook_i18n_string_info()
+*/
+function quicktabs_i18n_string_info() {
+  $groups['quicktabs'] = array(
+    'title' => t('Quicktabs'),
+    'description' => t('Vocabulary titles and term names for localizable quicktabs.'),
+    'format' => FALSE, // This group doesn't have strings with format
+    'list' => TRUE, // This group can list all strings
+  );
+  return $groups;
+}
+
+function quicktabs_translate($name, $string, $langcode = NULL, $textgroup = 'quicktabs') {
+  return function_exists('i18n_string') ? i18n_string($textgroup . ':' . $name, $string, array('langcode' => $langcode)) : $string; 
+}
+
+/**
+ * Update translatable strings.
+ */
+function quicktabs_i18n_update_strings($names = array()) {
+  if (!function_exists('i18n_string_update')) return;
+  $qts = quicktabs_load_multiple($names);
+  foreach ($qts as $name => $quicktabs) {
+    i18n_string_update("quicktabs:title:$name", $quicktabs->title);
+    foreach ($quicktabs->tabs as $tabkey => $tab) {
+      i18n_string_update("quicktabs:tab:$name-$tabkey:title", $tab['title']);
+    }
+  }
+}
+
+/**
+ * Implements hook_i18n_string_refresh().
+ *
+ * Refresh translations for all user-generated strings managed by quicktabs.
+ * This will load all strings inputted via the quicktabs user interface and
+ * register them (and their translations, if there are any) with the
+ * i18n_strings system.
+ */
+function quicktabs_i18n_string_refresh($group) {
+  if ($group === 'quicktabs') {
+    quicktabs_i18n_update_strings();
+  }
+  return TRUE;
+}
+
+/**
+ * Implements hook_ctools_plugin_type().
+ */
+function quicktabs_ctools_plugin_type() {
+  return array(
+    // Renderer plugins control the display of sets of items, e.g. as tabs.
+    'renderers' => array(
+      'cache' => TRUE,
+      'use hooks' => TRUE,
+      'classes' => array('handler'),
+    ),
+    // Content plugins control the display of individual items.
+    'contents' => array(
+      'cache' => TRUE,
+      'use hooks' => TRUE,
+      'classes' => array('handler'),
+    )
+  );
+}
+
+/**
+ * Implements hook_quicktabs_renderers().
+ */
+function quicktabs_quicktabs_renderers() {
+  $info = array();
+  $path = drupal_get_path('module', 'quicktabs') . '/plugins';
+  $info['quicktabs'] = array(
+    'path' => $path,
+    'handler' => array(
+      'file' => 'QuickQuicktabs.inc',
+      'class' => 'QuickQuicktabs',
+    ),
+  );
+  $info['ui_tabs'] = array(
+    'path' => $path,
+    'handler' => array(
+      'file' => 'QuickUiTabs.inc',
+      'class' => 'QuickUitabs',
+    ),
+  );
+  $info['accordion'] = array(
+    'path' => $path,
+    'handler' => array(
+      'file' => 'QuickAccordion.inc',
+      'class' => 'QuickAccordion',
+    ),
+  );
+  return $info;
+}
+
+/**
+ * Implements hook_quicktabs_contents().
+ */
+function quicktabs_quicktabs_contents() {
+  $info = array();
+  $path = drupal_get_path('module', 'quicktabs') . '/plugins';
+  $info['block'] = array(
+    'path' => $path,
+    'handler' => array(
+      'file' => 'QuickBlockContent.inc',
+      'class' => 'QuickBlockContent',
+    ),
+    'dependencies' => array('block'),
+  );
+  $info['view'] = array(
+    'path' => $path,
+    'handler' => array(
+      'file' => 'QuickViewContent.inc',
+      'class' => 'QuickViewContent',
+    ),
+    'dependencies' => array('views'),
+  );
+  $info['node'] = array(
+    'path' => $path,
+    'handler' => array(
+      'file' => 'QuickNodeContent.inc',
+      'class' => 'QuickNodeContent',
+    ),
+  );
+  $info['qtabs'] = array(
+    'path' => $path,
+    'handler' => array(
+      'file' => 'QuickQtabsContent.inc',
+      'class' => 'QuickQtabsContent',
+    ),
+  );
+  $info['callback'] = array(
+    'path' => $path,
+    'handler' => array(
+      'file' => 'QuickCallbackContent.inc',
+      'class' => 'QuickCallbackContent',
+    ),
+  );
+  return $info;
+}
+
+/**
+ * Returns a renderered QuickSet.
+ */
+function quickset_renderer_factory($name, $contents, $renderer, $settings) {
+  return QuickSet::QuickSetRendererFactory($name, $contents, $renderer, $settings);
+}
+
+/**
+ * Returns an object that implements the QuickContent interface.
+ */
+function quick_content_factory($name, $item) {
+  return QuickContent::factory($name, $item);
+}
+
+/**
+ * Determine if the machine name is in use.
+ */
+function quicktabs_machine_name_exists($machine_name) {
+  $qt_exists = db_query_range('SELECT 1 FROM {quicktabs} WHERE machine_name = :name', 0, 1, array(':name' => $machine_name))->fetchField();
+  return $qt_exists;
+}
+
+/**
+ * Implementation of hook_views_api().
+ */
+function quicktabs_views_api() {
+  return array(
+    'api' => 3,
+  );
+}
+
+/**
+ * Theme function to display the access denied tab.
+ *
+ * @ingroup themeable
+ */
+function theme_quicktabs_tab_access_denied($variables) {
+  return t('You are not authorized to access this content.');
+}
+
+
+/**
+ * Fetch the necessary CSS files for the tab style.
+ */
+function quicktabs_get_css($style) {
+  if ($style == 'default') {
+    // Get the default style.
+    $style = variable_get('quicktabs_tabstyle', 'nostyle');
+  }
+  if ($style == 'nostyle') return array();
+  $style_css = _quicktabs_get_style_css($style);
+  return $style_css;
+}
+
+/**
+ * Helper function to get the css file for given style.
+ */
+function _quicktabs_get_style_css($style) {
+  $tabstyles = &drupal_static(__FUNCTION__);
+  if (empty($tabstyles)) {
+    $cid = 'quicktabs_tabstyles';
+    $cache = cache_get($cid);
+    if (!$cache) {
+      $tabstyles = module_invoke_all('quicktabs_tabstyles');
+      cache_set($cid, $tabstyles);
+    }
+    else {
+      $tabstyles = $cache->data;
+    }
+  }
+  if ($css_file = array_search($style, $tabstyles)) {
+    return array('data' => $css_file);
+  }
+  return array();
+}
+
+/**
+ * Theme function to output tablinks for jQuery UI style tabs.
+ *
+ * @ingroup themeable
+ */
+function theme_qt_ui_tabs_tabset($vars) {
+
+  $output = '<ul>';
+  foreach ($vars['tabset']['tablinks'] as $i => $tab) {
+    if (is_array($tab)) {
+      $output .= '<li>'. drupal_render($tab) .'</li>';
+    }
+  }
+  $output .= '</ul>';
+  return $output;
+}
+
+/**
+ * Theme function to output content for jQuery UI style tabs.
+ *
+ * @ingroup themeable
+ */
+function theme_qt_ui_tabs($variables) {
+  $element = $variables['element'];
+  $output = '<div '. drupal_attributes($element['#options']['attributes']) .'>';
+  $output .= drupal_render($element['tabs']);
+
+  if (isset($element['active'])) {
+    $output .= drupal_render($element['active']);
+  }
+  else {
+    foreach ($element['divs'] as $div) {
+      $output .= drupal_render($div);
+    }
+  }
+
+  $output .= '</div>';
+  return $output;
+}
+
+/**
+ * Theme function to output tablinks for classic Quicktabs style tabs.
+ *
+ * @ingroup themeable
+ */
+function theme_qt_quicktabs_tabset($vars) {
+  $variables = array(
+    'attributes' => array(
+      'class' => 'quicktabs-tabs quicktabs-style-' . $vars['tabset']['#options']['style'],
+    ),
+    'items' => array(),
+  );
+  foreach (element_children($vars['tabset']['tablinks']) as $key) {
+    $item = array();
+    if (is_array($vars['tabset']['tablinks'][$key])) {
+      $tab = $vars['tabset']['tablinks'][$key];
+      if ($key == $vars['tabset']['#options']['active']) {
+        $item['class'] = array('active');
+      }
+      $item['data'] = drupal_render($tab);
+      $variables['items'][] = $item;
+    }
+  }
+  return theme('item_list', $variables);
+}
+
+/**
+ * Theme function to output content for classic Quicktabs style tabs.
+ *
+ * @ingroup themeable
+ */
+function theme_qt_quicktabs($variables) {
+  $element = $variables['element'];
+  $output = '<div '. drupal_attributes($element['#options']['attributes']) .'>';
+  $output .= drupal_render($element['tabs']);
+  
+  $output .= drupal_render($element['container']);
+
+  $output .= '</div>';
+  return $output;
+}
+
+
+/**
+ * Theme function to output markup for the accordion style.
+ *
+ * @ingroup themeable
+ */
+function theme_qt_accordion($variables) {
+  $element = $variables['element'];
+  $output = '<div '. drupal_attributes($element['#options']['attributes']) .'>';
+  foreach ($element['divs'] as $div) {
+    $output .= drupal_render($div);
+  }
+
+  $output .= '</div>';
+  return $output;
+}

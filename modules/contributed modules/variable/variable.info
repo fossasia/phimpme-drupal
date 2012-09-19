@@ -1,0 +1,13 @@
+name = Variable
+description = Variable Information and basic variable API
+core = 7.x
+
+files[] = includes/node.variable.inc
+files[] = includes/system.variable.inc
+files[] = includes/user.variable.inc
+; Information added by drupal.org packaging script on 2011-08-11
+version = "7.x-1.1"
+core = "7.x"
+project = "variable"
+datestamp = "1313088721"
+

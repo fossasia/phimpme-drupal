@@ -1,0 +1,100 @@
+<?php
+
+/**
+ * @file
+ * gmap_taxonomy install routines.
+ */
+
+/**
+ * Implement hook_requirements().
+ */
+function gmap_taxonomy_requirements($phase) {
+  $requirements = array();
+  if (!variable_get('taxonomy_maintain_index_table', TRUE)) {
+    $requirements['gmap_taxonomy_able_to_index'] = array(
+      'title' => t('GMap Taxonomy Markers'),
+      'value' => '',
+      'description' => t('The variable <em>taxonomy_maintain_index_table</em> is set to FALSE. gmap_taxonomy.module will not work properly.'),
+      'severity' => REQUIREMENT_ERROR,
+    );
+  }
+  return $requirements;
+}
+
+
+/**
+ * Implementation of hook_schema().
+ */
+function gmap_taxonomy_schema() {
+  $schema['gmap_taxonomy_term'] = array(
+    'fields' => array(
+      'tid'    => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+      'marker' => array('type' => 'varchar', 'length' => 32),
+    ),
+    'primary key' => array('tid'),
+  );
+
+  $schema['gmap_taxonomy_node'] = array(
+    'fields' => array(
+      'nid'    => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+//      'vid'    => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+      'tid'    => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+      'marker' => array('type' => 'varchar', 'length' => 32),
+    ),
+    'primary key' => array('nid'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Track the tid that caused the association, so we can
+ * do fixups faster.
+ */
+function gmap_taxonomy_update_5001() {
+  $ret = array();
+  // Removed because we just kill the table and recreate it in update 5002^H^H^H^H6001 anyway.
+  return $ret;
+}
+
+/**
+ * Rebuild {gmap_taxonomy_node}.
+ */
+function gmap_taxonomy_update_6001() {
+  $ret = array();
+
+  // Drop the existing table and rebuild it from scratch.
+  if (db_table_exists('gmap_taxonomy_node')) {
+    db_drop_table($ret, 'gmap_taxonomy_node');
+  }
+
+  $schema['gmap_taxonomy_node'] = array(
+    'fields' => array(
+      'nid'    => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+      'vid'    => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+      'tid'    => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+      'marker' => array('type' => 'varchar', 'length' => 32),
+    ),
+    'primary key' => array('vid'),
+    'indexes' => array(
+      'nid' => array('nid'),
+    ),
+  );
+
+  db_create_table($ret, 'gmap_taxonomy_node', $schema['gmap_taxonomy_node']);
+
+  // Recreate the data.
+  // Useful for repopulating in bulk... Copy to hook_enable()?
+  $ret[] = update_sql("INSERT INTO {gmap_taxonomy_node} (nid, vid, tid, marker) (SELECT n.nid, n.vid, t.tid, g.marker FROM {node_revisions} n INNER JOIN {term_node} t ON n.vid = t.vid INNER JOIN {gmap_taxonomy_term} g ON t.tid = g.tid GROUP BY n.vid ORDER BY NULL)");
+
+  return $ret;
+}
+
+/**
+ * Rebuild {gmap_taxonomy_node} again.
+ */
+/*
+function gmap_taxonomy_update_7000() {
+  // @@@ FIXME -- rebuild the table from scratch again.
+}
+*/

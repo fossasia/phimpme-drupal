@@ -1,0 +1,197 @@
+<?php
+
+
+/**
+ * @file
+ * Unit tests for the functions in the 'services.module' file.
+ */
+
+/**
+ * Run test cases for the functions in the 'services.module' file.
+ */
+class ServicesModuleTests extends DrupalWebTestCase {
+  // Class variables.
+  protected $privilegedUser = NULL ;
+
+  /**
+   * Implementation of getInfo.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Unit tests for services.module file',
+      'description' => 'These are the unit tests for the services.module file functions.',
+      'group' => 'Services',
+    );
+  }
+
+  /**
+   * Implementation of setUp.
+   */
+  public function setUp() {
+    parent::setUp(
+      'ctools',
+      'services',
+      'rest_server'
+    );
+
+    // Create and logi in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'administer site configuration',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+  }
+
+  /**
+   * Test services_help function.
+   */
+  public function testServicesHelp() {
+
+    $result = services_help('admin/help#services', array()) ;
+    $message = t('There should be a help message returned from services help.') ;
+    $this->assertNotNull($result, $message) ;
+
+    $result = services_help('admin/structure/services', array()) ;
+    $message = t('There should be help text when going to the services endpoint administration page.') ;
+    $this->assertNotNull($result, $message) ;
+  }
+
+  /**
+   * Test hook_hook_info implementation.
+   */
+  public function testHookHookInfo() {
+    $results = services_hook_info() ;
+
+    $message = t('The \'services_resources\' key should be set in the returned array') ;
+    $this->assertTrue(isset($results['services_resources']), $message) ;
+
+    $message = t('hook_hook_info value should be an array') ;
+    $this->assertTrue((gettype($results['services_resources'])=='array'), $message) ;
+
+    $message = t('Should have added one element to the array') ;
+    $this->assertEqual(count($results['services_resources']), 1, $message) ;
+
+    $message = t('Key \'group\' should exist') ;
+    $this->assertTrue(isset($results['services_resources']['group']), $message) ;
+
+    $message = t('Value for key \'group\' should be \'services\'') ;
+    $this->assertEqual($results['services_resources']['group'], 'services',
+      $message) ;
+  } // function
+
+  /**
+   * Test thta adding a menu endpoint creates an menu path for that item.
+   */
+  public function testEndpointMenu() {
+    // Create the endpoint.
+    $endpointSettings = array(
+       'name'   => 'machine_name',
+       'path'   => $this->randomName(10),
+       'server' => 'rest_server',
+    );
+
+    $this->drupalPost('admin/structure/services/add', $endpointSettings, t('Save'));
+    $this->assertResponse('200', t('Attempting to create Endpoint.'));
+
+    // Check edit.
+    $this->drupalGet('admin/structure/services/list/' . $endpointSettings['name']
+     . '/edit');
+    $this->assertResponse('200', t('Failed to access endpoint edit path.')) ;
+
+    // Check export.
+    $this->drupalGet('admin/structure/services/list/' . $endpointSettings['name']
+     . '/export');
+    $this->assertResponse('200', t('Failed to access endpoint export path.')) ;
+
+    // Check delete.
+    $this->drupalGet('admin/structure/services/list/' . $endpointSettings['name']
+     . '/delete');
+    $this->assertResponse('200', t('Failed to access endpoint delete path.')) ;
+  }
+
+  /*
+   * Helper function to test the values of a menu item from a hook_menu call.
+   *
+   * Checks only the common menu parameters.
+   *
+   * @param $menu_item
+   * The path to the menu item.
+   *
+   * @param $items
+   * The array from the callback to services_menu (hook_menu).
+   *
+   * @return
+   * Void. Feedback is given through the test harness via assertions.
+   */
+  protected function helpMenuItem($menuItem, $items) {
+    $message = t('%menuItem should exist', array('%menuItem' => $menuItem));
+    $this->assertTrue(isset($items[$menuItem]), $message);
+
+    $message = t('%menuItem value should be an array', array('%menuItem' => $menuItem));
+    $this->assertTrue(gettype($items[$menuItem]) == 'array', $message);
+
+    $message = t("%menuItem should have 'access arguments' set to 'administer services'", array('%menuItem' => $menuItem));
+    $this->assertEqual($items[$menuItem]['access arguments'][0], 'administer services', $message);
+
+    $message = t("%menuItem should have 'file' to 'services.admin.inc'", array('%menuItem' => $menuItem));
+    $this->assertEqual($items[$menuItem]['file'], 'services.admin.inc', $message);
+
+    $message = t("%menuItem should have a 'page callback'", array('%menuItem' => $menuItem));
+    $this->assertTrue(isset($items[$menuItem]['page callback']), $message);
+  } // function
+
+  /**
+   * Test that services_access_menu() returns TRUE.
+   */
+  public function testServicesAccessMenu() {
+    $message = t('services_access_menu should return TRUE');
+    $this->assertTrue(services_access_menu(), $message);
+  } // function
+
+  /**
+   * Verify services_get_servers() returs the REST server.
+   */
+  public function testServicesGetServers() {
+    $results = services_get_servers() ;
+
+    $message = t('\'services_get_servers\' should return an array.');
+    $this->assertTrue(gettype($results) == 'array', $message);
+
+    $message = t('There should only be one element in the array.');
+    $this->assertEqual(count($results), 1, $message);
+
+    $message = t('The key to the one element should be \'rest_server\'.');
+    $this->assertTrue(isset($results['rest_server']), $message);
+
+    $message = t('Server name should be \'REST\'.');
+    $this->assertTrue(isset($results['rest_server']['name'])
+      && ($results['rest_server']['name'] == 'REST'), $message);
+
+    $message = t('Server path should be \'rest\'.');
+    $this->assertTrue(isset($results['rest_server']['path'])
+      && ($results['rest_server']['path'] == 'rest'), $message);
+  }
+
+  /**
+   * Test services_endpoint_new().
+   */
+  public function testServicesEndpointNew() {
+    $results = services_endpoint_new();
+    $results_type = gettype($results);
+    $message = t('services_endpoints_new() should return an object.');
+    $this->assertEqual($results_type, 'object', $message);
+
+    $string = 'New Service object should have property ';
+    $this->assertTrue(property_exists($results, 'eid'), t($string . 'eid.'));
+    $this->assertTrue(property_exists($results, 'name'), t($string . 'name.'));
+    $this->assertTrue(property_exists($results, 'server'), t($string . 'server.'));
+    $this->assertTrue(property_exists($results, 'path'  ), t($string . 'path.'));
+  }
+
+  /**
+   * Test services_controller_get().
+   */
+//  public function testServicesControllerGet() {
+//
+//  }
+} // class

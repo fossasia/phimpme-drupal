@@ -1,0 +1,122 @@
+<?php
+// $Id: ServicesResourceSystemTests.test,v 1.1.2.1 2011/01/19 00:34:49 ocyrus Exp $
+
+/**
+ * @file
+ * Call the endpoint tests when no authentication is being used.
+ *
+ */
+
+/**
+ * Run test cases for the endpoint with no authentication turned on.
+ *
+ */
+class ServicesResourceSystemTests extends ServicesWebtestCase {
+  // Class variables
+  protected $privileged_user = NULL ;
+  // Endpoint details.
+  protected $endpoint = NULL;
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(
+      'ctools',
+      'services',
+      'rest_server'
+    );
+    // Set up endpoint.
+    $this->endpoint =  $this->saveNewEndpoint();
+    // Set up privileged user and login.
+    $this->privileged_user = $this->drupalCreateUser(array('get a system variable', 'set a system variable'));
+    $this->drupalLogin($this->privileged_user);
+  }
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name'        => t('Resource System'),
+      'description' => t('Test the resource System methods.'),
+      'group'       => t('Services'),
+    );
+  }
+
+  /**
+   * Test connect method.
+   */
+  function testSystemConnect() {
+    $path = $this->endpoint->path;
+    // Call as authenticated user.
+    $response = $this->servicesPost($path . '/system/connect');
+    $response_user = $response['body']->user;
+    $this->assertEqual($response_user->uid, $this->privileged_user->uid, t('User account received for authenticated user.'), 'SystemResource: Connect');
+
+    $this->drupalLogout();
+    // Call as anonymous user.
+    $response = $this->servicesPost($path . '/system/connect');
+    $response_user = $response['body']->user;
+    $this->assertEqual($response_user->uid, 0, t('User account received for anonymous user.'), 'SystemResource: Connect');
+  }
+
+  /**
+   * Test get_variable method.
+   */
+  function testSystemGetVariable() {
+    $path = $this->endpoint->path;
+
+    $name = $this->randomName();
+    $value = $this->randomString();
+    variable_set($name, $value);
+
+    // Get already set variable.
+    $response = $this->servicesPost($path . '/system/get_variable', array('name' => $name, 'default' => $this->randomString()));
+    $this->assertEqual($value, $response['body'], t('Variable get value.'), 'SystemResource: get_variable');
+
+    $name = $this->randomName();
+    $default = $this->randomString();
+
+    // Get not defined variable. Ensure we get back default value.
+    $response = $this->servicesPost($path . '/system/get_variable', array('name' => $name, 'default' => $default));
+    $this->assertEqual($default, $response['body'], t('Variable get value default.'), 'SystemResource: get_variable');
+  }
+
+  /**
+   * Test set_variable method.
+   */
+  function testSystemSetVariable() {
+    $path = $this->endpoint->path;
+
+    $name = $this->randomName();
+    $value = $this->randomString();
+
+    $response = $this->servicesPost($path . '/system/set_variable', array('name' => $name, 'value' => $value));
+
+    // We can't use variable_get as variables get cached to global variable.
+    $variable = unserialize(db_query('SELECT value FROM {variable} WHERE name = :name', array(':name' => $name))->fetchField());
+
+    $this->assertEqual($value, $variable, t('Variable set value.'), 'SystemResource: set_variable');
+  }
+
+  /**
+   * Test set_variable method.
+   */
+  function testSystemDelVariable() {
+    $path = $this->endpoint->path;
+
+    // Set a random variable.
+    $name = $this->randomName();
+    $value = $this->randomString();
+    variable_set($name, $value);
+
+    // Delete the variable via del_variable.
+    $response = $this->servicesPost($path . '/system/del_variable', array('name' => $name));
+
+    // We can't use variable_get as variables get cached to global variable.
+    $newvalue = $this->randomString();
+    $response = $this->servicesPost($path . '/system/get_variable', array('name' => $name, 'default' => $newvalue));
+    $this->assertEqual($newvalue, $response['body'], t('Variable deleted.'), 'SystemResource: get_variable');
+  }
+}

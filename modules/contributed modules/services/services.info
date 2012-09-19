@@ -1,0 +1,27 @@
+name = Services
+description = Provide an API for creating web services.
+package = Services
+core = 7.x
+php = 5.x
+
+files[] = services.runtime.inc
+files[] = tests/functional/NoAuthEndpointTestRunner.test
+files[] = tests/functional/ServicesResourceNodeTests.test
+files[] = tests/functional/ServicesResourceUserTests.test
+files[] = tests/functional/ServicesResourceSystemTests.test
+files[] = tests/functional/ServicesResourceCommentTests.test
+files[] = tests/functional/ServicesResourceTaxonomyTests.test
+files[] = tests/functional/ServicesResourceFileTests.test
+files[] = tests/functional/ServicesEndpointTests.test
+files[] = tests/functional/ServicesParserTests.test
+files[] = tests/functional/ServicesXMLRPCTests.test
+files[] = tests/unit/TestServicesModule.test
+files[] = tests/services.test
+
+dependencies[] = ctools
+; Information added by drupal.org packaging script on 2011-11-16
+version = "7.x-3.1"
+core = "7.x"
+project = "services"
+datestamp = "1321482643"
+

@@ -1,0 +1,416 @@
+<?php
+
+/**
+ * @file
+ * Location search interface.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function location_search_menu() {
+  $items['admin/settings/location/search'] = array(
+    'title' => 'Search options',
+    'description' => 'Settings for Location Search module',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('location_search_admin_settings'),
+    'file' => 'location_search.admin.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 5,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function location_search_theme() {
+  return array(
+    'search_result_location' => array(
+      'variables' => array(
+        'result' => NULL,
+        'module' => NULL,
+      ),
+      'template' => 'search_result_location',
+    ),
+  );
+}
+
+/**
+ * Implements hook_search_info().
+ */
+function location_search_search_info() {
+  return array(
+    'title' => 'Locations',
+    'path' => 'location',
+  );
+}
+
+/**
+ * Implements hook_search_access().
+ */
+function location_search_search_access() {
+  return user_access('access content');
+}
+
+/**
+ * Implements hook_search_reset().
+ */
+function location_search_search_reset() {
+  db_delete('location_search_work')->execute();
+  $insert_select = db_select('location', 'l');
+  $insert_select->addField('l', 'lid');
+
+  db_insert('location_search_work')
+    ->fields(array('lid'))
+    ->from($insert_select)
+    ->execute();
+}
+
+/**
+ * Implements hook_search_status().
+ */
+function location_search_search_status() {
+  $total = db_query('SELECT COUNT(lid) FROM {location}')->fetchField();
+  $remaining = db_query('SELECT COUNT(lid) FROM {location_search_work}')->fetchField();
+  return array('remaining' => $remaining, 'total' => $total);
+}
+
+
+/**
+ * Implements hook_search_execute().
+ */
+function location_search_search_execute($keys = NULL, $conditions = NULL) {
+  $proximity = FALSE;
+
+  $lids = array();
+
+  // Determine whether this is a fulltext search or not.
+  $fulltext = $keys;
+  $fulltext = search_expression_insert($fulltext, 'country');
+  $fulltext = search_expression_insert($fulltext, 'province');
+  $fulltext = search_expression_insert($fulltext, 'city');
+  $fulltext = search_expression_insert($fulltext, 'from');
+  $fulltext = empty($fulltext) ? FALSE : TRUE;
+
+  if ($fulltext) {
+    // Fuzzy search -- Use the fulltext routines against the indexed locations.
+    $query = db_select('search_index', 'i')->extend('SearchQuery')->extend('PagerDefault');
+    $query->join('location', 'l', 'l.lid = i.sid');
+    $query->searchExpression($keys, 'node');
+
+    // Insert special keywords.
+    $query->setOption('country', 'l.country');
+    $query->setOption('province', 'l.province');
+    $query->setOption('city', 'l.city');
+
+    // setOption() can't handle the complexity of this so do it manually.
+    if ($value = search_expression_extract($keys, 'from')) {
+      // Set up a proximity search.
+      $proximity = TRUE;
+      list($lat, $lon, $dist, $unit) = explode(',', $value);
+      $distance_meters = _location_convert_distance_to_meters($dist, $unit);
+
+      // MBR query to make it easier on the database.
+      $latrange = earth_latitude_range($lon, $lat, $distance_meters);
+      $lonrange = earth_longitude_range($lon, $lat, $distance_meters);
+      $query->condition('l.latitude', array($latrange[0], $latrange[1]), 'BETWEEN');
+      $query->condition('l.longitude', array($lonrange[0], $lonrange[1]), 'BETWEEN');
+
+      // Distance query to finish the job.
+      $query->where(earth_distance_sql($lon, $lat) . ' < ' . $distance_meters);
+
+      // Override the scoring mechanism to use calculated distance
+      // as the scoring metric.
+      $query->addExpression(earth_distance_sql($lon, $lat, 'l'), 'distance');
+      $query->orderBy('distance', 'DESC');
+
+      $query->searchExpression = search_expression_insert($query->searchExpression, 'from');
+    }
+
+    // Only continue if the first pass query matches.
+    if (!$query->executeFirstPass()) {
+      return array();
+    }
+  }
+  else {
+    $query = db_select('location', 'l')->extend('PagerDefault');
+    // sid is the alias so that our results match the fulltext search results.
+    $query->addField('l', 'lid', 'sid');
+    // Insert special keywords.
+    if ($value = search_expression_extract($keys, 'country')) {
+      $query->condition('l.country', $value);
+    }
+    if ($value = search_expression_extract($keys, 'province')) {
+      $query->condition('l.province', $value);
+    }
+    if ($value = search_expression_extract($keys, 'city')) {
+      $query->condition('l.city', $value);
+    }
+    // This is almost duplicated from the fulltext search above because if it
+    // were refactored out it would make the code a little less clean and a
+    // little harder to understand.
+    if ($value = search_expression_extract($keys, 'from')) {
+      // Set up a proximity search.
+      $proximity = TRUE;
+      list($lat, $lon, $dist, $unit) = explode(',', $value);
+      $distance_meters = _location_convert_distance_to_meters($dist, $unit);
+
+      // MBR query to make it easier on the database.
+      $latrange = earth_latitude_range($lon, $lat, $distance_meters);
+      $lonrange = earth_longitude_range($lon, $lat, $distance_meters);
+      $query->condition('l.latitude', array($latrange[0], $latrange[1]), 'BETWEEN');
+      $query->condition('l.longitude', array($lonrange[0], $lonrange[1]), 'BETWEEN');
+
+      // Distance query to finish the job.
+      $query->where(earth_distance_sql($lon, $lat) . ' < ' . $distance_meters);
+
+      // Override the scoring mechanism to use calculated distance
+      // as the scoring metric.
+      $query->addExpression(earth_distance_sql($lon, $lat, 'l'), 'distance');
+      $query->orderBy('distance', 'DESC');
+    }
+  }
+
+  // Load results.
+  $found = $query
+    ->limit(10)
+    ->execute();
+
+  foreach ($found as $item) {
+    $lids[] = $item->sid;
+  }
+
+  $results = array();
+  foreach ($lids as $lid) {
+    $loc = location_load_location($lid);
+
+    $result = db_query('SELECT nid, uid, genid FROM {location_instance} WHERE lid = :lid', array(':lid' => $lid), array('fetch' => PDO::FETCH_ASSOC));
+    $instance_links = array();
+    foreach ($result as $row) {
+      $instance_links[] = $row;
+    }
+    location_invoke_locationapi($instance_links, 'instance_links');
+
+    $results[] = array(
+      'links' => $instance_links,
+      'location' => $loc,
+    );
+
+  }
+  return $results;
+}
+
+function location_search_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'search_form' && arg(1) == 'location' && user_access('use advanced search')) {
+    // @@@ Cache this.
+    $result = db_query('SELECT DISTINCT country FROM {location}', array(), array('fetch' => PDO::FETCH_ASSOC));
+    $countries = array('' => '');
+    foreach ($result as $row) {
+      if (!empty($row['country'])) {
+        $country = $row['country'];
+        location_standardize_country_code($country);
+        $countries[$country] = location_country_name($country);
+      }
+    }
+    ksort($countries);
+
+    drupal_add_js(drupal_get_path('module', 'location') .'/location_autocomplete.js');
+
+    // Keyword boxes:
+    $form['advanced'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Advanced search'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#attributes' => array('class' => array('search-advanced')),
+    );
+
+    $form['advanced']['country'] = array(
+      '#type' => 'select',
+      '#title' => t('Country'),
+      '#options' => $countries,
+      // Used by province autocompletion js.
+      '#attributes' => array('class' => array('location_auto_country')),
+    );
+
+    $form['advanced']['province'] = array(
+      '#type' => 'textfield',
+      '#title' => t('State/Province'),
+      '#autocomplete_path' => 'location/autocomplete/'. variable_get('location_default_country', 'us'),
+      // Used by province autocompletion js.
+      '#attributes' => array('class' => array('location_auto_province')),
+    );
+
+    $form['advanced']['city'] = array(
+      '#type' => 'textfield',
+      '#title' => t('City'),
+    );
+
+    $form['advanced']['proximity'] = array(
+      '#type' => 'fieldset',
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#title' => t('Proximity'),
+    );
+
+    $form['advanced']['proximity']['map'] = array();
+
+    if (variable_get('location_search_map_address', 1)) {
+      $form['advanced']['proximity']['locpick_address'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Locate Address'),
+      );
+    }
+
+    $form['advanced']['proximity']['latitude'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Latitude'),
+    );
+    $form['advanced']['proximity']['longitude'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Longitude'),
+    );
+    $form['advanced']['proximity']['distance'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Distance'),
+    );
+    $form['advanced']['proximity']['distance']['distance'] = array(
+      '#type' => 'textfield',
+      '#size' => 5,
+      '#maxlength' => 5,
+    );
+    $form['advanced']['proximity']['distance']['units'] = array(
+      '#type' => 'select',
+      '#options' => array(
+        'mi' => t('mi'),
+        'km' => t('km'),
+      ),
+    );
+
+    if (variable_get('location_search_map', 1)) {
+      $map_fields = array(
+        'latitude' => 'latitude',
+        'longitude' => 'longitude',
+      );
+      if (variable_get('location_search_map_address', 1)) {
+        $map_fields['address'] = 'locpick_address';
+      }
+      if (module_exists('gmap')) {
+        $form['advanced']['proximity']['map']['#value'] = gmap_set_location(variable_get('location_search_map_macro', '[gmap |behavior=+collapsehack]'), $form['advanced']['proximity'], $map_fields);
+      }
+    }
+
+    $form['advanced']['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Advanced search'),
+      '#prefix' => '<div class="action">',
+      '#suffix' => '</div>',
+    );
+
+    $form['#validate'][] = 'location_search_validate';
+  }
+}
+
+function location_search_validate($form, &$form_state) {
+  $values = $form_state['values'];
+
+  // Initialise using any existing basic search keywords.
+  $keys = $values['processed_keys'];
+
+  if (!empty($values['country'])) {
+    $keys = search_expression_insert($keys, 'country', $values['country']);
+
+    if (!empty($values['province'])) {
+      $keys = search_expression_insert($keys, 'province', location_province_code($values['country'], $values['province']));
+    }
+  }
+
+  if (!empty($values['city'])) {
+    $keys = search_expression_insert($keys, 'city', $values['city']);
+  }
+
+  if (!empty($values['latitude']) && !empty($values['longitude']) && !empty($values['distance'])) {
+    $keys = search_expression_insert($keys, 'from', $values['latitude'] .','. $values['longitude'] .','. $values['distance'] .','. $values['units']);
+  }
+
+  if (!empty($keys)) {
+    form_set_value($form['basic']['processed_keys'], trim($keys), $form_state);
+  }
+}
+
+/**
+ * Implements hook_update_index().
+ */
+function location_update_index() {
+  $limit = (int)variable_get('search_cron_limit', 100);
+
+  $result = db_query_range('SELECT lid FROM {location_search_work}', 0, $limit);
+  foreach ($result as $row) {
+    $loc = location_load_location($row->lid);
+    $text = theme('location', array('location' => $loc, 'hide' => array())); // @@@ hide?
+
+    search_index($row->lid, 'location', $text);
+    db_delete('location_search_work')
+      ->condition('lid', $row->lid)
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_locationapi().
+ */
+function location_search_locationapi(&$obj, $op, $a3 = NULL, $a4 = NULL, $a5 = NULL) {
+  if ($op == 'save') {
+    // Ensure the changed location is in our work list.
+    db_delete('location_search_work')
+      ->condition('lid', $obj['lid'])
+      ->execute();
+    db_insert('location_search_work')
+      ->fields(array(
+        'lid' => $obj['lid'],
+      ))
+      ->execute();
+  }
+  if ($op == 'delete') {
+    search_reindex($obj['lid'], 'location');
+  }
+}
+
+/**
+ * Implements hook_search_page().
+ */
+function location_search_search_page($results) {
+  $output['prefix']['#markup'] = '<ol class="search-results">';
+
+  foreach ($results as $entry) {
+    $output[] = array(
+      '#theme' => 'search_result_location',
+      '#result' => $entry,
+      '#module' => 'location',
+    );
+  }
+  $output['suffix']['#markup'] = '</ol>' . theme('pager');
+
+  return $output;
+}
+
+function template_preprocess_search_result_location(&$variables) {
+  $result = $variables['result'];
+
+  $variables['links_raw'] = array();
+  foreach ($result['links'] as $link) {
+    if (isset($link['title']) && isset($link['href'])) {
+      $variables['links_raw'][] = $link;
+    }
+  }
+  $variables['location_raw'] = $result['location'];
+
+  $variables['location'] = theme('location', array('location' => $result['location'], 'hide' => array())); // @@@ hide?
+  $variables['links'] = theme('links', array('links' => $variables['links_raw']));
+
+  // Provide alternate search result template.
+  $variables['theme_hook_suggestions'][] = 'search_result_' . $variables['module'];
+}

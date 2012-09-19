@@ -1,0 +1,24 @@
+name = Statuses Comments
+description = "Allows comments on Statuses."
+dependencies[] = statuses
+package = Statuses
+core = 7.x
+
+files[] = api.php
+files[] = fbss_comments.generate.inc
+files[] = fbss_comments.install
+files[] = fbss_comments.module
+files[] = fbss_comments.pages.inc
+files[] = fbss_comments.views.inc
+files[] = fbss_comments_views_handler_field_cc.inc
+files[] = fbss_comments_views_handler_field_cc2.inc
+files[] = fbss_comments_views_handler_field_comment_box.inc
+files[] = fbss_comments_views_handler_field_delete.inc
+files[] = fbss_comments_views_handler_field_edit.inc
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

@@ -1,0 +1,344 @@
+<?php
+
+/**
+ * @file
+ * Call the endpoint tests when no authentication is being used.
+ *
+ */
+
+/**
+ * Run test cases for the endpoint with no authentication turned on.
+ *
+ */
+class ServicesResourceCommentTests extends ServicesWebTestCase {
+  // Class variables
+  protected $privileged_user = NULL ;
+  // Endpoint details.
+  protected $endpoint = NULL;
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(
+      'ctools',
+      'services',
+      'rest_server'
+    );
+    // Set up endpoint.
+    $this->endpoint =  $this->saveNewEndpoint();
+
+    // Create and log in our privileged user.
+    $this->privileged_user = $this->drupalCreateUser();
+    $this->drupalLogin($this->privileged_user);
+  }
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+   return array(
+     'name'        => t('Resource Comment'),
+     'description' => t('Test the resource Comment methods and actions.'),
+     'group'       => t('Services'),
+   );
+  }
+  public function testCommentIndex() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+
+
+    // Create a set of comments. The comment resource returns 20 comments at a time,
+    // so we create two pages and a half worth.
+    $comments = array();
+    $count = 50;
+    $node = $this->drupalCreateNode();
+    $nid = $node->nid;
+    for ($i = 0; $i < $count; $i++) {
+      $comment = (object)$this->getCommentValues($nid);
+      $comment->created = REQUEST_TIME + $i;
+      comment_save($comment);
+      $comments[$comment->cid] = $comment;
+    }
+
+    // Get the content.
+    $page_count = ceil(count($comments) / 20);
+    $retrieved_comments = array();
+    for ($page = 0; $page < $page_count; $page++) {
+      $responseArray = $this->servicesGet($this->endpoint->path . '/comment', array('page' => $page, 'fields' => 'cid,subject'));
+      $this->assertTrue(count($responseArray['body']) <= 20, t('Correct number of items returned'));
+
+      // Store the returned comment IDs.
+      foreach ($responseArray['body'] as $comment) {
+        if (isset($retrieved_comments[$comment->cid])) {
+          $this->fail(t('Duplicate comment @cid returned.', array('@cid' => $comment->cid)));
+        }
+        $retrieved_comments[$comment->cid] = TRUE;
+
+        $this->assertTrue($comments[$comment->cid]->subject == $comment->subject, t('Successfully received Comment info'), 'CommentResource: Index');
+      }
+    }
+    // We should have got all the comments.
+    $expected_cids = array_keys($comments);
+    sort($expected_cids);
+    $retrieved_cids = array_keys($retrieved_comments);
+    sort($retrieved_cids);
+    
+    $this->assertEqual($expected_cids, $retrieved_cids, t('Retrieved all comments'));
+
+    // The n+1 page should be empty.
+    $responseArray = $this->servicesGet($this->endpoint->path . '/comment', array('page' => $page_count + 1));
+    $this->assertEqual(count($responseArray['body']), 0, t('The n+1 page is empty'));
+  }
+
+  /**
+   * Test create comment.
+   */
+  public function testCommentCreate() {
+    $node = $this->drupalCreateNode();
+
+    // Create comment.
+    $comment = $this->getCommentValues($node->nid);
+
+    $response_array = $this->servicesPost($this->endpoint->path . '/comment', $comment);
+    $commentResourceCreateReturn = $response_array['body'];
+    $this->assertTrue(isset($commentResourceCreateReturn['cid']), t('Comment was successfully created'), 'CommentResource: Create');
+
+    // Assert subject and body of comment are the same as we created.
+    $newComment = comment_load($commentResourceCreateReturn['cid']);
+    $this->assertTrue($newComment->subject == $comment['subject'], t('Subject was the same'), 'CommentResource: Create');
+    $this->assertTrue($newComment->comment_body[LANGUAGE_NONE][0]['value'] == $comment['comment_body'][LANGUAGE_NONE][0]['value'], t('Body was the same'), 'CommentResource: Create');
+
+    // Try to create comment with full_html filter that is disabled by default.
+    $comment = array(
+      'subject' => $this->randomString(),
+      'comment_body' => array(
+        LANGUAGE_NONE => array(
+          array(
+            'value' => $this->randomString(),
+            'format' => 'full_html',
+          )
+        )
+      ),
+      'name' => $this->privileged_user->name,
+      'language' => LANGUAGE_NONE,
+      'nid' => $node->nid,
+      'uid' => $this->privileged_user->uid,
+      'cid' => NULL,
+      'pid' => 0,
+    );
+    $response_array = $this->servicesPost($this->endpoint->path . '/comment', $comment);
+
+    $this->assertTrue(strpos($response_array['status'], t('An illegal choice has been detected.')), t('User cannot post comment with full_html filter chosen.'), 'CommentResource: Create');
+  }
+
+  /**
+   * Test create comment (Legacy).
+   *
+   * TODO: To be removed in future version.
+   * @see http://drupal.org/node/1083242
+   */
+  public function testCommentCreateLegacy() {
+    $node = $this->drupalCreateNode();
+
+    // Create comment.
+    $comment = $this->getCommentValues($node->nid);
+
+    $response_array = $this->servicesPost($this->endpoint->path . '/comment', array('comment' => $comment));
+    $commentResourceCreateReturn = $response_array['body'];
+    $this->assertTrue(isset($commentResourceCreateReturn['cid']), t('Comment was successfully created'), 'CommentResource: Create (Legacy)');
+
+    // Assert subject and body of comment are the same as we created.
+    $newComment = comment_load($commentResourceCreateReturn['cid']);
+    $this->assertTrue($newComment->subject == $comment['subject'], t('Subject was the same'), 'CommentResource: Create (Legacy)');
+    $this->assertTrue($newComment->comment_body[LANGUAGE_NONE][0]['value'] == $comment['comment_body'][LANGUAGE_NONE][0]['value'], t('Body was the same'), 'CommentResource: Create (Legacy)');
+
+    // Try to create comment with full_html filter that is disabled by default.
+    $comment = array(
+      'subject' => $this->randomString(),
+      'comment_body' => array(
+        LANGUAGE_NONE => array(
+          array(
+            'value' => $this->randomString(),
+            'format' => 'full_html',
+          )
+        )
+      ),
+      'name' => $this->privileged_user->name,
+      'language' => LANGUAGE_NONE,
+      'nid' => $node->nid,
+      'uid' => $this->privileged_user->uid,
+      'cid' => NULL,
+      'pid' => 0,
+    );
+    $response_array = $this->servicesPost($this->endpoint->path . '/comment', array('comment' => $comment));
+
+    $this->assertTrue(strpos($response_array['status'], t('An illegal choice has been detected.')), t('User cannot post comment with full_html filter chosen.'), 'CommentResource: Create (Legacy)');
+  }
+
+  /**
+   * Test retrieve method.
+   */
+  function testCommentRetrieve() {
+    $path = $this->endpoint->path;
+
+    // Create node.
+    $node = $this->drupalCreateNode();
+
+    $comment_args = $this->getCommentValues($node->nid);
+
+    $comment = (object)$comment_args;
+
+    comment_save($comment);
+    $comment_args['cid'] = $comment->cid;
+
+    $response = $this->servicesGet($path . '/comment/' . $comment->cid);
+
+    $comment_retrieve = (array)$response['body'];
+
+    $comment_intersect = array_intersect_assoc($comment_retrieve, $comment_args);
+
+    // Unset save_value as we don't have this key in arguments.
+    unset($comment_intersect['comment_body'][LANGUAGE_NONE][0]['safe_value']);
+
+    $this->assertEqual($comment_args, $comment_intersect, t('Comment retrieved properly.'), 'CommentResource: Retrieve');
+  }
+
+  /**
+   * Test update method.
+   */
+  function testCommentUpdate() {
+    $path = $this->endpoint->path;
+
+    // Create node.
+    $node = $this->drupalCreateNode();
+
+    $comment_args = $this->getCommentValues($node->nid);
+
+    $comment = (object)$comment_args;
+
+    comment_save($comment);
+    $cid = $comment->cid;
+    $comment_args['cid'] = $cid;
+
+    $comment_update = $comment_args;
+    $comment_update['subject'] = $this->randomString();
+    $comment_update['comment_body'][LANGUAGE_NONE][0]['value'] = $this->randomString();
+
+    $response = $this->servicesPut($path . '/comment/' . $cid, $comment_update);
+
+    $comment_load = (array)comment_load($cid);
+
+    $comment_intersect = array_intersect_assoc($comment_load, $comment_update);
+
+    // Unset save_value as we don't have this key in arguments.
+    unset($comment_intersect['comment_body'][LANGUAGE_NONE][0]['safe_value']);
+
+    $this->assertEqual($comment_update, $comment_intersect, t('Comment updated properly.'), 'CommentResource: Update');
+  }
+
+  /**
+   * Test update method.
+   *
+   * TODO: To be removed in future version.
+   * @see http://drupal.org/node/1083242
+   */
+  function testCommentUpdateLegacy() {
+    $path = $this->endpoint->path;
+
+    // Create node.
+    $node = $this->drupalCreateNode();
+
+    $comment_args = $this->getCommentValues($node->nid);
+
+    $comment = (object)$comment_args;
+
+    comment_save($comment);
+    $cid = $comment->cid;
+    $comment_args['cid'] = $cid;
+
+    $comment_update = $comment_args;
+    $comment_update['subject'] = $this->randomString();
+    $comment_update['comment_body'][LANGUAGE_NONE][0]['value'] = $this->randomString();
+
+    $response = $this->servicesPut($path . '/comment/' . $cid, array('data' => $comment_update));
+
+    $comment_load = (array)comment_load($cid);
+
+    $comment_intersect = array_intersect_assoc($comment_load, $comment_update);
+
+    // Unset save_value as we don't have this key in arguments.
+    unset($comment_intersect['comment_body'][LANGUAGE_NONE][0]['safe_value']);
+
+    $this->assertEqual($comment_update, $comment_intersect, t('Comment updated properly.'), 'CommentResource: Update');
+  }
+
+  /**
+   * Test delete method.
+   */
+  function testCommentDelete() {
+    $path = $this->endpoint->path;
+
+    // Create node with commenting.
+    $node = $this->drupalCreateNode();
+
+    $comment_args = $this->getCommentValues($node->nid);
+
+    $comment = (object)$comment_args;
+
+    comment_save($comment);
+    $cid = $comment->cid;
+    $comment_args['cid'] = $cid;
+
+    $response = $this->servicesDelete($path . '/comment/' . $cid);
+
+    $comment_load = comment_load($cid);
+
+    $this->assertTrue(empty($comment_load), t('Comment deleted properly.'), 'CommentResource: Delete');
+  }
+
+
+  /**
+   * Test countAll method.
+   */
+  function testCommentCountAll() {
+    $path = $this->endpoint->path;
+    // Generate comments.
+    $settings = array('comment' => 1);
+    $node = $this->drupalCreateNode($settings);
+    for ($i = 0; $i < 5; $i++) {
+      $comment = (object)$this->getCommentValues($node->nid);
+      comment_save($comment);
+    }
+
+    $response = $this->servicesPost($path . '/comment/countAll', array('nid' => $node->nid));
+    $this->assertEqual($response['body'], 5, t('Counted number of comments properly.'), 'CommentResource: countAll');
+  }
+
+  /**
+   * Test countNew method.
+   */
+  function testCommentCountNew() {
+    $path = $this->endpoint->path;
+    // Generate comments.
+    $node = $this->drupalCreateNode();
+    $nid = $node->nid;
+    for ($i = 0; $i < 5; $i++) {
+      $comment = (object)$this->getCommentValues($nid);
+      $comment->created = REQUEST_TIME + $i;
+      comment_save($comment);
+      $comments[] = comment_load($comment->cid);
+    }
+
+    $response = $this->servicesPost($path . '/comment/countNew', array('nid' => $node->nid));
+    $this->assertEqual($response['body'], 5, t('Received number of all new comments.'), 'CommentResource: countNew');
+
+    $since = $comments[2]->created;
+
+    $response = $this->servicesPost($path . '/comment/countNew', array('nid' => $node->nid, 'since' => $since));
+    $this->assertEqual($response['body'], 2, t('Received number of new comments.'), 'CommentResource: countNew');
+  }
+}

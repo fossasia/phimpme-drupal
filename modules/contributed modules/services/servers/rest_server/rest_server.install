@@ -1,0 +1,25 @@
+<?php
+/**
+ * @file
+ * Install, uninstall and update the rest server module.
+ */
+
+/**
+ * Implements hook_requirements().
+ */
+function rest_server_requirements($phase) {
+  $requirements = array();
+  // Ensure translations don't break at install time
+  $t = get_t();
+  if ($phase == 'install') {
+    if (!file_exists(dirname(__FILE__) . '/lib/spyc.php')) {
+      $requirements['rest_server'] = array(
+        'description' => 'A library is missing for rest_server to work',
+        'severity' => REQUIREMENT_ERROR,
+        'value' => $t('Please download <a href="@download">spyc</a> and create a file called spyc.php in rest_server/lib', array('@download' =>  'http://code.google.com/p/spyc/downloads/list')),
+        'title' => t('Missing library'),
+      );
+    }
+  }
+  return $requirements;
+}

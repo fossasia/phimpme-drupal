@@ -1,0 +1,159 @@
+<?php
+
+/**
+ * @file
+ * Rules Scheduler - Installation file.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function rules_scheduler_schema() {
+  $schema['rules_scheduler'] = array(
+    'description' => 'Stores scheduled tasks.',
+    'fields' => array(
+      'tid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => "The scheduled task's id.",
+      ),
+      'config' => array(
+        'type' => 'varchar',
+        'length' => '64',
+        'default' => '',
+        'not null' => TRUE,
+        'description' => "The scheduled configuration's name.",
+      ),
+      'date' => array(
+        'description' => 'The Unix timestamp of when the task is to be scheduled.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'state' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+        'description' => 'The whole, serialized evaluation state.',
+      ),
+      'identifier' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'default' => '',
+        'not null' => FALSE,
+        'description' => 'The user defined string identifying this task.',
+      ),
+    ),
+    'primary key' => array('tid'),
+    'indexes' => array(
+      'date' => array('date'),
+    ),
+    'unique key' => array(
+      'id' => array('config', 'identifier'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Upgrade from Rules scheduler 6.x-1.x to 7.x.
+ */
+function rules_scheduler_update_7200() {
+  // Rename the old table so we can keep its content and start over with a
+  // fresh one.
+  db_rename_table('rules_scheduler', 'rules_scheduler_d6');
+  // Create the d7 table.
+  $schema['rules_scheduler'] = array(
+    'description' => 'Stores scheduled tasks.',
+    'fields' => array(
+      'tid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => "The scheduled task's id.",
+      ),
+      'config' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'default' => '',
+        'not null' => TRUE,
+        'description' => "The scheduled configuration's name.",
+      ),
+      'date' => array(
+        'description' => 'The Unix timestamp of when the task is to be scheduled.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'state' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+        'description' => 'The whole, serialized evaluation state.',
+      ),
+      'identifier' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'default' => '',
+        'not null' => FALSE,
+        'description' => 'The user defined string identifying this task.',
+      ),
+    ),
+    'primary key' => array('tid'),
+    'indexes' => array('date' => array('date')),
+  );
+  db_create_table('rules_scheduler', $schema['rules_scheduler']);
+}
+
+/**
+ * Fix the length of the rules_scheduler.name column.
+ */
+function rules_scheduler_update_7202() {
+  // Note that update 7201 (add the 'id' unique key') has been removed as it is
+  // incorporated by 7202. For anyone that has already run the previous update
+  // 7201, we have to first drop the unique key.
+  db_drop_unique_key('rules_scheduler', 'id');
+  db_change_field('rules_scheduler', 'config', 'config', array(
+    'type' => 'varchar',
+    'length' => '64',
+    'default' => '',
+    'not null' => TRUE,
+    'description' => "The scheduled configuration's name.",
+  ));
+  db_add_unique_key('rules_scheduler', 'id', array('config', 'identifier'));
+}
+
+/**
+ * Rules upgrade callback for mapping the action name.
+ */
+function rules_scheduler_action_upgrade_map_name($element) {
+  return 'schedule';
+}
+
+/**
+ * Rules upgrade callback.
+ */
+function rules_scheduler_action_upgrade($element, $target) {
+  $target->settings['component'] = $element['#info']['set'];
+  $target->settings['date'] = $element['#settings']['task_date'];
+  $target->settings['identifier'] = $element['#settings']['task_identifier'];
+
+  unset($element['#info']['arguments']['task_date'], $element['#info']['arguments']['task_identifier']);
+  foreach ($element['#info']['arguments'] as $name => $info) {
+    rules_upgrade_element_parameter_settings($element, $target, $name, $info, 'param_' . $name);
+  }
+}
+
+/**
+ * Rules upgrade callback for mapping the action name.
+ */
+function rules_action_delete_scheduled_set_upgrade_map_name($element) {
+  return 'schedule_delete';
+}
+
+/**
+ * Rules upgrade callback.
+ */
+function rules_action_delete_scheduled_set_upgrade($element, $target) {
+  $target->settings['component'] = $element['#settings']['ruleset'];
+  $target->settings['task'] = $element['#settings']['task_identifier'];
+}

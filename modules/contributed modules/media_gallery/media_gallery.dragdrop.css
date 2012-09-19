@@ -1,0 +1,52 @@
+
+.media-gallery-media .media-gallery-item-wrapper {
+  outline: none;
+}
+
+.draggable-wrapper {
+  cursor: move;
+}
+
+.media-gallery-item-wrapper.draggable:hover .media-gallery-item,
+.mg-col .node-media-gallery.node-teaser .float-overflow:hover .stack-image {
+  outline: 1px dashed #98C4DF;
+}
+
+/* Needs to be :hover */
+.draggable:hover .draggable-wrapper {
+  display: block;
+}
+
+.draggable-wrapper {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: #98C4DF;
+  height: 25px;
+  z-index: 2;
+}
+
+.draggable-wrapper .draggable-handle {
+  background: transparent url('images/draggable.png') no-repeat 0px -20px;
+  top: 5px;
+  left: 5px;
+  position: absolute;
+  height: 18px;
+  text-indent: 110%; /* LTR */
+  width: 18px;
+  outline: none;
+  overflow: hidden;
+}
+
+.media-gallery-sortable-processed.ui-sortable .ui-sortable-helper .meta-wrapper,
+.media-gallery-sortable-processed.ui-sortable .ui-sortable-helper .meta-wrapper.hover {
+  display: none;
+}
+
+/* Don't gray out images while drag-and-drop is disabled; webkit doesn't seem
+   to handle the opacity change correctly. */
+.field-name-media-gallery-media .media-gallery-sortable-processed.ui-state-disabled {
+  opacity: inherit;
+}

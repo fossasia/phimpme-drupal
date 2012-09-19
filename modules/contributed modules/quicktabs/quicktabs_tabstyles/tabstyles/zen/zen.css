@@ -1,0 +1,53 @@
+
+/**
+ *  Style from the new (great!) ZEN THEME for Drupal 
+ * http://drupal.org/project/zen
+ */
+
+.quicktabs_main.quicktabs-style-zen{
+  clear:both;
+}
+ul.quicktabs-tabs.quicktabs-style-zen{
+  margin:0 0 10px 0;
+  padding:0 0 3px;
+  font-size:1em;
+  list-style: none;
+  height:21px;
+  background:transparent url(images/tab-bar.png) repeat-x left bottom;
+}
+*html ul.quicktabs-tabs.quicktabs-style-zen li{
+  margin-bottom:-5px;
+}
+ul.quicktabs-tabs.quicktabs-style-zen li{
+  float: left;
+  margin:0 5px;
+  padding: 0 0 0 5px;
+  background:transparent url(images/tab-left-ie6.png) no-repeat left -38px;
+}
+ul.quicktabs-tabs.quicktabs-style-zen li a{
+  font:bold 12px/170% Verdana;
+  font-size-adjust:none;
+  display: block;
+  margin: 0;
+  padding:4px 17px 0px 12px;
+  border-width: 0;
+  font-weight:bold;
+  text-decoration:none;
+  background: transparent url(images/tab-right-ie6.png) no-repeat right -38px;
+}
+ul.quicktabs-tabs.quicktabs-style-zen li:hover a{
+  border-width: 0;
+  background:transparent url(images/tab-right-ie6.png) no-repeat right -76px;
+}
+quicktabs-tabs.quicktabs-style-zen li:hover{
+  background:transparent url(images/tab-left-ie6.png) no-repeat left -76px;
+}
+ul.quicktabs-tabs.quicktabs-style-zen li.active a,
+ul.quicktabs-tabs.quicktabs-style-zen li.active a:hover{
+  text-decoration:none;
+  border-width: 0;
+  background:transparent url(images/tab-right-ie6.png) no-repeat right 0;
+}
+ul.quicktabs-tabs.quicktabs-style-zen li.active{
+  background:transparent url(images/tab-left-ie6.png) no-repeat left 0;
+}

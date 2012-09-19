@@ -1,0 +1,13 @@
+<?php
+
+/**
+ * Implements hook_uninstall().
+ */
+function devel_node_access_uninstall() {
+  variable_del('devel_node_access_debug_mode');
+
+  if (!module_exists('devel') && ($devel_menu = menu_load('devel'))) {
+    // Delete the development menu.
+    menu_delete($devel_menu);
+  }
+}

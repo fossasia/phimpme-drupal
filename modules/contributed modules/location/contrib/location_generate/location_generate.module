@@ -1,0 +1,90 @@
+<?php
+
+/**
+ * @file
+ * Generate random locations.
+ */
+
+/**
+ * Implements hook_node_presave().
+ */
+function location_generate_node_presave($node) {
+  // Devel.module bulk node generation.
+  if (isset($node->devel_generate)) {
+    // Argh, we inherit a broken rand() on windows because devel_generate
+    // calls array_rand()...
+    // http://bugs.php.net/bug.php?id=45301
+    srand((double) microtime() * 1000000);
+    $sources = array(LOCATION_LATLON_USER_SUBMITTED, LOCATION_LATLON_GEOCODED_APPROX, LOCATION_LATLON_GEOCODED_EXACT);
+    $results = $node->devel_generate;
+    if ($results['add_locations']) {
+      $countries = location_get_iso3166_list();
+
+      $numlocs = rand(0, (int) variable_get('location_maxnum_' . $node->type, 0));
+      $node->locations = array();
+      for ($i = 0; $i < $numlocs; $i++) {
+        $country_code = array_rand($countries);
+        $provinces = location_get_provinces($country_code);
+        $province_code = array_rand($provinces);
+
+        $location = array(
+          'lid' => NULL,
+          'name' => devel_create_greeking(mt_rand(1, 4), TRUE),
+          'street' => location_generate_generate_street(),
+          'additional' => '',
+          'city' => devel_generate_word(mt_rand(5, 15)),
+          'province' => $province_code,
+          'postal_code' => mt_rand(1000, 99999),
+          'country' => $country_code,
+          'latitude' => (float) ((mt_rand(0, 120000) - 60000) / 1000),
+          'longitude' => (float) ((mt_rand(0, 360000) - 180000) / 1000),
+          'source' => $sources[rand(0, 2)],
+          'inhibit_geocode' => TRUE,
+        );
+        $settings = variable_get('location_settings_node_' . $node->type, array());
+        $location['location_settings'] = $settings;
+        $node->locations[] = $location;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ * Alter the devel_generate_content_form form.
+ */
+function location_generate_form_devel_generate_content_form_alter(&$form, &$form_state) {
+  $form['add_locations'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Add locations to each node.'),
+    '#description' => t('Added by location_generate.module'),
+    '#default_value' => FALSE,
+  );
+
+  if (!isset($form['submit']['#weight'])) {
+    $form['submit']['#weight'] = 1;
+  }
+}
+
+/**
+ * Helper function to generate street values.
+ */
+function location_generate_generate_street() {
+  $type = array(
+    'Street' => 'Street',
+    'Road' => 'Road',
+    'Boulevard' => 'Boulevard',
+    'Way' => 'Way',
+    'Terrace' => 'Terrace',
+    'Row' => 'Row',
+    'Lane' => 'Lane',
+    'Place' => 'Place',
+    'Close' => 'Close',
+    'Court' => 'Court',
+    'Alley' => 'Alley',
+    'Crescent' => 'Crescent',
+    'Parkway' => 'Parkway',
+  );
+
+  return mt_rand(1, 9999) . ' ' . devel_create_greeking(mt_rand(1, 3), TRUE) . ' ' . array_rand($type);
+}

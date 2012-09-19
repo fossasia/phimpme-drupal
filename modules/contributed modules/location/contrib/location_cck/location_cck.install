@@ -1,0 +1,48 @@
+<?php
+
+/**
+ * @file
+ *   Install, update and uninstall functions for the location_cck module.
+ */
+
+/**
+ * Drupal 6 location_cck 3.x update.
+ */
+function location_cck_update_6301() {
+  // Create a temporary table to fix some location_instance data.
+  $schema = drupal_get_schema('location_instance');
+  $schema['description'] = 'Temp table to repair data integrity of location_instance table.';
+  unset($schema['indexes']);
+  db_create_table('location_instance_tmp', $schema);
+
+  // Populate the temporary table.
+  $join_select = db_select('location_instance', 'li');
+  $join_select->addExpression("SUBSTRING_INDEX(genid, ':', -1)", 'genvid');
+  $join_select->fields('li', array('lid', 'genid'));
+
+  $insert_select = db_select('node', 'n')
+    ->fields('n', array('nid', 'vid'))
+    ->fields('l', array('genid', 'lid'))
+    ->join($join_select, 'l', 'n.vid = l.genvid');
+
+  db_insert('location_instance_tmp')
+    ->fields(array('nid', 'vid', 'genid', 'lid'))
+    ->from($insert_select)
+    ->execute();
+
+  // Update the location_instance table.
+  db_delete('location_instance')
+    ->condition('genid', 'cck:%', 'LIKE')
+    ->execute();
+
+  $insert_select = db_select('location_instance_tmp', 'lit')
+    ->fields('lit', array('nid', 'vid', 'genid', 'lid'));
+
+  db_insert('location_instance')
+    ->fields(array('nid', 'vid', 'genid', 'lid'))
+    ->from($insert_select)
+    ->execute();
+
+  // Remove the temporary table.
+  db_drop_table('location_instance_tmp');
+}

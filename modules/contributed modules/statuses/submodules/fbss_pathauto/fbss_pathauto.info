@@ -1,0 +1,14 @@
+name = Statuses Pathauto
+description = "Integrates Pathauto with Statuses."
+package = Statuses
+dependencies[] = statuses
+dependencies[] = pathauto
+core = 7.x
+files[] = fbss_pathauto.module
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

@@ -1,0 +1,19 @@
+<?php
+
+/**
+ * @file
+ *   Install, update and uninstall functions for the location_taxonomy module.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function location_taxonomy_uninstall() {
+  // @@@ Delete data?
+
+  // Delete vocabulary location settings.
+  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'location_taxonomy_%'")->fetchCol();
+  foreach ($result as $var) {
+    variable_del($var);
+  }
+}

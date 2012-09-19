@@ -1,0 +1,615 @@
+
+/* @group Node edit form styles */
+
+.settings-group {
+  clear: both;
+  margin-top: 1.5em;
+}
+
+.settings-group > img {
+  float: left;
+  margin-bottom: 2em;
+  margin-right: 2em;
+}
+
+.settings-group .group-label {
+  font-weight: bold;
+  margin-bottom: 0.75em;
+}
+
+.settings-group .form-item {
+  padding: 0;
+}
+
+.settings-group .form-item label {
+  font-weight: normal;
+}
+
+.settings-group .form-item label.option {
+  font-size: 1em;
+  vertical-align: middle;
+}
+
+.settings-group .form-item div.description {
+  font-size: 0.87em;
+  margin-top: 0;
+}
+
+.settings-group .form-inline {
+  float: left;
+}
+
+.settings-group .form-inline label {
+  display: none;
+}
+
+.settings-group .form-inline select {
+  margin: 2em 1em 0 0;
+}
+
+.settings-group .form-inline.label label {
+  display: block;
+  position: absolute;
+}
+
+.settings-group .form-select.enhanced {
+  margin-right: 1em;
+}
+
+.no-overflow {
+  overflow: hidden;
+}
+
+.field-name-media-gallery-format .form-type-radio label.option,
+.field-name-media-gallery-lightbox-extras .form-type-checkbox label.option {
+  font-size: 0.94em;
+  line-height: 1.2em;
+}
+
+.field-name-media-gallery-format .form-type-radio label.option .description {
+  color: #666666;
+  display: block;
+  font-size: 0.86em;
+}
+
+.no-label label,
+.no-group-label > .form-item > label {
+  display: none;
+}
+
+.setting-icon {
+  background: url('images/gallery-icon-sprite.png') no-repeat left top transparent;
+  display: block;
+  float: left;
+  height: 44px;
+  margin: 0 0.5em;
+  width: 42px;
+}
+
+.settings-group .setting-icon {
+  height: 109px;
+  width: 104px;
+}
+
+.gallery-settings .setting-icon {
+  background-position: -442px -57px;
+}
+
+.presentation-settings .setting-icon {
+  background-position: 0 -57px;
+}
+
+.block-settings .setting-icon {
+  background-position: -331px -57px;
+}
+
+.galleries-settings .setting-icon {
+  background-position: -552px -57px;
+}
+
+/* @end */
+
+/* @group Galleries form styles */
+
+.form-media-gallery-collection .field-name-field-license {
+  clear: both;
+}
+
+#edit-media-gallery-lightbox-extras {
+  margin-left: 2em;
+  margin-top: -1em;
+}
+
+.presentation-settings .setting-icon.display-page {
+  background-position: -221px -57px;
+}
+
+.presentation-settings .setting-icon.display-lightbox {
+  background-position: 0 -57px;
+}
+
+.presentation-settings .setting-icon.display-extras {
+  background-position: -110px -57px;
+}
+
+/* @end */
+
+/* @group Gallery thumbnail styles */
+
+.media-gallery-collection a.media-gallery-thumb,
+.media-gallery-media a.media-gallery-thumb,
+.media-gallery-thumb img {
+  display: block;
+  overflow: hidden;
+  position: relative;
+}
+
+.media-gallery-media > .field-items > .field-item {
+  float: left;
+  position: relative;
+}
+
+.media-gallery-media .media-gallery-item-wrapper {
+  margin: 0.5em;
+  position: relative;
+}
+
+.media-gallery-media .media-gallery-item {
+  background: #FFFFFF;
+  border: 1px solid #666666;
+  padding: 2%;
+}
+
+.meta-wrapper,
+.meta-wrapper:link,
+.meta-wrapper:hover,
+.meta-wrapper:visited,
+.meta-wrapper:active {
+  font-size: 0.8462em;
+  line-height: 1.5em;
+  min-height: 3em;
+  vertical-align: top;
+}
+
+.meta-wrapper .media-title * .field-item,
+.meta-wrapper .media-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  -moz-binding: url('ellipsis.xml#ellipsis');
+}
+
+.meta-wrapper {
+  display: block;
+  padding: 0 9%;
+}
+
+.meta-wrapper.hover {
+  line-height: 1em;
+  padding: 0;
+}
+
+.meta-wrapper .media-description span {
+  white-space: nowrap;
+}
+
+.media-license {
+  display: block;
+  float: right;
+  font-size: 0;
+  line-height: 14px;
+}
+
+.media-gallery-media .media-license {
+  float: left;
+  margin: 4px 0 0;
+}
+
+.media-license span {
+  background: url('images/creative-commons-sprite.png') no-repeat left top transparent;
+  display: inline-block;
+  font-size: 1em;
+  height: 0;
+  padding: 7px;
+  width: 0;
+}
+
+.media-license span + span {
+  margin-left: 3px;
+}
+
+.media-license.dark .copyright {
+  background-position: -95px -1px;
+}
+
+.media-license.dark .attribution {
+  background-position: -2px -1px;
+}
+
+.media-license.dark .non-commercial {
+  background-position: -25px -1px;
+}
+
+.media-license.dark .share-alike {
+  background-position: -49px -1px;
+}
+
+.media-license.dark .no-deriv {
+  background-position: -72px -1px;
+}
+
+.media-license.light .copyright {
+  background-position: -95px -51px;
+}
+
+.media-license.light .attribution {
+  background-position: -2px -51px;
+}
+
+.media-license.light .non-commercial {
+  background-position: -25px -51px;
+}
+
+.media-license.light .share-alike {
+  background-position: -49px -51px;
+}
+
+.media-license.light .no-deriv {
+  background-position: -72px -51px;
+}
+
+.media-license.medium .copyright {
+  background-position: -95px -26px;
+}
+
+.media-license.medium .attribution {
+  background-position: -2px -26px;
+}
+
+.media-license.medium .non-commercial {
+  background-position: -25px -26px;
+}
+
+.media-license.medium .share-alike {
+  background-position: -49px -26px;
+}
+
+.media-license.medium .no-deriv {
+  background-position: -72px -26px;
+}
+
+.meta-wrapper.hover {
+  color: #666;
+  display: none;
+  left: -2px;
+  line-height: 1.25em;
+  margin: -7px 0 0;
+  min-height: 0;
+  min-width: 100%;
+  position: absolute;
+  *right: -2px;
+  top: 100%;
+  z-index: 1;
+}
+
+.meta-wrapper.hover .slider {
+  background: url('images/hover-bubble.png') no-repeat left top transparent;
+  display: block;
+}
+
+.meta-wrapper.hover .slider.top {
+  padding-left: 53px;
+}
+
+.meta-wrapper.hover .slider.top-inner {
+  background-position: right -48px;
+  height: 14px;
+}
+
+.meta-wrapper.hover .slider.meta-outer {
+  background: url('images/hover-bubble-middle.png') repeat-y left top transparent;
+  padding-left: 0.5em;
+}
+
+.meta-wrapper.hover .slider.meta-inner {
+  background: url('images/hover-bubble-middle.png') repeat-y right top transparent;
+  padding-right: 0.5em;
+}
+
+.meta-wrapper.hover .slider.bottom {
+  background-position: left -42px;
+  padding-left: 53px;
+}
+
+.meta-wrapper.hover .slider.bottom-inner {
+  background-position: right bottom;
+  height: 5px;
+}
+
+.meta-wrapper .media-title {
+  display: block;
+  font-size: 12px;
+  font-weight: bold;
+  height: 1.5em;
+  line-height: 1.5em;
+  white-space: nowrap;
+}
+
+.meta-wrapper.hover .media-title {
+  color: #000;
+}
+
+.meta-wrapper.hover .media-title a,
+.meta-wrapper.hover .media-title a:hover {
+  color: #000;
+}
+
+.media-gallery-item-wrapper:hover .meta-wrapper.hover,
+.media-collection-item-wrapper:hover + .meta-wrapper.hover,
+.meta-wrapper.hover:hover {
+  display: block;
+}
+
+.meta-inner span {
+  display: block;
+}
+
+.media-description span {
+  display: inline;
+  line-height: 1em;
+}
+
+/* @end */
+
+/* @group Gridding styles */
+
+.media-gallery-media {
+
+}
+
+.mg-col {
+  display: inline-block;
+  margin: 0 -0.5em 3em;
+  width: 100%;
+}
+
+.mg-col > .field-items {
+  width: 100%;
+}
+
+a.media-gallery-thumb img,
+.media-gallery-detail img {
+  height: auto;
+  overflow: auto;
+  width: 100%;
+}
+
+/**
+ * The following widths are inflected with !important to
+ * prevent users in the ThemeBuilder from destroying the
+ * presentation of their galleries if they alter the width
+ * of items with the .field class.
+ */
+.mg-col-1 > .field-items > .field-item,
+.mg-col-1 .node,
+.media-gallery-detail .field-items > .field-item {
+  width: 100% !important;
+}
+
+.mg-col-2 > .field-items > .field-item,
+.mg-col-2 .node {
+  width: 50% !important;
+}
+
+.mg-col-3 > .field-items > .field-item,
+.mg-col-3 .node {
+  width: 33.3% !important;
+}
+
+.mg-col-4 > .field-items > .field-item,
+.mg-col-4 .node {
+  width: 24.96% !important;
+}
+
+.mg-col-5 > .field-items > .field-item,
+.mg-col-5 .node {
+  width: 20% !important;
+}
+
+.mg-col-6 > .field-items > .field-item,
+.mg-col-6 .node {
+  width: 16.6666666665% !important;
+}
+
+.mg-col-7 > .field-items > .field-item,
+.mg-col-7 .node {
+  width: 14.2857142857% !important;
+}
+
+.mg-col-8 > .field-items > .field-item,
+.mg-col-8 .node {
+  width: 12.5% !important;
+}
+
+.mg-col-9 > .field-items > .field-item,
+.mg-col-9 .node {
+  width: 11.1111111111% !important;
+}
+
+.mg-col-10 > .field-items > .field-item,
+.mg-col-10 .node {
+  width: 10% !important;
+}
+
+.mg-col .node-media-gallery.node-teaser {
+  float: left;
+}
+
+.mg-col .node-media-gallery.node-teaser,
+.mg-col .node-media-gallery.node-teaser .content {
+  margin: 0;
+  outline: none;
+}
+
+.mg-col .node-media-gallery.node-teaser h2 {
+  display: none;
+}
+
+.mg-col .node-media-gallery.node-teaser .float-overflow {
+  margin: 0.5em;
+  overflow: visible;
+  position: relative;
+}
+
+/* @end */
+
+/* @group Detail page styles */
+
+.media-gallery-detail-wrapper {
+  margin-top: 1em;
+}
+
+.media-gallery-detail {
+  float: left;
+  margin-right: 1em;
+  line-height: normal;
+  max-width: 70%;
+}
+
+.media-gallery-detail-wrapper .field-name-media-description .field-item {
+  word-wrap: break-word;
+}
+
+.media-gallery-detail-info {
+  clear: both;
+  display: inline-block;
+  margin-top: 0.5em;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+.media-gallery-detail-info .media-license {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.media-gallery-detail-info + .media-gallery-detail-info {
+  margin-top: 1em;
+}
+
+.media-gallery-detail-image-info-wrapper {
+  clear: right;
+  float: right;
+}
+
+.media-gallery-image-count {
+  padding-right: 1em;
+}
+
+/* @end */
+
+/* @group Lightbox styles */
+
+#cboxSlideshow {
+  right: 40px;
+}
+
+.mg-lightbox-wrapper {
+  color: #666666;
+}
+
+.mg-lightbox-wrapper a,
+.lightbox-stack a {
+  color: #0074BD;
+}
+
+.mg-lightbox-wrapper a:link,
+.mg-lightbox-wrapper a:visited,
+.mg-lightbox-wrapper a:active,
+.mg-lightbox-wrapper a:hover,
+.lightbox-stack a:link,
+.lightbox-stack a:visited,
+.lightbox-stack a:active,
+.lightbox-stack a:hover{
+  color: #0074BD;
+}
+
+.mg-lightbox-wrapper a:hover,
+.lightbox-stack a:hover {
+  text-decoration: underline;
+}
+
+.mg-lightbox-wrapper .lightbox-title {
+  font-size: 1.8em;
+  font-weight: bold;
+  padding-bottom: 0.2em;
+  padding-top: 0.2em;
+}
+
+.mg-lightbox-detail {
+  float: left;
+  padding-right: 320px;
+}
+
+.mg-lightbox-description {
+  width: 300px;
+  margin-left: -300px;
+  float: left;
+}
+
+.lightbox-stack {
+  min-width: 250px;
+}
+
+/* @end */
+
+/* @group Gallery of Galleries styles */
+
+.media-collection-item-wrapper {
+  padding: 9%;
+  position: relative;
+}
+
+.stack-image {
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  z-index: 0;
+}
+
+.media-collection-item-wrapper .media-gallery-item {
+  border: none;
+  position: relative;
+}
+
+/* @end */
+
+/* @group Gallery node styles */
+
+.colorbox-supplemental-links {
+  display: none;
+}
+
+/* @end */
+
+/* @group Overrides */
+
+a.contextual-links-trigger {
+  background-position: 2px -18px;
+}
+
+a.contextual-links-trigger:hover,
+div.contextual-links-active a.contextual-links-trigger {
+  background-position: 2px 0;
+}
+
+/* remove extra padding around the iframe */
+.ui-dialog .media-modal-frame {
+  padding: 0 !important;
+}
+
+/* @end */

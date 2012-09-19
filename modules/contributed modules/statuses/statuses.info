@@ -1,0 +1,56 @@
+name = Statuses
+description = "Creates context-sensitive social streams."
+package = Statuses
+configure = admin/config/statuses
+dependencies[] = views
+core = 7.x
+
+files[] = statuses.author-pane.inc
+files[] = statuses.install
+files[] = statuses.module
+files[] = views-view-row-rss.tpl.php
+files[] = includes/statuses.preprocess.inc
+files[] = includes/ctools/content_types/statuses_stream.inc
+files[] = includes/utility/statuses.access.inc
+files[] = includes/utility/statuses.admin.inc
+files[] = includes/utility/statuses.announce.inc
+files[] = includes/utility/statuses.contexts.inc
+files[] = includes/utility/statuses.conversation.inc
+files[] = includes/utility/statuses.edit.inc
+files[] = includes/utility/statuses.form.inc
+files[] = includes/utility/statuses.generate.inc
+files[] = includes/views/statuses.views.inc
+files[] = includes/views/statuses.views_default.inc
+files[] = includes/views/fbss_user_relationships.views_default.inc
+files[] = includes/views/handlers/statuses_plugin_argument_validate.inc
+files[] = includes/views/handlers/statuses_views_handler_argument_communicated.inc
+files[] = includes/views/handlers/statuses_views_handler_argument_participant.inc
+files[] = includes/views/handlers/statuses_views_handler_argument_rels_and_me.inc
+files[] = includes/views/handlers/statuses_views_handler_field_created.inc
+files[] = includes/views/handlers/statuses_views_handler_field_cross.inc
+files[] = includes/views/handlers/statuses_views_handler_field_cross_pic.inc
+files[] = includes/views/handlers/statuses_views_handler_field_current_uid.inc
+files[] = includes/views/handlers/statuses_views_handler_field_delete.inc
+files[] = includes/views/handlers/statuses_views_handler_field_edit.inc
+files[] = includes/views/handlers/statuses_views_handler_field_last.inc
+files[] = includes/views/handlers/statuses_views_handler_field_message.inc
+files[] = includes/views/handlers/statuses_views_handler_field_recipient.inc
+files[] = includes/views/handlers/statuses_views_handler_field_recipient_pic.inc
+files[] = includes/views/handlers/statuses_views_handler_field_repost.inc
+files[] = includes/views/handlers/statuses_views_handler_field_respond.inc
+files[] = includes/views/handlers/statuses_views_handler_filter_autotype.inc
+files[] = includes/views/handlers/statuses_views_handler_filter_communicated.inc
+files[] = includes/views/handlers/statuses_views_handler_filter_latest_only.inc
+files[] = includes/views/handlers/statuses_views_handler_filter_not_own.inc
+files[] = includes/views/handlers/statuses_views_handler_filter_own.inc
+files[] = includes/views/handlers/statuses_views_handler_filter_participant.inc
+files[] = includes/views/handlers/statuses_views_handler_filter_type.inc
+files[] = includes/views/handlers/statuses_views_plugin_row_rss.inc
+files[] = templates/statuses-item.tpl.php
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

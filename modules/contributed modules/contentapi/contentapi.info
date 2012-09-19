@@ -1,0 +1,12 @@
+name = Content API
+description = A pluggable content resource module for the Services 3.x framework
+package = "Services - resources"
+dependencies[] = services
+dependencies[] = rest_server
+core = 7.x
+; Information added by drupal.org packaging script on 2012-01-24
+version = "7.x-1.0-alpha3"
+core = "7.x"
+project = "contentapi"
+datestamp = "1327367738"
+

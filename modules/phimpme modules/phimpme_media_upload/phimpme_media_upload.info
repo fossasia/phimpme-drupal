@@ -1,0 +1,10 @@
+name = PhimpMe Media Upload
+description = Create a button to upload to Media Gallery.
+package = Media
+core = 7.x
+dependencies[] = block
+dependencies[] = media_gallery
+
+version = "7.x-0.1"
+core = "7.x"
+project = "phimpme_media_upload"

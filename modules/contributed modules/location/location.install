@@ -1,0 +1,1288 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the location module.
+ */
+
+/**
+ * Implentation of hook_uninstall().
+ */
+function location_uninstall() {
+  // Delete variables.
+  variable_del('location_default_country');
+  variable_del('location_display_location');
+  variable_del('location_usegmap');
+  variable_del('location_locpick_macro');
+
+  // Delete geocoder settings.
+  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'location_geocode_%'")->fetchCol();
+  foreach ($result as $var) {
+    variable_del($var);
+  }
+}
+
+/**
+ * Implementation of hook_schema().
+ */
+function location_schema() {
+  $schema['location'] = array(
+    'description' => 'Locational data managed by location.module.',
+    'fields' => array(
+      'lid' => array(
+        'description' => 'Primary Key: Unique location ID.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'name' => array(
+        'description' => 'Place Name.',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+        'not null' => TRUE,
+      ),
+      'street' => array(
+        'description' => 'Street address, line 1.',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+        'not null' => TRUE,
+      ),
+      'additional' => array(
+        'description' => 'Street address, line 2.',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+        'not null' => TRUE,
+      ),
+      'city' => array(
+        'description' => 'City.',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+        'not null' => TRUE,
+      ),
+      'province' => array(
+        'description' => 'State / Province code.',
+        'type' => 'varchar',
+        'length' => 16,
+        'default' => '',
+        'not null' => TRUE,
+      ),
+      'postal_code' => array(
+        'description' => 'Postal / ZIP code.',
+        'type' => 'varchar',
+        'length' => 16,
+        'default' => '',
+        'not null' => TRUE,
+      ),
+      'country' => array(
+        'description' => 'Two letter ISO country code.',
+        'type' => 'char',
+        'length' => 2,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'latitude' => array(
+        'description' => 'Location latitude (decimal degrees).',
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 6, // @@@ Shouldn't these all be 7?
+        'not null' => TRUE,
+        'default' => 0.0,
+      ),
+      'longitude' => array(
+        'description' => 'Location longitude (decimal degrees).',
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 6,
+        'not null' => TRUE,
+        'default' => 0.0,
+      ),
+      'source' => array(
+        'description' => 'Source of the latitude and longitude data (Geocoder, user entered, invalid, etc.)',
+        'type' => 'int',
+        'size' => 'tiny',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+      // @@@ Historical civicrm field that isn't applicable to location, I think..
+      'is_primary' => array(
+        'description' => 'Is this the primary location of an object? (unused, civicrm legacy field?).',
+        'type' => 'int',
+        'size' => 'tiny',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('lid'),
+  );
+  $schema['location_instance'] = array(
+    'description' => 'N:M join table to join locations to other tables.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Reference to {node}.nid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'vid' => array(
+        'description' => 'Reference to {node_revision}.vid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'uid' => array(
+        'description' => 'Reference to {users}.uid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'genid' => array(
+        'description' => 'Generic reference key.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'lid' => array(
+        'description' => 'Reference to {location}.lid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'nid' => array('nid'),
+      'vid' => array('vid'),
+      'uid' => array('uid'),
+      'genid' => array('genid'),
+      'lid' => array('lid'),
+    ),
+  );
+  $schema['zipcodes'] = array(
+    'description' => 'Location.module zipcode database.',
+    'fields' => array(
+      'zip' => array(
+        'description' => 'Postal / ZIP code.',
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => TRUE,
+        'default' => '0', // @@@ Why?
+      ),
+      'city' => array(
+        'description' => 'City.',
+        'type' => 'varchar',
+        'length' => 30,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'state' => array(
+        'description' => 'Province / State.',
+        'type' => 'varchar',
+        'length' => 30,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'latitude' => array(
+        'description' => 'Location latitude (decimal degrees).',
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 6,
+        'not null' => TRUE,
+        'default' => 0.0,
+      ),
+      'longitude' => array(
+        'description' => 'Location longitude (decimal degrees).',
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 6,
+        'not null' => TRUE,
+        'default' => 0.0,
+      ),
+      // @@@ Not used, an artifact of the original data dump format.
+      'timezone' => array(
+        'description' => 'Timezone (unused).',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      // @@@ Not used, an artifact of the original data dump format.
+      'dst' => array(
+        'description' => 'Daylight Savings Time (unused).',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'country' => array(
+        'description' => 'Two letter ISO country code.',
+        'type' => 'char',
+        'length' => 2,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    // @@@ This pk is invalid, see issue queue.
+    //'primary key' => array('country', 'zip'),
+    // @@@ These need reworked.
+    'indexes' => array(
+      'pc' => array('country', 'zip'),
+      'zip' => array('zip'),
+      // @@@ No combined one?
+      'latitude' => array('latitude'),
+      'longitude' => array('longitude'),
+      'country' => array('country'),
+    ),
+  );
+  // Copied from system.module.
+  $schema['cache_location'] = array(
+    'description' => 'Generic cache table for caching things not separated out into their own tables. Contributed modules may also use this to store cached items.',
+    'fields' => array(
+      'cid' => array(
+        'description' => 'Primary Key: Unique cache ID.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => ''),
+      'data' => array(
+        'description' => 'A collection of data to cache.',
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big'),
+      'expire' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry should expire, or 0 for never.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0),
+      'created' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0),
+      'headers' => array(
+        'description' => 'Any custom HTTP headers to be added to cached data.',
+        'type' => 'text',
+        'not null' => FALSE),
+      'serialized' => array(
+        'description' => 'A flag to indicate whether content is serialized (1) or not (0).',
+        'type' => 'int',
+        'size' => 'small',
+        'not null' => TRUE,
+        'default' => 0)
+      ),
+    'indexes' => array('expire' => array('expire')),
+    'primary key' => array('cid'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Legacy update 1.
+ * Convert tables to utf8.
+ */
+function location_update_1() {
+//  return _system_update_utf8(array('location', 'zipcodes'));
+}
+
+/**
+ * Legacy update 2.
+ * Fix a bug with the "us" entry in the "location_configured_countries" var.
+ */
+function location_update_2() {
+  $configured_countries = variable_get('location_configured_countries', array());
+  if ($configured_countries['us']) {
+    $configured_countries['us'] = 'us';
+    variable_set('location_configured_countries', $configured_countries);
+  }
+  return array();
+}
+
+/**
+ * Legacy update 3.
+ * Allow for postgresql support by renaming the oid column, which is a reserved
+ * name on postgresql.
+ */
+function location_update_3() {
+  db_change_field('location', 'oid', 'eid', array(
+    'type' => 'int',
+    'unsigned' => TRUE,
+    'not null' => TRUE,
+    'default' => 0,
+  ));
+
+  if (module_exists('views')) {
+    views_invalidate_cache();
+  }
+  
+  return t("The schema for location module has been updated.  The update is such that you may want to re-resave any views you have that may include locations.");
+}
+
+/***************************************************************
+  PostgreSQL must be supported in all updates after this comment
+ ***************************************************************/
+
+/**
+ * Legacy update 4.
+ * Add "lid" as the new location key.
+ */
+function location_update_4() {
+  db_add_field('location', 'lid', array(
+    'type' => 'serial',
+    'unsigned' => TRUE,
+    'not null' => TRUE,
+    'description' => 'Primary Key: Unique location ID.',
+  ));
+
+  $result = db_query("SELECT eid, type FROM {location}");
+  $next_id = 0;
+  foreach ($result as $row) {
+    $next_id++;
+    db_update('location')
+      ->fields(array(
+        'lid' => $next_id,
+      ))
+      ->condition('eid', $row->eid)
+      ->condition('type', $row->type)
+      ->execute();
+  }
+
+  db_drop_primary_key('location');
+  db_add_primary_key('location', array('lid'));
+
+  db_insert('sequences')
+    ->fields(array(
+      'name' => '{location}_lid',
+      'id' => $next_id,
+    ))
+    ->execute();
+
+  db_add_field('location', 'is_primary', array(
+    'description' => 'Is this the primary location of an object? (unused, civicrm legacy field?).',
+    'type' => 'int',
+    'size' => 'tiny',
+    'default' => 0,
+    'not null' => TRUE,
+  ));
+
+  db_update('location')
+    ->fields(array(
+      'is_primary' => 1,
+    ))
+    ->condition('type', 'user')
+    ->execute();
+      
+  foreach (node_type_get_types() as $type) {
+    $new_setting = variable_get('location_' . $type->type, 0) ? 1 : 0;
+    variable_del('location_' . $type->type);
+    variable_set('location_maxnum_' . $type->type, $new_setting);
+    variable_set('location_defaultnum_' . $type->type, $new_setting);
+  }
+}
+
+/**
+ * Legacy update 5.
+ * Postgresql support that was missing from previous update.
+ *
+ * This update is redundant now that we have db api functions
+ * that are database independant.
+ */
+function location_update_5() {
+}
+
+/**
+ * Legacy update 6.
+ * Use correct country code for Sweeden.
+ */
+function location_update_6() {
+  db_update('location')
+    ->fields(array(
+      'country' => 'se',
+    ))
+    ->condition('country', 'sw')
+    ->execute();
+}
+
+/**
+ * Update 7 (Location 2.x)
+ * Generalize google geocoding so you don't have to enter the api key over and over.
+ */
+function location_update_7() {
+  $services = array('google');
+  $general_geocoders_in_use = array();
+
+  $result = db_query("SELECT * FROM {variable} WHERE name REGEXP '^location_geocode_[a-z][a-z]$'");
+
+  foreach ($result as $row) {
+    $value_decoded = unserialize($row->value);
+    if (!in_array($value_decoded, $services)) {
+      db_update('variable')
+        ->fields(array(
+          'value' => serialize($value_decoded . '|' . substr($row->name, 17)),
+        ))
+        ->condition('name', $row->name)
+        ->execute();
+    }
+    else {
+      $general_geocoders_in_use[$value_decoded] = $value_decoded;
+    }
+  }
+
+  $key = db_query("SELECT value FROM {variable} WHERE name REGEXP '^location_geocode_[a-z][a-z]_google_apikey$'")->fetchField();
+
+  db_delete('variable')
+    ->where("name REGEXP '^location_geocode_[a-z][a-z]_google_apikey$'")
+    ->execute();
+
+  db_insert('variable')
+    ->fields(array(
+      'name' => 'location_geocode_google_apikey',
+      'value' => $key,
+    ))
+    ->execute();
+
+  db_delete('cache')
+    ->condition('cid', 'variables')
+    ->execute();
+
+  variable_set('location_general_geocoders_in_use', $general_geocoders_in_use);
+}
+
+/**
+ * Location 3.x update 1.
+ * Add location specific cache table.
+ */
+function location_update_5300() {
+  $schema['cache_location'] = array(
+    'description' => 'Generic cache table for caching things not separated out into their own tables. Contributed modules may also use this to store cached items.',
+    'fields' => array(
+      'cid' => array(
+        'description' => 'Primary Key: Unique cache ID.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'data' => array(
+        'description' => 'A collection of data to cache.',
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big',
+      ),
+      'expire' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry should expire, or 0 for never.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'headers' => array(
+        'description' => 'Any custom HTTP headers to be added to cached data.',
+        'type' => 'text',
+        'not null' => FALSE,
+      ),
+    ),
+    'indexes' => array('expire' => array('expire')),
+    'primary key' => array('cid'),
+  );
+
+  db_create_table('cache_location', $schema['cache_location']);
+}
+
+/**
+ * Location 3.x update 2.
+ * Normalize the location table.
+ * This allows:
+ *   - Making the loading and saving code cleaner.
+ *   - Fixing a longstanding bug with revisions.
+ *   - Having the same location on multiple nodes/users/both.
+ *   - Garbage collecting unused locations periodically.
+ *   - Having full support for deletions.
+ *   - Full revisions support.
+ * Note that the location_instance table does NOT have a primary key.
+ * This is on purpose. It's a N:M join table.
+ */
+function location_update_5301() {
+  $schema['location_instance'] = array(
+    'description' => 'N:M join table to join locations to other tables.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Reference to {node}.nid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'vid' => array(
+        'description' => 'Reference to {node_revision}.vid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'uid' => array(
+        'description' => 'Reference to {users}.uid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'genid' => array(
+        'description' => 'Generic reference key.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'lid' => array(
+        'description' => 'Reference to {location}.lid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'nid' => array('nid'),
+      'vid' => array('vid'),
+      'uid' => array('uid'),
+      'genid' => array('genid'),
+      'lid' => array('lid'),
+    ),
+  );
+
+  db_create_table('location_instance', $schema['location_instance']);
+
+  // Synthesise node location data based on what we have.
+  // Storage of locations was previously stored against node revision, BUT the
+  // data was not properly duplicated by revision (i.e. only the latest revision
+  // carried the data.)
+  // Joining like this allows us to backfill all the old revisions with the current
+  // data, which is not nice but better than having no data at all when viewing
+  // old revisions.
+
+  $query = db_select('node_revision', 'nr');
+  $query->join('node_revision', 'nr2', 'nr.nid = nr2.nid');
+  $query->join('location', 'l', "nr2.vid = l.eid AND l.type = 'node'");
+  $query->addField('nr', 'nid');
+  $query->addField('nr', 'vid');
+  $query->addField('l', 'lid');
+
+  db_insert('location_instance')
+    ->fields(array('nid', 'vid', 'lid'))
+    ->from($query)
+    ->execute();
+
+  // Users is much simpler.
+  $query = db_select('location', 'l');
+  $query->addField('l', 'eid');
+  $query->addField('l', 'lid');
+  $query->condition('type', 'user');
+
+  db_insert('location_instance')
+    ->fields(array('uid', 'lid'))
+    ->from($query)
+    ->execute();
+
+  // Aug 18 2008:
+  // Save everything else in genid.
+  $query = db_select('location', 'l');
+  $query->addExpression("CONCAT(l.type, ':', l.eid)");
+  $query->addField('l', 'lid');
+  $query->condition('type', 'user', '<>');
+  $query->condition('type', 'node', '<>');
+
+  db_insert('location_instance')
+    ->fields(array('genid', 'lid'))
+    ->from($query)
+    ->execute();
+
+  // Remove now unused columns.
+  db_drop_field('location', 'type');
+  db_drop_field('location', 'eid');
+
+  // General cleanup.
+  variable_del('location_user'); // Removed in favor of permission check.
+
+  // Variable consolidation (as part of the element based system)
+  // We're doing this "raw" so we can be sure we got everything moved over,
+  // INCLUDING content types that were deleted in the past.
+  // This will let us do better cleanup sometime in the future.
+  $data = array();
+  $todelete = array();
+  foreach(array('name', 'street', 'additional', 'city', 'province', 'postal_code', 'country', 'phone', 'fax') as $field) {
+    $result = db_query("SELECT name, value FROM {variable} WHERE name > :name", array(':name' => "location_$field%"));
+    foreach ($result as $row) {
+      $data[substr($row->name, strlen($field) + 10)][$field] = (string)(int)unserialize($row->value);
+      $todelete[] = $row->name;
+    }
+  }
+  foreach ($data as $type => $value) {
+    // We aren't going to trust that hook_locationapi is operational.
+    // So, stick with some conservative defaults.
+    $value = array_merge(array(
+      'name' => '1',
+      'street' => '1',
+      // additional is left out of this list intentionally.
+      'city' => '0',
+      'province' => '0',
+      'postal_code' => '0',
+      'country' => '1',
+    ), $value);
+    if (!isset($value['additional'])) {
+      // Initialize additional to match street.
+      $value['additional'] = $value['street'];
+    }
+    variable_set('location_fields_'. $type, $value);
+  }
+  foreach ($todelete as $key) {
+    variable_del($key);
+  }
+
+  // This update was retrofitted on Aug 18, 2008. Set a flag for use by
+  // the next update in order to handle the case where someone has already
+  // updated to EXACTLY schema revision 5301 before the retrofit took effect.
+  // People who migrated past this point before that date may have the following
+  // inconsistencies:
+  // A) location_{field}_{type} variables were not collected for content types
+  // that had been deleted in the past.
+  // B) Any locations with the 'type' field set to something other than 'node'
+  // or 'user' did not get entries in {location_instance}.
+  variable_set('location_update_5301_retrofit', TRUE);
+}
+
+/**
+ * Location 3.x update 3.
+ * Add genid to {location_instance}.
+ */
+function location_update_5302() {
+  // OK, here's the deal. I retrofitted 5301 on Aug 18 2008 to integrate the genid.
+  // This was needed to fix the pre location 3.x todo item regarding keeping non
+  // user, non node data intact. People doing an update after Aug 18 will already
+  // have the genid column in place, so it can be safely skipped.
+  if (!variable_get('location_update_5301_retrofit', FALSE)) {
+    db_add_field('location_instance', 'genid', array(
+      'description' => 'Generic reference key.',
+      'type' => 'varchar',
+      'length' => 255,
+      'not null' => TRUE,
+      'default' => '',
+    ));
+
+    db_add_index('location_instance', 'genid', array('genid'));
+  }
+}
+
+/**
+ * Location 3.x update 4.
+ * Shuffle more variables around.
+ */
+function location_update_5303() {
+  $types = array();
+  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'location_display_teaser_%'");
+  foreach ($result as $row) {
+    $type = substr($row->name, 24);
+    $types[$type]['teaser'] = variable_get('location_display_teaser_'. $type, TRUE);
+    $types[$type]['full'] = variable_get('location_display_full_'. $type, TRUE);
+    $types[$type]['weight'] = variable_get('location_display_weight_'. $type, 0);
+    // @@@ Combine location_suppress_country and country require settings to set this up?
+    $types[$type]['hide'] = array();
+  }
+  foreach ($types as $type => $value) {
+    variable_set("location_display_$type", $value);
+    variable_del("location_display_teaser_$type");
+    variable_del("location_display_full_$type");
+    variable_del("location_display_weight_$type");
+  }
+}
+
+// @@@ Does 5303 need rerun in some circumstances?
+
+/**
+ * Drupal 6 location 3.x update.
+ */
+function location_update_6301() {
+  $message = '';
+
+  // Update cache table.
+  db_drop_table('cache_location');
+
+  $schema['cache_location'] = array(
+    'description' => 'Generic cache table for caching things not separated out into their own tables. Contributed modules may also use this to store cached items.',
+    'fields' => array(
+      'cid' => array(
+        'description' => 'Primary Key: Unique cache ID.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => ''),
+      'data' => array(
+        'description' => 'A collection of data to cache.',
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big'),
+      'expire' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry should expire, or 0 for never.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0),
+      'created' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0),
+      'headers' => array(
+        'description' => 'Any custom HTTP headers to be added to cached data.',
+        'type' => 'text',
+        'not null' => FALSE),
+      'serialized' => array(
+        'description' => 'A flag to indicate whether content is serialized (1) or not (0).',
+        'type' => 'int',
+        'size' => 'small',
+        'not null' => TRUE,
+        'default' => 0)
+      ),
+    'indexes' => array('expire' => array('expire')),
+    'primary key' => array('cid'),
+  );
+
+  db_create_table('cache_location', $schema['cache_location']);
+
+  // LID 0 causes all sorts of issues, and will break our update routine
+  // unless we handle it beforehand.
+  // Since we're so nice, we're gonna renumber it for the user.
+  $has_rows = (bool) db_query_range('SELECT 1 FROM {location} WHERE lid = 0', 0, 1)->fetchField();
+  if ($has_rows) {
+    $lid = 1 + db_query('SELECT MAX(lid) FROM {location}')->fetchField();
+    $message = t('Note: A location with lid 0 was found in your database. It has been moved to lid %lid. You may wish to verify it manually, as lid 0 is usually a corrupt entry.', array('%lid' => $lid));
+
+    db_update('location')
+      ->fields(array(
+        'lid' => $lid,
+      ))
+      ->condition('lid', 0)
+      ->execute();
+
+    db_update('location_instance')
+      ->fields(array(
+        'lid' => $lid,
+      ))
+      ->condition('lid', 0)
+      ->execute();
+  }
+
+  // Field changes
+
+  // {location}
+
+  // {location}.lid -- Becomes a serial.
+  db_drop_primary_key('location');
+  db_change_field('location', 'lid', 'lid',
+    array('type' => 'serial', 'unsigned' => TRUE, 'not null' => TRUE),
+    array('primary key' => array('lid')));
+
+  // (The rest of the changes to this table were moved to update 6302 due to a bug.)
+
+  // {location_instance}
+
+  // Fix oddly named indexes -- Was using the postgresql method for both.
+  db_drop_index('location_instance', '{location_instance}_nid_idx');
+  db_drop_index('location_instance', '{location_instance}_vid_idx');
+  db_drop_index('location_instance', '{location_instance}_uid_idx');
+  db_drop_index('location_instance', '{location_instance}_genid_idx');
+  db_drop_index('location_instance', '{location_instance}_lid_idx');
+  db_drop_index('location_instance', 'nid');
+  db_drop_index('location_instance', 'vid');
+  db_drop_index('location_instance', 'uid');
+  db_drop_index('location_instance', 'genid');
+  db_drop_index('location_instance', 'lid');
+
+  // Fill in nulls.
+  db_update('location_instance')
+    ->fields(array(
+      'nid' => 0,
+    ))
+    ->isNull('nid')
+    ->execute();
+
+  db_update('location_instance')
+    ->fields(array(
+      'vid' => 0,
+    ))
+    ->isNull('vid')
+    ->execute();
+
+  db_update('location_instance')
+    ->fields(array(
+      'uid' => 0,
+    ))
+    ->isNull('uid')
+    ->execute();
+
+  db_update('location_instance')
+    ->fields(array(
+      'genid' => 0,
+    ))
+    ->isNull('genid')
+    ->execute();
+
+  // {location_instance}.nid
+  db_change_field('location_instance', 'nid', 'nid', array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0));
+  // {location_instance}.vid
+  db_change_field('location_instance', 'vid', 'vid', array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0));
+  // {location_instance}.uid
+  db_change_field('location_instance', 'uid', 'uid', array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0));
+  // {location_instance}.genid
+  db_change_field('location_instance', 'genid', 'genid', array('type' => 'varchar', 'length' => 255, 'not null' => TRUE, 'default' => ''));
+
+  // {location_instance}.lid
+  db_change_field('location_instance', 'lid', 'lid', array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0));
+
+  // Readd indexes.
+  db_add_index('location_instance', 'nid', array('nid'));
+  db_add_index('location_instance', 'vid', array('vid'));
+  db_add_index('location_instance', 'uid', array('uid'));
+  db_add_index('location_instance', 'genid', array('genid'));
+  db_add_index('location_instance', 'lid', array('lid'));
+
+  // {zipcodes}
+  // Drop primary key.
+  db_drop_primary_key('zipcodes');
+
+  if ($message) {
+    $message .= '<br /><br />';
+  }
+  return $message . t('Note: Location.module update 6301 will generate several warnings/failures regarding indexes and primary keys if you are upgrading from one of the 6.x test releases. These warnings can be safely disregarded in this case.');
+}
+
+/**
+ * Drupal 6 location 3.x update, part 2.
+ */
+function location_update_6302() {
+  // OK, here's the update to fix the previous update which had a few problems
+  // when upgrading from pre-rc 6.x versions.
+
+  // The "mismatch between mysql and postgresql" was actually applicable to
+  // 6.x-3.0 pre-rc1 as well, but I didn't notice because I accidentally added
+  // the not null when reformatting the schema.
+  db_update('location')
+    ->fields(array(
+      'is_primary' => 0,
+    ))
+    ->isNull('is_primary')
+    ->execute();
+    
+  db_change_field('location', 'is_primary', 'is_primary', array('type' => 'int', 'size' => 'tiny', 'default' => 0, 'not null' => TRUE));
+
+  // Fix zipcode mismatches caused by the same problem.
+
+  // There shouldn't be any rows like this, but it doesn't hurt to be sure.
+  db_update('zipcodes')
+    ->fields(array(
+      'zip' => 0,
+    ))
+    ->isNull('zip')
+    ->execute();
+
+  // Set not null.
+  db_change_field('zipcodes', 'zip', 'zip', array('type' => 'varchar', 'length' => 16, 'not null' => TRUE, 'default' => '0'));
+
+  // Prepare latitude and longitude for the same.
+  db_update('zipcodes')
+    ->fields(array(
+      'latitude' => 0.0,
+    ))
+    ->isNull('latitude')
+    ->execute();
+
+  db_update('zipcodes')
+    ->fields(array(
+      'longitude' => 0.0,
+    ))
+    ->isNull('longitude')
+    ->execute();
+
+  // Set not null.
+  db_change_field('zipcodes', 'latitude', 'latitude', array('type' => 'numeric', 'not null' => TRUE, 'default' => 0, 'precision' => 10, 'scale' => 6));
+  db_change_field('zipcodes', 'longitude', 'longitude', array('type' => 'numeric', 'not null' => TRUE, 'default' => 0, 'precision' => 10, 'scale' => 6));
+
+  // Prepare country.
+  update_sql("UPDATE {zipcodes} SET country = '' WHERE country IS NULL");
+  db_update('zipcodes')
+    ->fields(array(
+      'country' => '',
+    ))
+    ->isNull('country')
+    ->execute();
+
+  // Set not null.
+  db_change_field('zipcodes', 'country', 'country', array('type' => 'char', 'length' => 2, 'not null' => TRUE, 'default' => ''));
+
+  // Fix up possible {location} problems from previous update that could be caused if you had NULLed fields.
+
+  // Set defaults
+  $fields = array(
+    'name' => '',
+    'street' => '',
+    'additional' => '',
+    'city' => '',
+    'province' => '',
+    'postal_code' => '',
+    'latitude' => 0.0,
+    'longitude' => 0.0,
+    'source' => 0,
+  );
+  foreach ($fields as $field => $value) {
+    db_update('location')
+      ->fields(array(
+        $field => $value,
+      ))
+      ->isNull($field)
+      ->execute();
+  }
+
+  // {location}.name -- NOT NULL
+  db_change_field('location', 'name', 'name', array('type' => 'varchar', 'length' => 255, 'not null' => TRUE, 'default' => ''));
+  // {location}.street -- NOT NULL
+  db_change_field('location', 'street', 'street', array('type' => 'varchar', 'length' => 255, 'not null' => TRUE, 'default' => ''));
+  // {location}.additional -- NOT NULL
+  db_change_field('location', 'additional', 'additional', array('type' => 'varchar', 'length' => 255, 'not null' => TRUE, 'default' => ''));
+  // {location}.city -- NOT NULL
+  db_change_field('location', 'city', 'city', array('type' => 'varchar', 'length' => 255, 'not null' => TRUE, 'default' => ''));
+  // {location}.province -- NOT NULL
+  db_change_field('location', 'province', 'province', array('type' => 'varchar', 'length' => 16, 'not null' => TRUE, 'default' => ''));
+  // {location}.postal_code -- NOT NULL
+  db_change_field('location', 'postal_code', 'postal_code', array('type' => 'varchar', 'length' => 16, 'not null' => TRUE, 'default' => ''));
+  // {location}.country -- NOT NULL
+  db_change_field('location', 'country', 'country', array('type' => 'char', 'length' => 2, 'not null' => TRUE, 'default' => ''));
+
+  // {location}.latitude
+  db_change_field('location', 'latitude', 'latitude', array('type' => 'numeric', 'precision' => 10, 'scale' => 6, 'not null' => TRUE, 'default' => 0.0));
+  // {location}.longitude
+  db_change_field('location', 'longitude', 'longitude', array('type' => 'numeric', 'precision' => 10, 'scale' => 6, 'not null' => TRUE, 'default' => 0.0));
+
+  // {location}.source
+  db_change_field('location', 'source', 'source', array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0));
+}
+
+/**
+ * Drupal 6 location 3.x update, part 3.
+ */
+function location_update_6303() {
+  if (!variable_get('location_update_5304_done', FALSE)) {
+    // Do the same updates as 5304.
+
+    // Delete unused variables.
+    variable_del('location_configured_countries');
+    variable_del('location_garbagecollect');
+
+    // Update province code for Italy/Forlì-Cesena.
+    db_update('location')
+      ->fields(array(
+        'province' => 'FC',
+      ))
+      ->condition('country', 'it')
+      ->condition('province', 'FO')
+      ->execute();
+
+    // Update province code for Italy/Pesaro e Urbino.
+    db_update('location')
+      ->fields(array(
+        'province' => 'PU',
+      ))
+      ->condition('country', 'it')
+      ->condition('province', 'PS')
+      ->execute();
+
+    // Do one final garbage collection by hand.
+    $query = db_select('location_instance', 'li')
+      ->addField('li', 'lid');
+    db_delete('location')
+      ->condition('lid', $query, 'NOT IN')
+      ->execute();
+    
+    // Garbage collect {location_phone} by hand.
+    if (db_table_exists('location_phone')) {
+      $query = db_select('location', 'l')
+        ->addField('l', 'lid');
+      db_delete('location_phone')
+        ->condition('lid', $query, 'NOT IN')
+        ->execute();
+    }
+
+    // Garbage collect {location_fax} by hand.
+    if (db_table_exists('location_fax')) {
+      $query = db_select('location', 'l')
+        ->addField('l', 'lid');
+      db_delete('location_fax')
+        ->condition('lid', $query, 'NOT IN')
+        ->execute();
+    }
+
+    variable_del('location_update_5304_done');
+  }
+}
+
+/**
+ * Upgrade all of the settings variables to the new unified system.
+ */
+function location_update_6304() {
+  // Skip this update if it was already done on the 5.x side.
+  if (variable_get('location_update_5305_done', FALSE)) {
+    variable_del('location_update_5305_done');
+    return array();
+  }
+
+  $variables = array();
+  $todelete = array();
+
+  $base = array(
+    'multiple' => array(
+      'min' => 0,
+      'max' => 0,
+      'add' => 3,
+    ),
+    'form' => array(
+      'weight' => 0,
+      'collapsible' => TRUE,
+      'collapsed' => TRUE,
+      'fields' => array(),
+    ),
+    'display' => array(
+      'weight' => 0,
+      'hide' => array(),
+    ),
+  );
+
+  // Pull in user settings.
+  $variables['location_settings_user'] = $base;
+  $tmp = &$variables['location_settings_user'];
+  // Users previously could not have multiple locations, initialize with those
+  // settings.
+  $tmp['multiple'] = array(
+    'min' => 0,
+    'max' => 1,
+    'add' => 3,
+  );
+  $tmp['form']['weight'] = variable_get('location_user_weight', 9);
+  $tmp['form']['collapsible'] = variable_get('location_user_collapsible', TRUE);
+  $tmp['form']['collapased'] = variable_get('location_user_collapsed', TRUE);
+  $tmp['form']['fields'] = variable_get('location_user_fields', array());
+
+
+  // Pull in node settings.
+  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'location_maxnum_%'");
+  foreach ($result as $row) {
+    $type = substr($row->name, 16);
+    $todelete[] = $type;
+
+    $variables["location_settings_node_$type"] = $base;
+    $tmp = &$variables["location_settings_node_$type"];
+
+    $tmp['multiple']['min'] = 1; // Old behavior was to have the first one be required.
+    $tmp['multiple']['max'] = variable_get("location_maxnum_$type", 0);
+    $tmp['multiple']['add'] = variable_get("location_defaultnum_$type", 3);
+    $tmp['form']['weight'] = variable_get("location_weight_$type", 9);
+    $tmp['form']['collapsible'] = variable_get("location_collapsible_$type", TRUE);
+    $tmp['form']['collapsed'] = variable_get("location_collapsed_$type", TRUE);
+    $tmp['form']['fields'] = variable_get("location_fields_$type", array());
+    $tmp['rss']['mode'] = variable_get("location_rss_$type", 'simple');
+    $tmp['display'] = variable_get("location_display_$type", array(
+      'teaser' => TRUE,
+      'full' => TRUE,
+      'weight' => 0,
+      'hide' => array(),
+    ));
+  }
+
+  foreach ($variables as $name => $value) {
+    variable_set($name, $value);
+  }
+
+  // Delete old node variables.
+  foreach ($todelete as $key) {
+//    variable_del("location_maxnum_$key");
+//    variable_del("location_defaultnum_$key");
+    variable_del("location_weight_$key");
+    variable_del("location_collapsible_$key");
+    variable_del("location_collapsed_$key");
+    variable_del("location_fields_$key");
+    variable_del("location_rss_$key");
+    variable_del("location_display_$key");
+  }
+
+  // Delete old user variables.
+  variable_del('location_user_weight');
+  variable_del('location_user_collapsible');
+  variable_del('location_user_collapsed');
+  variable_del('location_user_fields');
+}
+
+/**
+ * Disabled due to some typos, moved to 6306.
+ */
+function location_update_6305() {
+  return array();
+}
+
+/**
+ * Add per-location-field weights and defaults.
+ */
+function location_update_6306() {
+  // Skip this update if it was already done on the 5.x side.
+  if (variable_get('location_update_5306_done', FALSE)) {
+    variable_del('location_update_5306_done');
+    return array();
+  }
+
+  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'location_settings_%'");
+  foreach ($result as $row) {
+    $var = variable_get($row->name, array());
+    $collect = $var['form']['fields'];
+    $var['form']['fields'] = array();
+    foreach ($collect as $k => $v) {
+      $var['form']['fields'][$k]['collect'] = $v;
+    }
+    // Country 3 has changed to 4 to make requirements code easier.
+    if (isset($var['form']['fields']['country']['collect']) && $var['form']['fields']['country']['collect'] == 3) {
+      $var['form']['fields']['country']['collect'] = 4;
+    }
+    // Weight and default values don't need to get set for now.
+    variable_set($row->name, $var);
+  }
+}
+
+/**
+ * Tell users about the new location_user module and enable it.
+ */
+function location_update_6307() {
+  $message = t("Note: Location module has now split off user location support into a seperate module, called <em>User Locations</em>. It has been enabled for you. If you don't want user locations, visit the <a href='!url'>modules page</a> and disable it.", array('!url' => url('admin/modules')));
+
+  if (module_exists('location')) {
+    module_enable(array('location_user'));
+  }
+  else {
+    $message .= '<br />' . t("Note: Refusing to enable location_user.module, as location.module is not currently enabled.");
+  }
+
+  return $message;
+}
+
+/**
+ * Tell users about the new location_node module and enable it.
+ */
+function location_update_6308() {
+  $message = t("Note: Location module has now split off node location support into a seperate module, called <em>Node Locations</em>. It has been enabled for you. If you don't want node locations, visit the <a href='!url'>modules page</a> and disable it.", array('!url' => url('admin/modules')));
+
+  if (module_exists('location')) {
+    module_enable(array('location_node'));
+  }
+  else {
+    $message .= '<br />' . t("Note: Refusing to enable location_node.module, as location.module is not currently enabled.");
+  }
+
+  return $message;
+}
+
+/**
+ * There has been a change in the options for the views distance/proximity filter.
+ * The old options need to be migrated into the new.
+ */
+function location_update_6309() {
+  $updated_views = array();
+
+  if (module_exists('views')) {
+    $views = views_get_all_views();
+    foreach ($views as $view) {
+      $modified = FALSE;
+      // For each view check all filters of all displays for the distance field filter.
+      foreach ($view->display as $did => $display) {
+        if (isset($display->display_options['filters']) && !empty($display->display_options['filters'])) {
+          foreach ($display->display_options['filters'] as $fid => $filter) {
+            if ($filter['table'] == 'location' && $filter['field'] == 'distance') {
+              // Set the origin (new option) from the type (old option).
+              $origin = '';
+              switch ($filter['type']) {
+                case 'latlon':
+                  $origin = 'static';
+                  break;
+                case 'postal':
+                case 'postal_default':
+                case 'latlon_gmap':
+                  $origin = $filter['type'];
+                  break;
+              }
+              if ($origin) {
+                $view->display[$did]->display_options['filters'][$fid]['origin'] = $origin;
+                unset($view->display[$did]->display_options['filters'][$fid]['type']);
+                $modified = TRUE;
+              }
+            }
+          }
+        }
+      }
+      // Save the view if we changed any options on any diplays.
+      // Views caches are cleared during save so we don't have to do it.
+      if ($modified) {
+        $updated_views[] = $view->name;
+        $view->save();
+      }
+    }
+  }
+
+  if (!empty($updated_views)) {
+    return t("Note: The 'Form type' option for the 'Location: Distance / Proximity' filter in views has been changed and is now the 'Origin' option.  The following views were using that setting and have been updated to use the new setting: %views.", array('%views' => implode(', ', $updated_views)));
+  }
+}
+
+/**
+ * Updates the ISO code for United Kingdom from 'uk' to 'gb' in the location
+ * table, the zipcodes table, and for any variable names and variable values
+ * where it is used.
+ */
+function location_update_7301() {
+
+  db_update('location')
+    ->fields(array(
+      'country' => 'gb',
+    ))
+    ->condition('country', 'uk')
+    ->execute();
+
+  db_update('zipcodes')
+    ->fields(array(
+      'country' => 'gb',
+    ))
+    ->condition('country', 'uk')
+    ->execute();
+
+  $uk = variable_get('location_geocode_uk', '');
+  $gb = variable_get('location_geocode_gb', '');
+  
+  if ($uk) {
+    variable_set('location_geocode_gb', $uk);
+  }
+  
+  $uk = variable_get('location_map_link_uk', '');
+  $gb = variable_get('location_map_link_gb', '');
+  
+  if ($uk) {
+    variable_set('location_map_link_gb', $uk);
+  }
+  
+  cache_clear_all('*', 'cache_location', TRUE);
+  return;
+}
+

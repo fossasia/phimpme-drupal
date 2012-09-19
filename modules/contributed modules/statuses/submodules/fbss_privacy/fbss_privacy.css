@@ -1,0 +1,9 @@
+.statuses-private-box {
+  float: right;
+}
+.statuses-private-box .form-item {
+  margin: 0.5em;
+}
+.statuses-private-text {
+  font-style: italic;
+}

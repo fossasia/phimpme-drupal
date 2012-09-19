@@ -1,0 +1,560 @@
+<?php
+
+/**
+ * @file
+ * display of a google map as cck field
+ */
+
+/**
+ * @addtogroup hooks
+ * @{
+ */
+
+
+/**
+ * Declare information about a field type.
+ *
+ * @return
+ *   An array keyed by field type name. Each element of the array is an associative
+ *   array with these keys and values:
+ *   - "label": The human-readable label for the field type.
+ */
+function gmap_cck_field_info() {
+  return array(
+    'gmap_cck' => array('label' => 'Google map view'),
+  );
+}
+
+/**
+ * Handle the parameters for a field.
+ *
+ * @param $op
+ *   The operation to be performed. Possible values:
+ *   - "form": Display the field settings form.
+ *   - "validate": Check the field settings form for errors.
+ *   - "save": Declare which fields to save back to the database.
+ *   - "database columns": Declare the columns that content.module should create
+ *     and manage on behalf of the field. If the field module wishes to handle
+ *     its own database storage, this should be omitted.
+ *   - "callbacks": Describe the field's behaviour regarding hook_field operations.
+ *   - "tables" : Declare the Views tables informations for the field.
+ *     Use this operator only if you need to override CCK's default general-purpose
+ *     implementation.
+ *     In this case, it is probably a good idea to use the default definitions
+ *     returned by content_views_field_tables($field) as a start point for your own
+ *     definitions.
+ *   - "arguments" : Declare the Views arguments informations for the field.
+ *     Use this operator only if you need to override CCK's default general-purpose
+ *     implementation.
+ *     In this case, it is probably a good idea to use the default definitions
+ *     returned by content_views_field_arguments($field) as a start point for your own
+ *     definitions.
+ *   - "filters": Declare the Views filters available for the field.
+ *     (this is used in CCK's default Views tables definition)
+ *     They always apply to the first column listed in the "database columns"
+ *     array.
+ * @param $field
+ *   The field on which the operation is to be performed.
+ * @return
+ *   This varies depending on the operation.
+ *   - "form": an array of form elements to add to
+ *     the settings page.
+ *   - "validate": no return value. Use form_set_error().
+ *   - "save": an array of names of form elements to
+ *     be saved in the database.
+ *   - "database columns": an array keyed by column name, with arrays of column
+ *     information as values. This column information must include "type", the
+ *     MySQL data type of the column, and may also include a "sortable" parameter
+ *     to indicate to views.module that the column contains ordered information.
+ *     Details of other information that can be passed to the database layer can
+ *     be found at content_db_add_column().
+ *   - "callbacks": an array describing the field's behaviour regarding hook_field
+ *     operations. The array is keyed by hook_field operations ('view', 'validate'...)
+ *     and has the following possible values :
+ *       CONTENT_CALLBACK_NONE     : do nothing for this operation
+ *       CONTENT_CALLBACK_CUSTOM   : use the behaviour in hook_field(operation)
+ *       CONTENT_CALLBACK_DEFAULT  : use content.module's default bahaviour
+ *     Note : currently only the 'view' operation implements this feature.
+ *     All other field operation implemented by the module _will_ be executed
+ *     no matter what.
+ *   - "tables": an array of 'tables' definitions as expected by views.module
+ *     (see Views Documentation).
+ *   - "arguments": an array of 'arguments' definitions as expected by views.module
+ *     (see Views Documentation).
+ *   - "filters": an array of 'filters' definitions as expected by views.module
+ *     (see Views Documentation).
+ *     When providing several filters, it is recommended to use the 'name'
+ *     attribute in order to let the user distinguish between them. If no 'name'
+ *     is specified for a filter, the key of the filter will be used instead.
+ */
+function gmap_cck_field_settings($op, $field) {
+  switch ($op) {
+    case 'form':
+      $def = gmap_defaults();
+      foreach (array('maptype', 'controltype', 'width', 'height', 'latlong') as $key) {
+        if (isset($field[$key]) && !empty($field[$key])) {
+          $def[$key] = $field[$key];
+        }
+      }
+
+      $form = gmap_macro_builder_form($def);
+      $form['#title'] = t('Google Map settings');
+      // keep: mapdiv
+      unset($form['macroform']['overlayedit']);
+      unset($form['macroform']['mapid']);
+      // keep: maptype, controltype
+      unset($form['macroform']['address']);
+      //unset($form['macroform']['latlong']);
+      // keep: width, height, alignment, zoom
+      unset($form['macroform']['macro']);
+
+      // GPX file support
+      $gpx_opts = array(t('Disabled'));
+      if (module_exists('filefield')) $gpx_opts['filefield'] = t('CCK Filefield');
+      // TODO: attachment to node, uploaded file, url from user, ...
+
+      if (count($gpx_opts) > 1) {
+        $form['gpx'] = array(
+          '#type' => 'select',
+          '#title' => t("GPX File support"),
+          '#options' => array(
+            0 => t('Disabled'),
+            'filefield' => t('CCK Filefield'),
+          ),
+          '#default_value' => $field['gpx'],
+        );
+
+        // if gpx-support is enabled we need a source for the data
+        $form['gpx_src'] = array(
+          '#type' => 'textfield',
+          '#title' => t('GPX data source parameter'),
+          '#description' => t('Only used if gpx-support is enabled'),
+          '#default_value' => $field['gpx_src'],
+        );
+      }
+
+      // noderef field(s) to nodes with locations for markers
+      if (module_exists('nodereference')) {
+        $form['marker_noderef'] = array(
+          '#type' => 'textfield',
+          '#title' => t('Marker noderef'),
+          '#description' => t('Name of noderef field to nodes to show as markers'),
+          '#default_value' => $field['marker_noderef']
+        );
+      }
+
+      return $form;
+
+    case 'validate': // check stuff entered in form-fields
+      break;
+
+    case 'save':
+      return array('maptype', 'controltype', 'width', 'height', 'alignment',
+                   'zoom', 'latlong', 'gpx', 'gpx_src', 'marker_noderef');
+
+    case 'database columns':
+      $columns = array( // TODO: ??? type -> longtext ???
+        'value' => array('type' => 'varchar', 'length' => 255, 'not null' => true, 'default' => "''", 'sortable' => false),
+      );
+      return $columns;
+
+    case 'callbacks': // CHECK: ??? any effect on calling ..._field() ???
+      return array(
+        'view' => CONTENT_CALLBACK_CUSTOM,
+      );
+  }
+}
+
+/**
+ * Define the behavior of a field type.
+ *
+ * @param $op
+ *   What kind of action is being performed. Possible values:
+ *   - "load": The node is about to be loaded from the database. This hook
+ *     should be used to load the field.
+ *   - "view": The node is about to be presented to the user. The module
+ *     should prepare and return an HTML string containing a default
+ *     representation of the field.
+ *     It will be called only if 'view' was set to TRUE in hook_field_settings('callbacks')
+ *   - "validate": The user has just finished editing the node and is
+ *     trying to preview or submit it. This hook can be used to check or
+ *     even modify the node. Errors should be set with form_set_error().
+ *   - "submit": The user has just finished editing the node and the node has
+ *     passed validation. This hook can be used to modify the node.
+ *   - "insert": The node is being created (inserted in the database).
+ *   - "update": The node is being updated.
+ *   - "delete": The node is being deleted.
+ * @param &$node
+ *   The node the action is being performed on. This argument is passed by
+ *   reference for performance only; do not modify it.
+ * @param $field
+ *   The field the action is being performed on.
+ * @param &$items
+ *   The contents of the field in this node. Changes to this variable will
+ *   be saved back to the node object.
+ * @return
+ *   This varies depending on the operation.
+ *   - The "load" operation should return an object containing extra values
+ *     to be merged into the node object.
+ *   - The "view" operation should return a string containing an HTML
+ *     representation of the field data.
+ *   - The "insert", "update", "delete", "validate", and "submit" operations
+ *     have no return value.
+ *
+ * In most cases, only "validate" operations is relevant ; the rest
+ * have default implementations in content_field() that usually suffice.
+ */
+function gmap_cck_field($op, &$node, $field, &$items, $teaser, $page) {
+  switch ($op) {
+    case 'view':
+      $context = $teaser ? 'teaser' : 'full';
+      $formatter = isset($field['display_settings'][$context]['format'])
+                   ? $field['display_settings'][$context]['format'] : 'default';
+      foreach ($items as $delta => $item) {
+        $items[$delta]['view'] = content_format($field, $item, $formatter, $node);
+      }
+      return theme('field', $node, $field, $items, $teaser, $page);
+  }
+}
+
+/**
+ * Declare information about a formatter.
+ *
+ * @return
+ *   An array keyed by formatter name. Each element of the array is an associative
+ *   array with these keys and values:
+ *   - "label": The human-readable label for the formatter.
+ *   - "field types": An array of field type names that can be displayed using
+ *     this formatter.
+ */
+function gmap_cck_field_formatter_info() {
+  return array(
+    'default' => array(
+      'label' => t('Default map'),
+      'field types' => array('gmap_cck'),
+    ),
+    // TODO: add list of configurable small map-displays
+  );
+}
+
+/**
+ * Prepare an individual item for viewing in a browser.
+ *
+ * @param $field
+ *   The field the action is being performed on.
+ * @param $item
+ *   An array, keyed by column, of the data stored for this item in this field.
+ * @param $formatter
+ *   The name of the formatter being used to display the field.
+ * @param $node
+ *   The node object, for context. Will be NULL in some cases.
+ *   Warning : when displaying field retrieved by Views, $node will not
+ *   be a "full-fledged" node object, but an object containg the data returned
+ *   by the Views query (at least nid, vid, changed)
+ * @return
+ *   An HTML string containing the formatted item.
+ *
+ * In a multiple-value field scenario, this function will be called once per
+ * value currently stored in the field. This function is also used as the handler
+ * for viewing a field in a views.module tabular listing.
+ *
+ * It is important that this function at the minimum perform security
+ * transformations such as running check_plain() or check_markup().
+ */
+function gmap_cck_field_formatter($field, $item, $formatter, $node) {
+  if (!isset($item['value'])) {
+    return '';
+  }
+
+  $m = unserialize($item['value']);
+  if (!is_array($m)) $m = array();
+  if (!empty($field['gpx']) && _gmap_cck_check_gpx_source($m, $field, $node)) {
+    _gmap_cck_get_gpx($m, $field, $node);
+  }
+  if (!empty($field['marker_noderef'])) {
+    _gmap_cck_noderef_markers($m, $field, $node);
+  }
+  $map = array_merge(gmap_defaults(), $field, $m);
+
+  $map['id'] = 'gmap';
+  if (isset($node) && isset($node->nid)) $map['id'] .= '_'. $node->nid;
+  $map['id'] .= '_'. $field['field_name'];
+
+  // TODO: correct width, height & zoom if ($formatter != 'default')
+
+  return theme('gmap', array('#settings' => $map));
+}
+
+
+/**
+ * Declare information about a widget.
+ *
+ * @return
+ *   An array keyed by widget name. Each element of the array is an associative
+ *   array with these keys and values:
+ *   - "label": The human-readable label for the widget.
+ *   - "field types": An array of field type names that can be edited using
+ *     this widget.
+ */
+function gmap_cck_widget_info() {
+  return array(
+    'gmap_cck' => array(
+      'label' => 'Google Map',
+      'field types' => array('gmap_cck'),
+    ),
+  );
+}
+
+/**
+ * Handle the parameters for a widget.
+ *
+ * @param $op
+ *   The operation to be performed. Possible values:
+ *   - "form": Display the widget settings form.
+ *   - "validate": Check the widget settings form for errors.
+ *   - "save": Declare which pieces of information to save back to the database.
+ *   - "callbacks": Describe the widget's behaviour regarding hook_widget operations.
+ * @param $widget
+ *   The widget on which the operation is to be performed.
+ * @return
+ *   This varies depending on the operation.
+ *   - "form": an array of form elements to add to the settings page.
+ *   - "validate": no return value. Use form_set_error().
+ *   - "save": an array of names of form elements to be saved in the database.
+ *   - "callbacks": an array describing the widget's behaviour regarding hook_widget
+ *     operations. The array is keyed by hook_widget operations ('form', 'validate'...)
+ *     and has the following possible values :
+ *       CONTENT_CALLBACK_NONE     : do nothing for this operation
+ *       CONTENT_CALLBACK_CUSTOM   : use the behaviour in hook_widget(operation)
+ *       CONTENT_CALLBACK_DEFAULT  : use content.module's default bahaviour
+ *     Note : currently only the 'default value' operation implements this feature.
+ *     All other widget operation implemented by the module _will_ be executed
+ *     no matter what.
+ */
+function gmap_cck_widget_settings($op, $widget) {
+  switch ($op) {
+
+    case 'callbacks': // CHECK: do we need this ???
+      return array(
+        'default value' => CONTENT_CALLBACK_CUSTOM,
+      );
+  }
+}
+
+/**
+ * Define the behavior of a widget.
+ *
+ * @param $op
+ *   What kind of action is being performed. Possible values:
+ *   - "prepare form values": The editing form will be displayed. The widget
+ *     should perform any conversion necessary from the field's native storage
+ *     format into the storage used for the form. Convention dictates that the
+ *     widget's version of the data should be stored beginning with "default".
+ *   - "form": The node is being edited, and a form should be prepared for
+ *     display to the user.
+ *   - "validate": The user has just finished editing the node and is
+ *     trying to preview or submit it. This hook can be used to check or
+ *     even modify the node. Errors should be set with form_set_error().
+ *   - "process form values": The inverse of the prepare operation. The widget
+ *     should convert the data back to the field's native format.
+ *   - "submit": The user has just finished editing the node and the node has
+ *     passed validation. This hook can be used to modify the node.
+ * @param &$node
+ *   The node the action is being performed on. This argument is passed by
+ *   reference for performance only; do not modify it.
+ * @param $field
+ *   The field the action is being performed on.
+ * @param &$items
+ *   The contents of the field in this node. Changes to this variable will
+ *   be saved back to the node object.
+ * @return
+ *   This varies depending on the operation.
+ *   - The "form" operation should return an array of form elements to display.
+ *   - Other operations have no return value.
+ */
+function gmap_cck_widget($op, &$node, $field, &$items) {
+
+  switch ($op) {
+
+    case 'prepare form values':
+      // db-value (serialized array) is in $items[0]['value'];
+      $items[0]['raw'] = unserialize($items[0]['value']);
+      // show some gpx-data?
+      if (!empty($field['gpx'])) {
+        _gmap_cck_check_gpx_source($items[0]['raw'], $field, $node);
+      }
+      // if ($field['multiple']) { ??? }
+      break;
+
+    case 'form':
+      $rd =& $items[0]['raw']; // raw data
+      if (empty($rd)) $rd = array();
+
+      $ndefs = array(
+        'maptype' => $field['maptype'],
+        'width' => $field['width'],
+        'height' => $field['height'],
+        'zoom' => $field['zoom'],
+        'latlong' => $field['latlong'],
+      );
+
+      if (isset($rd['gpx'])) {
+        $gpx_support = array('#value' => 'GPX support enabled');
+        _gmap_cck_get_gpx($rd, $field, $node);
+      }
+      $ndefs = array_merge(gmap_defaults(), $ndefs, $rd);
+      $hide = array('mapid' => 1, // type=hidden
+        'width' => 1, 'height' => 1, 'alignment' => 1, // 'zoom' => 2,
+        'maptype' => 1, 'controltype' => 1, 'macro' => 2,
+      );
+      $form = gmap_macro_builder_form($ndefs, $hide);
+
+      // remove/hide unwanted parts of form
+      $mf =& $form['macroform'];
+      $mf['#title'] = t('Select map view');
+      unset($mf['overlayedit'], $mf['address']);
+
+      foreach ($mf as $key => $val) {
+        if ($key[0] == '#') continue;
+        $mf['#tree'] = true;
+        $mf['#parents'] = array($field['field_name']);
+      }
+
+      $form[$field['field_name']] = $form['macroform'];
+      unset($form['macroform']);
+
+      if (isset($gpx_support)) {
+        $form['gpx_support'] = $gpx_support;
+      }
+
+      return $form;
+
+    case 'process form values':
+      // TODO: if ($field['multiple']) ...
+      // get the values and build serialized array for db-save
+/*      $ms = '[gmap zoom='. $items['zoom'] .'|center='.
+            $items['latlong'] .'|width='. $field['width'] .'|height='.
+            $field['height'] .'|id=gmap_'. $field['field_name'] .'|control='.
+            $field['controltype'] .'|type='. $field['maptype'] .']';
+*/
+      $v = array('zoom' => $items['zoom'], 'latlong' => $items['latlong']);
+      // TODO: add more props like 'markers', gpx-file, ...
+      foreach ($items as $delta => $item) {
+        unset($items[$delta]);
+      }
+
+      // show some gpx-data?
+      if (!empty($field['gpx'])) {
+        _gmap_cck_check_gpx_source($v, $field, $node);
+      }
+
+      $items[0]['value'] = serialize($v);// $ms;
+      break;
+  }
+}
+
+/**
+ * @} End of "addtogroup hooks".
+ */
+
+function _gmap_cck_check_gpx_source(&$data, &$field, &$node) {
+  $r = true;
+  if ($field['gpx'] == 'filefield') {
+    $fname = 'field_'. $field['gpx_src'];
+    $ff =& $node->$fname;
+    $r = (isset($ff) && _gmap_cck_gpxdata_filefield($data, $ff));
+  }
+  if (!$r) {
+    // TODO: ev. try to use $data['gpx']['file']
+    unset($data['gpx']);
+  }
+  return $r;
+}
+
+/**
+ * try to always get filedata from filefield, even if we're in preview mode
+ */
+function _gmap_cck_gpxdata_filefield(&$v, &$filefield) {
+  foreach ($filefield as $i => $data) {
+    if (!isset($data['filepath'])) continue;
+    $v['gpx'] = array(
+      'type' => 'file',
+      'file' => $data['filepath'],
+    );
+    return true;
+  }
+  return false;
+}
+
+/**
+ * process gpx-parameter to show something on the map
+ */
+function _gmap_cck_get_gpx(&$settings, &$field, &$node) {
+  require_once('gmap_gpx.inc');
+  if ($settings['gpx']['type'] == 'file') {
+    $f = $settings['gpx']['file'];
+    if (!file_exists($f)) { // was in temp location last time we looked?
+      if (!isset($field) || !isset($node)) return false;
+      if (!_gmap_cck_check_gpx_source($settings, $field, $node)) return false;
+      $f = $settings['gpx']['file'];
+    }
+    gmap_gpx_parse_file($f);
+    gmap_gpx_data2map($settings);
+    gmap_gpx_cleanup();
+  }
+  unset($settings['gpx']);
+  return true;
+}
+
+/**
+ * load locations from nodes pointed at with noderef field, show markers
+ */
+function _gmap_cck_noderef_markers(&$settings, &$field, &$node) {
+  $fname = 'field_'. $field['marker_noderef'];
+  $nrf =& $node->$fname;
+  $nids = array();
+  foreach ($nrf as $delta => $item) {
+    if (!empty($item['nid']) && is_numeric($item['nid'])) {
+      $nids[] = $item['nid'];
+      $n = node_load($item['nid']);
+      if ($n) {
+        $settings['markers'][] = array(
+          'label' => $n->title,
+          'opts' => array('title' => $n->title),
+          'latitude' => $n->locations[0]['latitude'],
+          'longitude' => $n->locations[0]['longitude'],
+          'markername' => variable_get('gmap_node_marker_'. $n->type, 'drupal'),
+          'text' => theme('gmapnodelabel', $n), // TODO:
+          //'popuplink' => url('map/query/node/'. $n->nid),
+        );
+      }
+    }
+  }
+/* TODO: go this route if we have too many (how many?) nodes
+  if (count($nids)) {
+    $nidstr = implode(',', $nids);
+    //$res = db_query("SELECT * FROM {location} l , {node_revisions} nr WHERE".
+    //  " l.type = 'node' AND l.eid = nr.vid AND nr.nid IN('$nidstr')");
+    $res = db_query("SELECT nr.title, n.nid, n.type, max(nr.vid) vid,".
+      " l.latitude, l.longitude FROM location l, node n, node_revisions nr".
+      " WHERE l.type = 'node' AND l.eid = nr.vid AND n.nid = nr.nid AND".
+      " nr.nid IN($nidstr) GROUP BY n.nid");
+    $locs = array();
+    while ($nl = db_fetch_object($res)) {
+      if (!isset($locs[$nl->nid]) || ($locs[$nl->nid]->timestamp < $nl->timestamp)) {
+        $locs[$nl->nid] = $nl;
+      }
+    }
+    foreach ($locs as $nid => $nl) {
+      $settings['markers'][] = array(
+        'label' => $nl->title,
+        'latitude' => $nl->latitude,
+        'longitude' => $nl->longitude,
+        'markername' => variable_get('gmap_node_marker_'. $nl->type, 'drupal'),
+        //'text' => theme('gmapnodelabel',$nl), // TODO:
+        'popuplink' => url('map/query/node/'. $nl->nid),
+      );
+    }
+  }
+*/
+}

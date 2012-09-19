@@ -1,0 +1,71 @@
+
+.quicktabs_main.quicktabs-style-garland {
+  clear:both;
+}
+
+ul.quicktabs-tabs.quicktabs-style-garland {
+  background: #bcd6eb url('images/bg.gif') repeat-x bottom;
+  font:bold 12px/20px Verdana;
+  padding: 3px 0px 3px;
+  height: 20px;
+  margin:0 0 10px 0;
+}
+
+.sidebar ul.quicktabs-tabs.quicktabs-style-garland {
+  padding:0 0 3px 0;
+}
+
+ul.quicktabs-tabs.quicktabs-style-garland li {
+  margin:0;
+  padding:0;
+  display: block;
+  float: left;
+  padding: 2px 0 1px !important;
+  list-style-type: none;
+  background: none;
+}
+
+.sidebar ul.quicktabs-tabs.quicktabs-style-garland li {
+  margin:0;
+  display: block;
+  float: left;
+  padding: 2px 0 1px;
+  list-style-type: none;
+  background: none;
+}
+
+ul.quicktabs-tabs.quicktabs-style-garland li a:link,
+ul.quicktabs-tabs.quicktabs-style-garland li a:visited {
+  color: #fff;
+  padding: 8px 12px 4px 11px;
+  margin:0;
+  font:bold 12px/20px Verdana;
+}
+
+ul.quicktabs-tabs.quicktabs-style-garland li.active a {
+  color: #027AC6 !important;
+  background: url('images/tab-right.gif') no-repeat right bottom;
+}
+ul.quicktabs-tabs.quicktabs-style-garland li.active {
+  background: url('images/tab-left.gif') no-repeat left bottom;
+}
+
+.sidebar ul.quicktabs-tabs.quicktabs-style-garland li.active a {
+  color: #027AC6 !important;
+  background: url('images/tab-right-sidebar.gif') no-repeat right bottom;
+}
+.sidebar ul.quicktabs-tabs.quicktabs-style-garland li.active {
+  background: url('images/tab-left-sidebar.gif') no-repeat left bottom;
+}
+
+/* IE 6 Debug */
+* html ul.quicktabs-tabs.quicktabs-style-garland,
+* html .sidebar ul.quicktabs-tabs.quicktabs-style-garland {
+  padding-bottom: 0px;
+}
+
+/* IE 7 Debug */
+*+html .sidebar ul.quicktabs-tabs.quicktabs-style-garland li a:link {
+  padding-bottom: 4px;
+}
+

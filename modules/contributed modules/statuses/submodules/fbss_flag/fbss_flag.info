@@ -1,0 +1,20 @@
+name = Statuses Flags
+description = "Integrates Flag with Statuses."
+package = Statuses
+dependencies[] = statuses
+dependencies[] = flag
+core = 7.x
+files[] = fbss_flag.flag.inc
+files[] = fbss_flag.install
+files[] = fbss_flag.module
+files[] = views/statuses_views_handler_argument_flagged_user.inc
+files[] = views/statuses_views_handler_filter_flagged_user.inc
+files[] = views/fbss_flag.views.inc
+files[] = views/fbss_flag.views_default.inc
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

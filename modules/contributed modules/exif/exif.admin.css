@@ -1,0 +1,15 @@
+.tag_type {
+	background-color: gray !important;
+}
+
+img.sample-image {
+	height: 70px;
+	float:right; 
+	margin: 0 0 15px 15px; 
+	vertical-align:sub;
+}
+
+h3.sample-image {
+	margin-top:40px;
+	float:left;	
+}

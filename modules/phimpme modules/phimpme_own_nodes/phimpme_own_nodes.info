@@ -1,0 +1,11 @@
+name = PhimpMe Own Nodes
+description = Provides the list of nodes owned by a user via Services
+package = Services
+dependencies[] = services
+core = 7.x
+; Information added by drupal.org packaging script on 2011-11-12
+version = "7.x-0.1"
+core = "7.x"
+project = "phimpme_own_nodes"
+
+dependencies[] = services

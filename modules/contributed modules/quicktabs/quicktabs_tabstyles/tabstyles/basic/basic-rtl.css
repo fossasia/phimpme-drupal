@@ -1,0 +1,12 @@
+
+.quicktabs_main.quicktabs-style-basic{
+  border:1px solid #aaa;
+}
+ul.quicktabs-tabs.quicktabs-style-basic{
+  border-bottom:none;
+  padding:0 0 0 5px;
+}
+ul.quicktabs-tabs.quicktabs-style-basic li{
+  float:right;
+  margin:0 0 0 3px;
+}

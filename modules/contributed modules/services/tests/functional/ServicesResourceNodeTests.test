@@ -1,0 +1,529 @@
+<?php
+
+/**
+ * @file
+ * Call the endpoint tests when no authentication is being used.
+ *
+ */
+
+/**
+ * Run test cases for the endpoint with no authentication turned on.
+ *
+ */
+class ServicesResourceNodetests extends ServicesWebTestCase {
+  // Class variables
+  protected $privilegedUser = NULL ;
+  // Endpoint details.
+  protected $endpoint = NULL;
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(
+      'ctools',
+      'services',
+      'rest_server',
+      'comment'
+    );
+    // Set up endpoint.
+    $this->endpoint =  $this->saveNewEndpoint();
+  }
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Resource Node'),
+      'description' => t('Test the resource Node methods and actions.'),
+      'group' => t('Services'),
+    );
+  }
+
+  /**
+   * testing node_resource Index
+   */
+  public function testNewEndpointResourceNodeIndex() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'perform unlimited index queries',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+
+    // Create a set of nodes. The node resource returns 20 returns at a time,
+    // so we create two pages and a half worth.
+    $nodes = array();
+    $count = 50;
+    for ($i = 0; $i < $count; $i++) {
+      $node = $this->drupalCreateNode();
+      $nodes[$node->nid] = $node;
+    }
+
+    // Get the content.
+    $page_count = ceil(count($nodes) / 20);
+    $retrieved_nodes = array();
+    for ($page = 0; $page < $page_count; $page++) {
+      $responseArray = $this->servicesGet($this->endpoint->path . '/node', array('page' => $page, 'fields' => 'nid,title'));
+      $this->assertTrue(count($responseArray['body']) <= 20, t('Correct number of items returned'));
+
+      // Store the returned node IDs.
+      foreach ($responseArray['body'] as $node) {
+        if (isset($retrieved_nodes[$node->nid])) {
+          $this->fail(t('Duplicate node @nid returned.', array('@nid' => $node->nid)));
+        }
+        $retrieved_nodes[$node->nid] = TRUE;
+
+        $this->assertTrue($nodes[$node->nid]->title == $node->title, t('Successfully received Node info'), 'NodeResource: Index');
+      }
+    }
+
+    // We should have got all the nodes.
+    $expected_nids = array_keys($nodes);
+    sort($expected_nids);
+    $retrieved_nids = array_keys($retrieved_nodes);
+    sort($retrieved_nids);
+    $this->assertEqual($expected_nids, $retrieved_nids, t('Retrieved all nodes'));
+
+    // The n+1 page should be empty.
+    $responseArray = $this->servicesGet($this->endpoint->path . '/node', array('page' => $page_count + 1));
+    $this->assertEqual(count($responseArray['body']), 0, t('The n+1 page is empty'));
+
+    // Adjust the pager size.
+    $responseArray = $this->servicesGet($this->endpoint->path . '/node', array('fields' => 'nid,title', 'pagesize' => 40));
+    $this->assertTrue(count($responseArray['body']) == 40, t('Correct number of items returned'));
+
+    // Swap to user that can only use the default pager size.
+    $this->lessPrivilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+    ));
+    $this->drupalLogin($this->lessPrivilegedUser);
+    $responseArray = $this->servicesGet($this->endpoint->path . '/node', array('fields' => 'nid,title', 'pagesize' => 40));
+    $this->assertTrue(count($responseArray['body']) == 20, t('Correct number of items returned'));
+  }
+
+  /**
+   * testing node_resource Get
+   */
+  public function testNewEndpointResourceNodeGet() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+    $node = $this->drupalCreateNode();
+    $responseArray = $this->servicesGet($this->endpoint->path . '/node/' . $node->nid);
+    $this->assertTrue($node->title == $responseArray['body']->title, t('Successfully received Node info'), 'NodeResource: Retrieve');
+    //Verify node not found.
+    unset($node);
+    $responseArray = $this->servicesGet($this->endpoint->path . '/node/99');
+    $this->assertTrue($responseArray['code'] == '404', t('Successfully was rejected to non existent node'), 'NodeResource: Retrieve');
+  }
+
+  /**
+   * Test loadNodeComments method.
+   */
+  function testCommentLoadNodeComments() {
+    $path = $this->endpoint->path;
+    $this->privileged_user = $this->drupalCreateUser();
+    $this->drupalLogin($this->privileged_user);
+
+    // Create node with commenting.
+    $node = $this->drupalCreateNode();
+    $nid = $node->nid;
+
+    // Generate 15 comments for node.
+    $comments = array();
+    for ($i = 1; $i <= 15; $i++) {
+      $comment = (object)$this->getCommentValues($nid);
+      comment_save($comment);
+      $comments[$i] = comment_load($comment->cid);
+    }
+
+    // Generate some comments for another node.
+    $node2 = $this->drupalCreateNode();
+    for ($i = 1; $i <= 5; $i++) {
+      $comment = (object)$this->getCommentValues($node2->nid);
+      comment_save($comment);
+    }
+
+    // Load all comments of the first node.
+    $response = $this->servicesGet($path . '/node/'. $nid .'/comments');
+    $this->assertEqual($comments, $response['body'], t('Received all 15 comments.'), 'NodeResource: comments');
+
+    // Load only 5 comments of the first node.
+    $response = $this->servicesGet($path . '/node/'. $nid .'/comments', array('count' => 5));
+    $this->assertEqual(array_slice($comments, 0, 5), array_slice($response['body'], 0, 5), t('Received last 5 comments.'), 'NodeResource: comments');
+    // Load only 5 comments of the first node starting from fifth comment.
+    $response = $this->servicesGet($path . '/node/'. $nid .'/comments', array('count' => 5, 'offset' => 5));
+    $this->assertEqual(array_slice($comments, 5, 5), array_merge(array(),$response['body']), t('Received 5 comments starting from fifth comment.'), 'NodeResource: comments');
+  }
+
+  /**
+   * Testing node_resource Create.
+   */
+  public function testEndpointResourceNodeCreate() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'bypass node access',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+    $node = array(
+      'title' => 'testing',
+      'body' => array(LANGUAGE_NONE => array(array('value' => $this->randomString()))),
+      'type' => 'page',
+      'name' => $this->privilegedUser->name,
+      'language' => LANGUAGE_NONE,
+    );
+
+    $responseArray = $this->servicesPost($this->endpoint->path . '/node', $node);
+    $nodeResourceCreateReturn = $responseArray['body'];
+
+    $this->assertTrue(isset($nodeResourceCreateReturn['nid']), t('Node was successfully created'), 'NodeResource: Create');
+    $newNode = node_load($nodeResourceCreateReturn['nid']);
+    $this->assertTrue($newNode->title = $node['title'], t('Title was the same'), 'NodeResource: Create');
+    $this->assertTrue($newNode->body = $node['body'], t('Body was the same'), 'NodeResource: Create');
+  }
+
+  /**
+   * Testing node_resource Create (Legacy).
+   *
+   * TODO: To be removed in future version.
+   * @see http://drupal.org/node/1083242
+   */
+  public function testEndpointResourceNodeCreateLegacy() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'bypass node access',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+    $node = array(
+      'title' => 'testing',
+      'body' => array(LANGUAGE_NONE => array(array('value' => $this->randomString()))),
+      'type' => 'page',
+      'name' => $this->privilegedUser->name,
+      'language' => LANGUAGE_NONE,
+    );
+
+    $responseArray = $this->servicesPost($this->endpoint->path . '/node', array('node' => $node));
+    $nodeResourceCreateReturn = $responseArray['body'];
+
+    $this->assertTrue(isset($nodeResourceCreateReturn['nid']), t('Node was successfully created'), 'NodeResource: Create (Legacy)');
+    $newNode = node_load($nodeResourceCreateReturn['nid']);
+    $this->assertTrue($newNode->title = $node['title'], t('Title was the same'), 'NodeResource: Create (Legacy)');
+    $this->assertTrue($newNode->body = $node['body'], t('Body was the same'), 'NodeResource: Create (Legacy)');
+  }
+
+  /**
+   * testing node_resource Created make ure it fails with no perms
+   */
+  public function testEndpointResourceNodeCreateFail() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+    $node = array(
+      'title' => 'testing',
+      'body' => array(LANGUAGE_NONE => array(array('value' => $this->randomString()))),
+      'type' => 'page',
+      'name' => $this->privilegedUser->name,
+      'language' => LANGUAGE_NONE,
+    );
+
+    $responseArray = $this->servicesPost($this->endpoint->path . '/node', array('node' => $node));
+
+    $this->assertTrue($responseArray['code'] == 401, t('User with not sufficient permissions cannot create node'), 'NodeResource: Create');
+  }
+
+  /**
+   * testing node_resource Validate missing Title
+   */
+  public function testEndpointResourceNodeCreateMissingTitle() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'bypass node access',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+
+    $node = array(
+      'title' => '',
+      'body' => array(LANGUAGE_NONE => array(array('value' => $this->randomString()))),
+      'type' => 'page',
+      'name' => $this->privilegedUser->name,
+      'language' => LANGUAGE_NONE,
+    );
+
+    $responseArray = $this->servicesPost($this->endpoint->path . '/node', array('node' => $node));
+
+    $nodeResourceUpdateReturn = $responseArray['body'];
+    $this->assertTrue(strpos($responseArray['status'], 'Title field is required.'), t('Node was not created without title.'), 'NodeResource: Create');
+  }
+
+  /**
+   * Testing node_resource Update.
+   */
+  public function testEndpointResourceNodeUpdate() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'bypass node access',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+    $node = $this->drupalCreateNode();
+
+    $node_update = (array) $node;
+    $node_update['title'] = $this->randomName();
+    $node_update['body'][LANGUAGE_NONE][0]['value'] = $this->randomName();
+
+    $responseArray = $this->servicesPut($this->endpoint->path . '/node/' . $node->nid, $node_update);
+    // Load node not from cache.
+    $nodeAfterUpdate = node_load($responseArray['body']['nid'], NULL, TRUE);
+    $this->assertTrue(isset($nodeAfterUpdate->nid), t('Node was successfully updated'), 'NodeResource: Updated');
+    $this->assertEqual($nodeAfterUpdate->title, $node_update['title'], t('Title is the same'), 'NodeResource: Update');
+    $this->assertEqual($nodeAfterUpdate->body[LANGUAGE_NONE][0]['value'], $node_update['body'][LANGUAGE_NONE][0]['value'], t('Body is the same'), 'NodeResource: Update');
+
+    // Try to update the node without node type.
+    $node_update_no_type = $node_update;
+    unset($node_update_no_type['type']);
+    $node_update_no_type['title'] = $this->randomName();
+    $responseArray = $this->servicesPut($this->endpoint->path . '/node/' . $node->nid, $node_update_no_type);
+    $this->assertNotEqual($responseArray['code'], 200, t('Can\'t update node without specifying node type'), 'NodeResource: Update');
+  }
+
+  /**
+   * Testing node_resource Update (Legacy).
+   *
+   * TODO: To be removed in future version.
+   * @see http://drupal.org/node/1083242
+   */
+  public function testEndpointResourceNodeUpdateLegacy() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'bypass node access',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+    $node = $this->drupalCreateNode();
+
+    $node_update = (array) $node;
+    $node_update['title'] = $this->randomName();
+    $node_update['body'][LANGUAGE_NONE][0]['value'] = $this->randomName();
+
+    $responseArray = $this->servicesPut($this->endpoint->path . '/node/' . $node->nid, array('node' => $node_update));
+    // Load node not from cache.
+    $nodeAfterUpdate = node_load($responseArray['body']['nid'], NULL, TRUE);
+    $this->assertTrue(isset($nodeAfterUpdate->nid), t('Node was successfully updated'), 'NodeResource: Updated (legacy)');
+    $this->assertEqual($nodeAfterUpdate->title, $node_update['title'], t('Title is the same'), 'NodeResource: Update (legacy)');
+    $this->assertEqual($nodeAfterUpdate->body[LANGUAGE_NONE][0]['value'], $node_update['body'][LANGUAGE_NONE][0]['value'], t('Body is the same'), 'NodeResource: Update (legacy)');
+  }
+
+  /**
+  * testing node_resource Update fail with no permissions
+  */
+  public function testEndpointResourceNodeUpdatePermFail() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'create page content',
+      'edit own page content',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+
+    // Create node from user no 1.
+    $node = $this->drupalCreateNode(array('uid' => 1));
+
+    // Try to update this node with different user not
+    // having permission to edit any story content.
+    $node_update = (array) $node;
+    $node_update['title'] = $this->randomName();
+    $node_update['body'][LANGUAGE_NONE][0]['value'] = $this->randomName();
+
+    $responseArray = $this->servicesPut($this->endpoint->path . '/node/' . $node->nid, array('node' => $node_update));
+
+    $this->assertTrue(strpos($responseArray['status'], 'Access denied for user'), t('Updating the node failed without needed permissions. This is good!'), 'NodeResource: Update');
+  }
+
+  /**
+   * testing node_resource Update verify missing title
+   */
+  public function testEndpointResourceNodeUpdateMissingTitle() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'bypass node access',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+    $node = $this->drupalCreateNode();
+    $node_update = array(
+      'title' => '',
+      'body' => array(LANGUAGE_NONE => array(array('value' => $this->randomString()))),
+      'name' => $this->privilegedUser->name,
+      'type' => 'page',
+    );
+
+    $responseArray = $this->servicesPut($this->endpoint->path . '/node/' . $node->nid, array('node' => $node_update));
+    $this->assertTrue(strpos($responseArray['status'], 'Title field is required.'), t('Node was not updated without title.'), 'NodeResource: Update');
+  }
+
+  /**
+   * testing node_resource Delete
+   */
+  public function testEndpointResourceNodeDelete() {
+    // Create and log in our privileged user.
+    $this->privilegedUser = $this->drupalCreateUser(array(
+      'administer services',
+      'bypass node access',
+    ));
+    $this->drupalLogin($this->privilegedUser);
+    $node = $this->drupalCreateNode();
+    $data = '';
+
+    $responseArray = $this->servicesDelete($this->endpoint->path . '/node/' . $node->nid, $data);
+    $deleted_node = node_load($node->nid, NULL, TRUE);
+    $this->assertTrue(empty($deleted_node), t('Node was deleted.'), 'NodeResource: Deleted');
+
+    $responseArray = $this->servicesDelete($this->endpoint->path . '/node/' . $node->nid, $data);
+
+    $this->assertFalse($responseArray['code'] == 200, t('Node was deleted. It shoudlnt have been because it doesnt exist'), 'NodeResource: Deleted');
+  }
+}
+
+/**
+ * Test create node with taxonomy terms attached.
+ */
+class ServicesResourceNodeTaxonomytests extends ServicesResourceNodetests {
+  // Class variables
+  protected $admin_user = NULL ;
+  // Endpoint details.
+  protected $endpoint = NULL;
+  // Field instance.
+  protected $instance = NULL;
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Resource Node - taxonomy'),
+      'description' => t('Test the resource Node taxonomy methods and actions.'),
+      'group' => t('Services'),
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(
+      'ctools',
+      'services',
+      'rest_server',
+      'taxonomy'
+    );
+
+    $this->admin_user = $this->drupalCreateUser(array('administer taxonomy', 'bypass node access', 'administer services'));
+    $this->drupalLogin($this->admin_user);
+    $this->vocabulary = $this->createVocabulary();
+
+    $field = array(
+      'field_name' => 'taxonomy_' . $this->vocabulary->machine_name,
+      'type' => 'taxonomy_term_reference',
+      'cardinality' => FIELD_CARDINALITY_UNLIMITED,
+      'settings' => array(
+        'allowed_values' => array(
+          array(
+            'vocabulary' => $this->vocabulary->machine_name,
+            'parent' => 0,
+          ),
+        ),
+      ),
+    );
+    field_create_field($field);
+
+    $this->instance = array(
+      'field_name' => 'taxonomy_' . $this->vocabulary->machine_name,
+      'bundle' => 'article',
+      'entity_type' => 'node',
+      'widget' => array(
+        'type' => 'options_select',
+      ),
+      'display' => array(
+        'default' => array(
+          'type' => 'taxonomy_term_reference_link',
+        ),
+      ),
+    );
+    field_create_instance($this->instance);
+  }
+
+  /**
+   * Test that hook_node_$op implementations work correctly.
+   *
+   * Save & edit a node and assert that taxonomy terms are saved/loaded properly.
+   */
+  function testServicesTaxonomyNode() {
+    // Create two taxonomy terms.
+    $term1 = $this->createTerm($this->vocabulary);
+    $term2 = $this->createTerm($this->vocabulary);
+    $field_name = $this->instance['field_name'];
+
+    // Post an article.
+    $edit = array();
+    $langcode = LANGUAGE_NONE;
+    $edit['title'] = $this->randomName();
+    $edit["body[$langcode][0][value]"] = $this->randomName();
+    $edit[$field_name][$langcode][0] = $term1->tid;
+    $edit['type'] = 'page';
+    $edit['name'] = $this->admin_user->name;
+    $edit['language'] = LANGUAGE_NONE;
+    $responseArray = $this->servicesPost($this->endpoint->path . '/node', array('node' => $edit));
+
+    $nodeResourceCreateReturn = $responseArray['body'];
+    $this->assertTrue(isset($nodeResourceCreateReturn['nid']), t('Node was successfully created'), 'NodeResource: Create');
+    $newNode = node_load($nodeResourceCreateReturn['nid']);
+    $this->assertTrue($newNode->{$field_name}[$langcode][0]['tid'] =  $term1->tid, t('Term was the same'), 'Taxonomy: Create');
+
+    // Edit the node with a different term.
+    $edit[$field_name][$langcode][0] = $term2->tid;
+    $responseArray = $this->servicesPost($this->endpoint->path . '/node', array('node' => $edit));
+    $nodeResourceCreateReturn = $responseArray['body'];
+    $this->assertTrue(isset($nodeResourceCreateReturn['nid']), t('Node was successfully created'), 'NodeResource: Create');
+    $newNode = node_load($nodeResourceCreateReturn['nid']);
+    $this->assertTrue($newNode->{$field_name}[$langcode][0]['tid'] =  $term2->tid, t('Term was the same'), 'Taxonomy: updated');
+  }
+
+  /**
+   * Returns a new vocabulary with random properties.
+   */
+  function createVocabulary() {
+    // Create a vocabulary.
+    $vocabulary = new stdClass();
+    $vocabulary->name = $this->randomName();
+    $vocabulary->description = $this->randomName();
+    $vocabulary->machine_name = drupal_strtolower($this->randomName());
+    $vocabulary->help = '';
+    $vocabulary->nodes = array('article' => 'article');
+    $vocabulary->weight = mt_rand(0, 10);
+    taxonomy_vocabulary_save($vocabulary);
+    return $vocabulary;
+  }
+
+  /**
+   * Returns a new term with random properties in vocabulary $vid.
+   */
+  function createTerm($vocabulary) {
+    $term = new stdClass();
+    $term->name = $this->randomName();
+    $term->description = $this->randomName();
+    // Use the first available text format.
+    $term->format = db_query_range('SELECT format FROM {filter_format}', 0, 1)->fetchField();
+    $term->vid = $vocabulary->vid;
+    taxonomy_term_save($term);
+    return $term;
+  }
+}

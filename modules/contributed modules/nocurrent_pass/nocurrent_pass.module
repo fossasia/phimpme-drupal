@@ -1,0 +1,39 @@
+<?php
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function nocurrent_pass_form_user_admin_settings_alter(&$form, &$form_state) {
+  // reorder fieldset weights
+  $form['anonymous_settings']['#weight'] = -4;
+  $form['admin_role']['#weight'] = -3;
+  $form['registration_cancellation']['#weight'] = -2;
+  $form['nocurrent_pass_settings'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Require Current Password'),
+    '#weight' => -1,
+  );
+  $form['nocurrent_pass_settings']['nocurrent_pass_disabled'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Do not require current password'),
+    '#description' => t('Check this box to disable the "current password" field on the User Edit form.'),
+    '#default_value' => variable_get('nocurrent_pass_disabled', TRUE),
+  );
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ * Remove the current password field from the user_profile_form form (user/%/edit).
+ */
+function nocurrent_pass_form_user_profile_form_alter(&$form, &$form_state) {
+  if (variable_get('nocurrent_pass_disabled', TRUE)) {
+    // searches the #validate array for the current_pass validation function, and removes it
+    $key = array_search('user_validate_current_pass', $form['#validate']);
+    if ($key !== FALSE) {
+      unset($form['#validate'][$key]);
+    }
+    // hide the current password fields
+    $form['account']['current_pass_required_value']['#access'] = FALSE;
+    $form['account']['current_pass']['#access'] = FALSE;
+  }
+}

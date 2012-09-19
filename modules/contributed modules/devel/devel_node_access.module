@@ -1,0 +1,1355 @@
+<?php
+/**
+ * @file
+ *
+ * This module gives developers feedback as to what their
+ * node_access table contains, and which nodes are protected or
+ * visible to the public.
+ *
+ */
+
+define('DNA_ACCESS_VIEW', 'view devel_node_access information');
+
+function devel_node_access_permission() {
+  return array(
+    'view devel_node_access information' => array(
+      'description' => t('View the node access information blocks on node pages and the summary page.'),
+      'title'       => t('Access DNA information'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_help().
+ */
+function devel_node_access_help($path, $arg) {
+  switch ($path) {
+    case 'admin/settings/modules#description':
+      return t('Development helper for node_access table');
+      break;
+    case 'admin/help#devel_node_access':
+      $output  = '<p>' . t('This module helps in site development.  Specifically, when an access control module is used to limit access to some or all nodes, this module provides some feedback showing the node_access table in the database.') . "</p>\n";
+      $output .= '<p>' . t('The node_access table is one method Drupal provides to hide content from some users while displaying it to others.  By default, Drupal shows all nodes to all users.  There are a number of optional modules which may be installed to hide content from some users.') . "</p>\n";
+      $output .= '<p>' . t('If you have not installed any of these modules, you really have no need for the devel_node_access module.  This module is intended for use during development, so that developers and admins can confirm that the node_access table is working as expected.  You probably do not want this module enabled on a production site.') . "</p>\n";
+      $output .= '<p>' . t('This module provides two blocks.  One called Devel Node Access by User is visible when a single node is shown on a page.  This block shows which users can view, update or delete the node shown.  Note that this block uses an inefficient algorithm to produce its output.  You should only enable this block on sites with very few user accounts.') . "</p>\n";
+      $output .= '<p>' . t('The second block provided by this module shows the entries in the node_access table for any nodes shown on the current page.  You can enable the debug mode on the <a href="@settings_page">settings page</a> to display much more information, but this can cause considerable overhead.  Because the tables shown are wide, it is recommended to enable the blocks in the page footer rather than a sidebar.',
+                          array('@settings_page' => url('admin/config/development/devel', array('fragment' => 'edit-devel-node-access')))
+                          ) . "</p>\n";
+      $output .= '<p>' . t('This module also provides a <a href="@summary_page">summary page</a> which shows general information about your node_access table.  If you have installed the Views module, you may browse node_access by realm.',
+                          array('@summary_page' => url('devel/node_access/summary'))
+                          ) . "</p>\n";
+      return $output;
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function devel_node_access_menu() {
+  $items = array();
+
+  if (!module_exists('devel')) {
+    if (!menu_load('devel')) {
+      // we have to create the 'devel' menu ourselves
+      $menu = array(
+        'menu_name'   => 'devel',
+        'title'       => 'Development',
+        'description' => 'Development link',
+      );
+      menu_save($menu);
+    }
+
+    // we have to create the 'Devel settings' menu item ourselves
+    $items['admin/config/development/devel'] = array(
+      'title'            => 'Devel settings',
+      'description'      => 'Helper pages and blocks to assist Drupal developers and admins with node_access. The devel blocks can be managed via the <a href="' . url('admin/structure/block') . '">block administration</a> page.',
+      'page callback'    => 'drupal_get_form',
+      'page arguments'   => array('devel_node_access_admin_settings'),
+      'access arguments' => array('administer site configuration'),
+    );
+    $items['devel/settings'] = $items['admin/config/development/devel'] + array(
+      'menu_name' => 'devel',
+    );
+  }
+
+  // create a callback for use by devel_node_access_user_ajax().
+  $items['devel/node_access/by_user/%/%'] = array(
+    'page callback'    => 'devel_node_access_user_ajax',
+    'page arguments'   => array(3, 4),
+    'access arguments' => array(DNA_ACCESS_VIEW),
+    'type'             => MENU_CALLBACK,
+  );
+
+  // add this to the custom menu 'devel' created by the devel module.
+  $items['devel/node_access/summary'] = array(
+    'title'            => 'Node_access summary',
+    'page callback'    => 'dna_summary',
+    'access arguments' => array(DNA_ACCESS_VIEW),
+    'menu_name'        => 'devel',
+  );
+
+  return $items;
+}
+
+function devel_node_access_admin_settings() {
+  $form = array();
+  return system_settings_form($form);
+}
+
+function devel_node_access_form_alter(&$form, $form_state, $form_id) {
+  $tr = 't';
+  if ($form_id == 'devel_admin_settings' || $form_id == 'devel_node_access_admin_settings') {
+    $form['devel_node_access'] = array(
+      '#type'        => 'fieldset',
+      '#title'       => t('Devel Node Access'),
+      '#collapsible' => TRUE,
+    );
+    $form['devel_node_access']['devel_node_access_debug_mode'] = array(
+      '#type'          => 'checkbox',
+      '#title'         => t('Debug mode'),
+      '#default_value' => variable_get('devel_node_access_debug_mode', FALSE),
+      '#description'   => t('Debug mode verifies the grant records in the node_access table against those that would be set by running !Rebuild_permissions, and displays them all; this can cause considerable overhead.<br />For even more information enable the <a href="@link">%DNAbU block</a>, too.', array(
+        '!Rebuild_permissions' => l('[' . $tr('Rebuild permissions') . ']', 'admin/reports/status/rebuild'),
+        '%DNAbU' => t('Devel Node Access by User'),
+        '@link' => url('admin/structure/block/list'),
+      )),
+    );
+    $form['devel_node_access']['devel_node_access_user_ajax'] = array(
+      '#type'          => 'checkbox',
+      '#title'         => t('Asynchronously populate the <em>Devel Node Access by User</em> block'),
+      '#default_value' => variable_get('devel_node_access_user_ajax', FALSE),
+      '#description'   => t("Use Ajax to populate the second DNA block. This loads the initial page faster and uses dynamic calls to build the data in the table, one request at a time. It's especially useful during development, if some of the calls are failing.") . '<br />' . t('JavaScript must be enabled in your browser.'),
+    );
+    // push the Save button down
+    $form['actions']['#weight'] = 10;
+  }
+}
+
+function dna_summary() {
+  // warn user if they have any entries that could grant access to all nodes
+  $output = '';
+  $result = db_query('SELECT DISTINCT realm FROM {node_access} WHERE nid = 0 AND gid = 0');
+  $rows = array();
+  foreach ($result as $row) {
+    $rows[] = array($row->realm);
+  }
+  if (!empty($rows)) {
+    $output .= '<h3>' . t('Access Granted to All Nodes (All Users)') . "</h3>\n";
+    $output .= '<p>' . t('Your node_access table contains entries that may be granting all users access to all nodes.  Depending on which access control module(s) you use, you may want to delete these entries.  If you are not using an access control module, you should probably leave these entries as is.') . "</p>\n";
+    $headers = array(t('realm'));
+    $output .= theme('table', array('header' => $headers, 'rows' => $rows));
+    $access_granted_to_all_nodes = TRUE;
+  }
+
+  // how many nodes are not represented in the node_access table
+  $num = db_query('SELECT COUNT(n.nid) AS num_nodes FROM {node} n LEFT JOIN {node_access} na ON n.nid = na.nid WHERE na.nid IS NULL')->fetchField();
+  if ($num) {
+    $output .= '<h3>' . t('Legacy Nodes') . "</h3>\n";
+    $output .= '<p>' .
+      t('You have !num nodes in your node table which are not represented in your node_access table.  If you have an access control module installed, these nodes may be hidden from all users.  This could be caused by publishing nodes before enabling the access control module.  If this is the case, manually updating each node should add it to the node_access table and fix the problem.', array('!num' => l($num, 'devel/node_access/view/NULL')))
+      . "</p>\n";
+    if (!empty($access_granted_to_all_nodes)) {
+      $output .= '<p>' .
+        t('This issue may be masked by the one above, so look into the former first.')
+        . "</p>\n";
+    }
+  }
+  else {
+    $output .= '<h3>' . t('All Nodes Represented') . "</h3>\n";
+    $output .= '<p>' . t('All nodes are represented in the node_access table.') . "</p>\n";
+  }
+
+
+  // a similar warning to the one above, but slightly more specific
+  $result = db_query('SELECT DISTINCT realm FROM {node_access} WHERE nid = 0 AND gid <> 0');
+  $rows = array();
+  foreach ($result as $row) {
+    $rows[] = array($row->realm);
+  }
+  if (!empty($rows)) {
+    $output .= '<h3>' . t('Access Granted to All Nodes (Some Users)') . "</h3>\n";
+    $output .= '<p>' . t('Your node_access table contains entries that may be granting some users access to all nodes.  This may be perfectly normal, depending on which access control module(s) you use.') . "</p>\n";
+    $headers = array(t('realm'));
+    $output .= theme('table', array('header' => $headers, 'rows' => $rows));
+  }
+
+
+  // find specific nodes which may be visible to all users
+  $result = db_query('SELECT DISTINCT realm, COUNT(DISTINCT nid) as node_count FROM {node_access} WHERE gid = 0 AND nid > 0 GROUP BY realm');
+  $rows = array();
+  foreach ($result as $row) {
+    $rows[] = array(
+      $row->realm,
+      array(
+        'data'  => $row->node_count,
+        'align' => 'center',
+      ),
+    );
+  }
+  if (!empty($rows)) {
+    $output .= '<h3>' . t('Access Granted to Some Nodes') . "</h3>\n";
+    $output .= '<p>' .
+      t('The following realms appear to grant all users access to some specific nodes. This may be perfectly normal, if some of your content is available to the public.')
+      . "</p>\n";
+    $headers = array(t('realm'), t('public nodes'));
+    $output .= theme('table', array('header' => $headers, 'rows' => $rows, 'caption' => t('Public Nodes')));
+  }
+
+
+  // find specific nodes protected by node_access table
+  $result = db_query('SELECT DISTINCT realm, COUNT(DISTINCT nid) as node_count FROM {node_access} WHERE gid <> 0 AND nid > 0 GROUP BY realm');
+  $rows = array();
+  foreach ($result as $row) {
+    // no Views yet:
+    //$rows[] = array(l($row->realm, "devel/node_access/view/$row->realm"),
+    $rows[] = array(
+      $row->realm,
+      array(
+        'data' => $row->node_count,
+        'align' => 'center',
+      ),
+    );
+  }
+  if (!empty($rows)) {
+    $output .= '<h3>' . t('Summary by Realm') . "</h3>\n";
+    $output .= '<p>' . t('The following realms grant limited access to some specific nodes.') . "</p>\n";
+    $headers = array(t('realm'), t('private nodes'));
+    $output .= theme('table', array('header' => $headers, 'rows' => $rows, 'caption' => t('Protected Nodes')));
+  }
+
+  return $output;
+}
+
+function dna_visible_nodes($nid = NULL) {
+  static $nids = array();
+  if ($nid) {
+    $nids[$nid] = $nid;
+  }
+  elseif (empty($nids) && arg(0) == 'node' && is_numeric(arg(1)) && arg(2) == NULL) {
+    // show DNA information on node/NID even if access is denied (IF the user has the 'view devel_node_access information' permission)!
+    return array(arg(1));
+  }
+  return $nids;
+}
+
+function devel_node_access_node_view($node, $build_mode) {
+  // remember this node, for display in our block
+  dna_visible_nodes($node->nid);
+}
+
+function _devel_node_access_module_invoke_all() {  // array and scalar returns
+  $args = func_get_args();
+  $hook = $args[0];
+  unset($args[0]);
+  $return = array();
+  foreach (module_implements($hook) as $module) {
+    $function = $module . '_' . $hook;
+    if (function_exists($function)) {
+      $result = call_user_func_array($function, $args);
+      if (isset($result)) {
+        if (is_array($result)) {
+          foreach ($result as $key => $value) {
+            // add name of module that returned the value:
+            $result[$key]['#module'] = $module;
+          }
+        }
+        else {
+          // build array with result keyed by $module:
+          $result = array($module => $result);
+        }
+        $return = array_merge_recursive($return, $result);
+      }
+    }
+  }
+  return $return;
+}
+
+/**
+ * Helper function to build an associative array of grant records and their
+ * history. If there are duplicate records, display an error message.
+ *
+ * @param $grants
+ *   An indexed array of grant records, augmented by the '#module' key,
+ *   as created by _devel_node_access_module_invoke_all('node_access_records').
+ *
+ * @param $node
+ *   The node that the grant records belong to.
+ *
+ * @param $function
+ *   The name of the hook that produced the grants array, in case we need to
+ *   display an error message.
+ *
+ * @return
+ *   See _devel_node_access_nar_alter() for the description of the result.
+ */
+function _devel_node_access_build_nar_data($grants, $node, $function) {
+  $data = array();
+  $duplicates = array();
+  foreach ($grants as $grant) {
+    if (empty($data[$grant['realm']][$grant['gid']])) {
+      $data[$grant['realm']][$grant['gid']] = array('original' => $grant, 'current' => $grant, 'changes' => array());
+    }
+    else {
+      if (empty($duplicates[$grant['realm']][$grant['gid']])) {
+        $duplicates[$grant['realm']][$grant['gid']][] = $data[$grant['realm']][$grant['gid']]['original'];
+      }
+      $duplicates[$grant['realm']][$grant['gid']][] = $grant;
+    }
+  }
+  if (!empty($duplicates)) {
+    // generate an error message
+    $msg = t('Devel Node Access has detected duplicate records returned from %function:', array('%function' => $function));
+    $msg .= '<ul>';
+    foreach ($duplicates as $realm => $data_by_realm) {
+      foreach ($data_by_realm as $gid => $data_by_realm_gid) {
+        $msg .= '<li><ul>';
+        foreach ($data_by_realm_gid as $grant) {
+          $msg .= "<li>$node->nid/$realm/$gid/" . ($grant['grant_view'] ? 1 : 0) . ($grant['grant_update'] ? 1 : 0) . ($grant['grant_delete'] ? 1 : 0) . ' by ' . $grant['#module'] . '</li>';
+        }
+        $msg .= '</ul></li>';
+      }
+    }
+    $msg .= '</ul>';
+    drupal_set_message($msg, 'error', FALSE);
+  }
+  return $data;
+}
+
+/**
+ * Helper function to mimic hook_node_access_records_alter() and trace what
+ * each module does with it.
+ *
+ * @param object $grants
+ *   An indexed array of grant records, augmented by the '#module' key,
+ *   as created by _devel_node_access_module_invoke_all('node_access_records').
+ *   This array is updated by the hook_node_access_records_alter()
+ *   implementations.
+ *
+ * @param $node
+ *   The node that the grant records belong to.
+ *
+ * @return
+ *   A tree representation of the grant records in $grants including their
+ *   history:
+ *     $data[$realm][$gid]
+ *       ['original']  - grant record before processing
+ *       ['current']   - grant record after processing (if still present)
+ *       ['changes'][]['op']     - change message (add/change/delete by $module)
+ *                    ['grant']  - grant record after change (unless deleted)
+ */
+function _devel_node_access_nar_alter(&$grants, $node) {
+  //dpm($grants, '_devel_node_access_nar_alter(): grants IN');
+  $dummy = array();
+  drupal_alter('node_access_records', $dummy, $node);
+  static $drupal_static = array();
+  isset($drupal_static['drupal_alter']) || ($drupal_static['drupal_alter'] = &drupal_static('drupal_alter'));
+  $functions = $drupal_static['drupal_alter'];
+
+  // build the initial tree (and check for duplicates)
+  $data = _devel_node_access_build_nar_data($grants, $node, 'hook_node_access_records()');
+
+  // simulate drupal_alter('node_access_records', $grants, $node);
+  foreach ($functions['node_access_records'] as $function) {
+    // call hook_node_access_records_alter() for one module at a time and analyze
+    $function($grants, $node); // <==
+    $module = substr($function, 0, strlen($function) - 26);
+
+    foreach ($grants as $i => $grant) {
+      if (empty($data[$grant['realm']][$grant['gid']]['current'])) {
+        // it's an added grant
+        $data[$grant['realm']][$grant['gid']]['current'] = $grant;
+        $data[$grant['realm']][$grant['gid']]['current']['#module'] = $module;
+        $data[$grant['realm']][$grant['gid']]['changes'][] = array(
+          'op'    => 'added by ' . $module,
+          'grant' => $grant,
+        );
+        $grants[$i]['#module'] = $module;
+      }
+      else {
+        // it's an existing grant, check for changes
+        foreach (array('view', 'update', 'delete') as $op) {
+          $$op = $grant["grant_$op"] - $data[$grant['realm']][$grant['gid']]['current']["grant_$op"];
+        }
+        $priority = $grant['priority'] - $data[$grant['realm']][$grant['gid']]['current']['priority'];
+        if ($view || $update || $delete || $priority) {
+          // it was changed
+          $data[$grant['realm']][$grant['gid']]['current'] = $grant;
+          $data[$grant['realm']][$grant['gid']]['current']['#module'] = $module;
+          $data[$grant['realm']][$grant['gid']]['changes'][] = array(
+            'op'    => 'altered by ' . $module,
+            'grant' => $grant,
+          );
+          $grants[$i]['#module'] = $module;
+        }
+      }
+      $data[$grant['realm']][$grant['gid']]['found'] = TRUE;
+    }
+
+    // check for newly introduced duplicates
+    _devel_node_access_build_nar_data($grants, $node, 'hook_node_access_records_alter()');
+
+    // look for grant records that have disappeared
+    foreach ($data as $realm => $data2) {
+      foreach ($data2 as $gid => $data3) {
+        if (empty($data[$realm][$gid]['found']) && isset($data[$realm][$gid]['current'])) {
+          unset($data[$realm][$gid]['current']);
+          $data[$realm][$gid]['changes'][] = array('op' => 'removed by ' . $module);
+        }
+        else {
+          unset($data[$realm][$gid]['found']);
+        }
+      }
+    }
+  }
+  //dpm($data, '_devel_node_access_nar_alter() returns');
+  //dpm($grants, '_devel_node_access_nar_alter(): grants OUT');
+  return $data;
+}
+
+/**
+ * Helper function to mimic hook_node_grants_alter() and trace what
+ * each module does with it.
+ *
+ * @param object $grants
+ *   An indexed array of grant records, augmented by the '#module' key,
+ *   as created by _devel_node_access_module_invoke_all('node_grants').
+ *   This array is updated by the hook_node_grants_alter()
+ *   implementations.
+ *
+ * @param $node
+ *   The node that the grant records belong to.
+ *
+ * @return
+ *   A tree representation of the grant records in $grants including their
+ *   history:
+ *     $data[$realm][$gid]
+ *       ['cur']    - TRUE or FALSE whether the gid is present or not
+ *       ['ori'][]  - array of module names that contributed this grant (if any)
+ *       ['chg'][]  - array of changes, such as
+ *                       - 'added' if module name is a prefix if the $realm,
+ *                       - 'added by module' otherwise, or
+ *                       - 'removed by module'
+ */
+function _devel_node_access_ng_alter(&$grants, $account, $op) {
+  //dpm($grants, '_devel_node_access_ng_alter(): grants IN');
+  $dummy = array();
+  drupal_alter('node_grants', $dummy, $account, $op);
+  static $drupal_static = array();
+  isset($drupal_static['drupal_alter']) || ($drupal_static['drupal_alter'] = &drupal_static('drupal_alter'));
+  $functions = $drupal_static['drupal_alter'];
+
+  // build the initial structure
+  $data = array();
+  foreach ($grants as $realm => $gids) {
+    foreach ($gids as $i => $gid) {
+      if ($i !== '#module') {
+        $data[$realm][$gid]['cur'] = TRUE;
+        $data[$realm][$gid]['ori'][] = $gids['#module'];
+      }
+    }
+    unset($grants[$realm]['#module']);
+  }
+
+  // simulate drupal_alter('node_grants', $grants, $account, $op);
+  foreach ($functions['node_grants'] as $function) {
+    // call hook_node_grants_alter() for one module at a time and analyze
+    $function($grants, $account, $op); // <==
+    $module = substr($function, 0, strlen($function) - 18);
+
+    // check for new gids
+    foreach ($grants as $realm => $gids) {
+      foreach ($gids as $i => $gid) {
+        if (empty($data[$realm][$gid]['cur'])) {
+          $data[$realm][$gid]['cur'] = TRUE;
+          $data[$realm][$gid]['chg'][] = 'added by ' . $module;
+        }
+      }
+    }
+
+    // check for removed gids
+    foreach ($data as $realm => $gids) {
+      foreach  ($gids as $gid => $history) {
+        if ($history['cur'] && array_search($gid, $grants[$realm]) === FALSE) {
+          $data[$realm][$gid]['cur'] = FALSE;
+          $data[$realm][$gid]['chg'][] = 'removed by ' . $module;
+        }
+      }
+    }
+  }
+
+  //dpm($data, '_devel_node_access_ng_alter() returns');
+  //dpm($grants, '_devel_node_access_ng_alter(): grants OUT');
+  return $data;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function devel_node_access_block_info() {
+  $blocks['dna_node'] = array(
+    'info'   => t('Devel Node Access'),
+    'region' => 'footer',
+    'status' => 1,
+    'cache'  => DRUPAL_NO_CACHE,
+  );
+  $blocks['dna_user'] = array(
+    'info'   => t('Devel Node Access by User'),
+    'region' => 'footer',
+    'cache'  => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function devel_node_access_block_view($delta) {
+  global $user;
+  global $theme_key;
+  static $block1_visible, $hint = '';
+  if (!isset($block1_visible)) {
+    $block1_visible = db_query("SELECT status FROM {block} WHERE module = 'devel_node_access' AND delta = 'dna_user' AND theme = :theme", array(
+      ':theme' => $theme_key,
+    ))->fetchField();
+    if (!$block1_visible) {
+      $hint = t('For per-user access permissions enable the <a href="@link">%DNAbU block</a>.', array('@link' => url('admin/structure/block'), '%DNAbU' => t('Devel Node Access by User')));
+    }
+  }
+
+  if (!user_access(DNA_ACCESS_VIEW)) {
+    return;
+  }
+
+  $output = array();
+
+  switch ($delta) {
+    case 'dna_node':
+      if (!count(dna_visible_nodes())) {
+        return;
+      }
+
+      // include rows where nid == 0
+      $nids = array_merge(array(0 => 0), dna_visible_nodes());
+      $query = db_select('node_access', 'na');
+      $query
+        ->fields('na')
+        ->condition('na.nid', $nids, 'IN')
+        ->orderBy('na.nid')
+        ->orderBy('na.realm')
+        ->orderBy('na.gid');
+      $nodes = node_load_multiple($nids);
+
+      if (!variable_get('devel_node_access_debug_mode', FALSE)) {
+        $headers = array(t('node'), t('realm'), t('gid'), t('view'), t('update'), t('delete'), t('explained'));
+        $rows = array();
+        foreach ($query->execute() as $row) {
+          $explained = module_invoke_all('node_access_explain', $row);
+          $rows[] = array(
+            (empty($row->nid) ? '0' : '<a href="#node-' . $row->nid . '">' . _devel_node_access_get_node_title($nodes[$row->nid], TRUE) . '</a>'),
+            $row->realm,
+            $row->gid,
+            $row->grant_view,
+            $row->grant_update,
+            $row->grant_delete,
+            implode('<br />', $explained),
+          );
+        }
+        $output[] = array(
+          '#theme'      => 'table',
+          '#header'     => $headers,
+          '#rows'       => $rows,
+          '#attributes' => array('style' => 'text-align: left')
+        );
+
+        $hint = t('To see more details enable <a href="@debug_mode">debug mode</a>.', array('@debug_mode' => url('admin/config/development/devel', array('fragment' => 'edit-devel-node-access')))) . (empty($hint) ? '' : ' ' . $hint);
+      }
+      else {
+        $tr = 't';
+        $variables = array('!na' => '{node_access}');
+        $states = array(
+          'default'      => array(t('default'),      'ok',      t('Default grant supplied by core in the absence of any other non-empty grants; in !na.', $variables)),
+          'ok'           => array(t('ok'),           'ok',      t('Highest priority grant; in !na.', $variables)),
+          'removed'      => array(t('removed'),      '',        t('Was removed in @func; not in !na.', $variables + array('@func' => 'hook_node_access_records_alter()'))),
+          'static'       => array(t('static'),       'ok',      t('Non-standard grant in !na.', $variables)),
+          'unexpected'   => array(t('unexpected'),   'warning', t('The 0/all/0/... grant applies to all nodes and all users -- usually it should not be present in !na if any node access module is active!')),
+          'ignored'      => array(t('ignored'),      'warning', t('Lower priority grant; not in !na and thus ignored.', $variables)),
+          'empty'        => array(t('empty'),        'warning', t('Does not grant any access, but could block lower priority grants; not in !na.', $variables)),
+          'wrong'        => array(t('wrong'),        'error',   t('Is rightfully in !na but at least one access flag is wrong!', $variables)),
+          'missing'      => array(t('missing'),      'error',   t("Should be in !na but isn't!", $variables)),
+          'removed!'     => array(t('removed!'),     'error',   t('Was removed in @func; should NOT be in !na!', $variables + array('@func' => 'hook_node_access_records_alter()'))),
+          'illegitimate' => array(t('illegitimate'), 'error',   t('Should NOT be in !na because of lower priority!', $variables)),
+          'alien'        => array(t('alien'),        'error',   t('Should NOT be in !na because of unknown origin!', $variables)),
+        );
+        $active_states = array('default', 'ok', 'static', 'unexpected', 'wrong', 'illegitimate', 'alien');
+        $headers = array(t('node'), t('prio'), t('status'), t('realm'), t('gid'), t('view'), t('update'), t('delete'), t('explained'));
+        $headers = _devel_node_access_format_row($headers);
+        $active_grants = array();
+        foreach ($query->execute() as $active_grant) {
+          $active_grants[$active_grant->nid][$active_grant->realm][$active_grant->gid] = $active_grant;
+        }
+        $all_grants = $checked_grants = $published_nid = array();
+        foreach ($nids as $nid) {
+          $acquired_grants_nid = array();
+          if ($node = node_load($nid)) {
+            // check node_access_acquire_grants()
+            $grants = _devel_node_access_module_invoke_all('node_access_records', $node);
+            // check drupal_alter('node_access_records')
+            $data = _devel_node_access_nar_alter($grants, $node);
+            /* (This was the D6 implementation that didn't analyze the hook_node_access_records_alter() details.)
+            if (!empty($grants)) {
+              $top_priority = NULL;
+              foreach ($grants as $grant) {
+                $priority = intval($grant['priority']);
+                $top_priority = (isset($top_priority) ? max($top_priority, $priority) : $priority);
+                $grant['priority'] = (isset($grant['priority']) ? $priority : '&ndash;&nbsp;');
+                $acquired_grants_nid[$priority][$grant['realm']][$grant['gid']] = $grant + array(
+                  '#title'  => _devel_node_access_get_node_title($node, TRUE),
+                  '#module' => (isset($grant['#module']) ? $grant['#module'] : ''),
+                );
+              }
+              krsort($acquired_grants_nid);
+            }
+            /*/
+            // (This is the new D7 implementation; it retains backward compatibility.)
+            if (!empty($data)) {
+              foreach ($data as $data_by_realm) {
+                foreach ($data_by_realm as $data_by_realm_gid) { // by gid
+                  if (isset($data_by_realm_gid['current'])) {
+                    $grant = $data_by_realm_gid['current'];
+                  }
+                  elseif (isset($data_by_realm_gid['original'])) {
+                    $grant = $data_by_realm_gid['original'];
+                    $grant['#removed'] = 1;
+                  }
+                  else {
+                    continue;
+                  }
+                  $priority = intval($grant['priority']);
+                  $top_priority = (isset($top_priority) ? max($top_priority, $priority) : $priority);
+                  $grant['priority'] = (isset($grant['priority']) ? $priority : '&ndash;&nbsp;');
+                  $grant['history'] = $data_by_realm_gid;
+                  $acquired_grants_nid[$priority][$grant['realm']][$grant['gid']] = $grant + array(
+                    '#title'  => _devel_node_access_get_node_title($node),
+                    '#module' => (isset($grant['#module']) ? $grant['#module'] : ''),
+                  );
+                }
+              }
+              krsort($acquired_grants_nid);
+            }
+            /**/
+            //dpm($acquired_grants_nid, "acquired_grants_nid =");
+            // check node_access_grants()
+            $published_nid[$nid] = $node->status;
+            if ($node->nid) {
+              foreach (array('view', 'update', 'delete') as $op) {
+                $grants = _devel_node_access_module_invoke_all('node_grants', $user, $op);
+                // call all hook_node_grants_alter() implementations
+                $ng_alter_data = _devel_node_access_ng_alter($grants, $user, $op);
+                $checked_grants[$nid][$op] = array_merge(array('all' => array(0)), $grants);
+              }
+            }
+          }
+
+          // check for grants in the node_access table that aren't returned by node_access_acquire_grants()
+
+          if (isset($active_grants[$nid])) {
+            foreach ($active_grants[$nid] as $realm => $active_grants_realm) {
+              foreach ($active_grants_realm as $gid => $active_grant) {
+                $found = FALSE;
+                $count_nonempty_grants = 0;
+                foreach ($acquired_grants_nid as $priority => $acquired_grants_nid_priority) {
+                  if (isset($acquired_grants_nid_priority[$realm][$gid])) {
+                    $found = TRUE;
+                  }
+                }
+                if ($acquired_grants_nid_priority = reset($acquired_grants_nid)) { // highest priority only
+                  foreach ($acquired_grants_nid_priority as $acquired_grants_nid_priority_realm) {
+                    foreach ($acquired_grants_nid_priority_realm as $acquired_grants_nid_priority_realm_gid) {
+                      $count_nonempty_grants += (!empty($acquired_grants_nid_priority_realm_gid['grant_view']) || !empty($acquired_grants_nid_priority_realm_gid['grant_update']) || !empty($acquired_grants_nid_priority_realm_gid['grant_delete']));
+                    }
+                  }
+                }
+                $fixed_grant = (array) $active_grant;
+                if ($count_nonempty_grants == 0 && $realm == 'all' && $gid == 0) {
+                  $fixed_grant += array(
+                    'priority' => '&ndash;',
+                    'state'    => 'default',
+                  );
+                }
+                elseif (!$found) {
+                  $acknowledged = _devel_node_access_module_invoke_all('node_access_acknowledge', $fixed_grant);
+                  if (empty($acknowledged)) {
+                    // no module acknowledged this record, mark it as alien
+                    $fixed_grant += array(
+                      'priority' => '?',
+                      'state'    => 'alien',
+                    );
+                  }
+                  else {
+                    // at least one module acknowledged the record, attribute it to the first one
+                    $fixed_grant += array(
+                      'priority' => '&ndash;',
+                      'state'    => 'static',
+                      '#module'  => reset(array_keys($acknowledged)),
+                    );
+                  }
+                }
+                else {
+                  continue;
+                }
+                $fixed_grant += array(
+                  'nid'    => $nid,
+                  '#title' => _devel_node_access_get_node_title($node),
+                );
+                $all_grants[] = $fixed_grant;
+              }
+            }
+          }
+
+          // order grants and evaluate their status
+          foreach ($acquired_grants_nid as $priority => $acquired_grants_priority) {
+            ksort($acquired_grants_priority);
+            foreach ($acquired_grants_priority as $realm => $acquired_grants_realm) {
+              ksort($acquired_grants_realm);
+              foreach ($acquired_grants_realm as $gid => $acquired_grant) {
+                if ($priority == $top_priority) {
+                  if (empty($acquired_grant['grant_view']) && empty($acquired_grant['grant_update']) && empty($acquired_grant['grant_delete'])) {
+                    $acquired_grant['state'] = 'empty';
+                  }
+                  else {
+                    if (isset($active_grants[$nid][$realm][$gid])) {
+                      $acquired_grant['state'] = (isset($acquired_grant['#removed']) ? 'removed!' : 'ok');
+                    }
+                    else {
+                      $acquired_grant['state'] = (isset($acquired_grant['#removed']) ? 'removed' : 'missing');
+                    }
+                    if ($acquired_grant['state'] == 'ok') {
+                      foreach (array('view', 'update', 'delete') as $op) {
+                        $active_grant = (array) $active_grants[$nid][$realm][$gid];
+                        if (empty($acquired_grant["grant_$op"]) != empty($active_grant["grant_$op"])) {
+                          $acquired_grant["grant_$op!"] = $active_grant["grant_$op"];
+                        }
+                      }
+                    }
+                  }
+                }
+                else {
+                  $acquired_grant['state'] = (isset($active_grants[$nid][$realm][$gid]) ? 'illegitimate' : 'ignored');
+                }
+                $all_grants[] = $acquired_grant + array('nid' => $nid);
+              }
+            }
+          }
+        }
+
+        // fill in the table rows
+        $rows = array();
+        $error_count = 0;
+        foreach ($all_grants as $grant) {
+          $row = new stdClass();
+          $row->nid = $grant['nid'];
+          $row->title = $grant['#title'];
+          $row->priority = $grant['priority'];
+          $row->state = array('data' => $states[$grant['state']][0], 'title' => $states[$grant['state']][2]);
+          $row->realm = $grant['realm'];
+          $row->gid = $grant['gid'];
+          $row->grant_view = $grant['grant_view'];
+          $row->grant_update = $grant['grant_update'];
+          $row->grant_delete = $grant['grant_delete'];
+          $row->explained = implode('<br />', module_invoke_all('node_access_explain', $row));
+          unset($row->title);  // possibly needed above
+          if ($row->nid == 0 && $row->gid == 0 && $row->realm == 'all' && count($all_grants) > 1) {
+            $row->state = array('data' => $states['unexpected'][0], 'title' => $states['unexpected'][2]);
+            $class = $states['unexpected'][1];
+          }
+          else {
+            $class = $states[$grant['state']][1];
+          }
+          $row = (array) $row;
+          foreach (array('view', 'update', 'delete') as $op) {
+            $row["grant_$op"] = array('data' => $row["grant_$op"]);
+            if ((isset($checked_grants[$grant['nid']][$op][$grant['realm']]) && in_array($grant['gid'], $checked_grants[$grant['nid']][$op][$grant['realm']]) || ($row['nid'] == 0 && $row['gid'] == 0 && $row['realm'] == 'all')) && !empty($row["grant_$op"]['data']) && in_array($grant['state'], $active_states)) {
+              $row["grant_$op"]['data'] .= '&prime;';
+              $row["grant_$op"]['title'] = t('This entry grants access to this node to this user.');
+            }
+            if (isset($grant["grant_$op!"])) {
+              $row["grant_$op"]['data'] = $grant["grant_$op!"] . '&gt;' . (!$row["grant_$op"]['data'] ? 0 : $row["grant_$op"]['data']);
+              $row["grant_$op"]['class'][] = 'error';
+              if ($class == 'ok') {
+                $row['state'] = array('data' => $states['wrong'][0], 'title' => $states['wrong'][2]);
+                $class = $states['wrong'][1];
+              }
+            }
+          }
+          $error_count += ($class == 'error');
+          $row['nid'] = array(
+            'data'  => '<a href="#node-' . $grant['nid'] . '">' . $row['nid'] . '</a>',
+            'title' => $grant['#title'],
+          );
+          $row['realm'] = (empty($grant['#module']) || strpos($grant['realm'], $grant['#module']) === 0 ? '' : $grant['#module'] . ':<br />') . $grant['realm'];
+
+          // prepend information from the D7 hook_node_access_records_alter()
+          $next_style = array();
+          if (isset($grant['history'])) {
+            $history = $grant['history'];
+            if (($num_changes = count($history['changes']) - empty($history['current'])) > 0) {
+              $first_row = TRUE;
+              while (isset($history['original']) || $num_changes--) {
+                if (isset($history['original'])) {
+                  $this_grant = $history['original'];
+                  $this_action = '[ Original by ' . $this_grant['#module'] . ':';
+                  unset($history['original']);
+                }
+                else {
+                  $change = $history['changes'][0];
+                  $this_grant = $change['grant'];
+                  $this_action = ($first_row ? '[ ' : '') . $change['op'] . ':';
+                  array_shift($history['changes']);
+                }
+                $rows[] = array(
+                  'data'  => array(
+                    'data'  => array(
+                      'data'    => $this_action,
+                      'style'   => array('padding-bottom: 0;'),
+                    ),
+                  ),
+                  'style' => array_merge(($first_row ? array() : array('border-top-style: dashed;', 'border-top-width: 1px;')), array('border-bottom-style: none;')),
+                );
+                $next_style = array('border-top-style: none;');
+                if (count($history['changes'])) {
+                  $g = $this_grant;
+                  $rows[] = array(
+                    'data'  => array('v', $g['priority'], '', $g['realm'], $g['gid'], $g['grant_view'], $g['grant_update'], $g['grant_delete'], 'v'),
+                    'style' => array('border-top-style: none;', 'border-bottom-style: dashed;'),
+                  );
+                  $next_style = array('border-top-style: dashed;');
+                }
+                $first_row = FALSE;
+              }
+            }
+          }
+
+          // fix up the main row cells with the proper class (needed for Bartik)
+          foreach ($row as $key => $value) {
+            if (!is_array($value)) {
+              $row[$key] = array('data' => $value);
+            }
+            $row[$key]['class'] = array($class);
+          }
+          // add the main row
+          $will_append = empty($history['current']) && !empty($history['changes']);
+          $rows[] = array(
+            'data'  => array_values($row),
+            'class' => array($class),
+            'style' => array_merge($next_style, ($will_append ? array('border-bottom-style: none;') : array())),
+          );
+
+          // append information from the D7 hook_node_access_records_alter()
+          if ($will_append) {
+            $last_change = end($history['changes']);
+            $rows[] = array(
+              'data'  => array(
+                'data'  => array(
+                  'data'    => $last_change['op'] . ' ]',
+                  'style' => array('padding-top: 0;'),
+                ),
+              ),
+              'style' => array('border-top-style: none;'),
+            );
+          }
+        }
+
+        foreach ($rows as $i => $row) {
+          $rows[$i] = _devel_node_access_format_row($row);
+        }
+
+        $output[] = array(
+          '#theme'      => 'table',
+          '#header'     => $headers,
+          '#rows'       => $rows,
+          '#attributes' => array(
+            'class'       => array('system-status-report'),
+            'style'       => 'text-align: left;',
+          ),
+        );
+
+        $output[] = array(
+          '#theme'       => 'form_element',
+          '#description' => t('(Some of the table elements provide additional information if you hover your mouse over them.)'),
+        );
+
+        if ($error_count > 0) {
+          $variables['!Rebuild_permissions'] = '<a href="' . url('admin/reports/status/rebuild') . '">' . $tr('Rebuild permissions') . '</a>';
+          $output[] = array(
+            '#prefix' => "\n<div class=\"error\">",
+            '#markup' => t("You have errors in your !na table! You may be able to fix these for now by running !Rebuild_permissions, but this is likely to destroy the evidence and make it impossible to identify the underlying issues. If you don't fix those, the errors will probably come back again. <br /> DON'T do this just yet if you intend to ask for help with this situation.", $variables),
+            '#suffix' => "</div><br />\n",
+          );
+        }
+
+        // Explain whether access is granted or denied, and why (using code from node_access()).
+        $tr = 't';
+        array_shift($nids);  // remove the 0
+        $accounts = array();
+        $variables += array(
+          '!username' => '<em class="placeholder">' . theme('username', array('account' => $user)) . '</em>',
+          '%uid'      => $user->uid,
+        );
+
+        if (user_access('bypass node access')) {
+          $variables['%bypass_node_access'] = $tr('bypass node access');
+          $output[] = array(
+            '#markup' => t('!username has the %bypass_node_access permission and thus full access to all nodes.', $variables),
+            '#suffix' => '<br />&nbsp;',
+          );
+        }
+        else {
+          $variables['!list'] = '<div style="margin-left: 2em">' . _devel_node_access_get_grant_list($nid, $ng_alter_data) . '</div>';
+          $variables['%access'] = 'view';
+          $output[] = array(
+            '#prefix' => "\n<div style='text-align: left' title='" . t('These are the grants returned by hook_node_grants() for this user.') . "'>",
+            '#markup' => t('!username (user %uid) can use these grants (if they are present above) for %access access: !list', $variables),
+            '#suffix' => "</div>\n",
+          );
+          $accounts[] = $user;
+        }
+        if (arg(0) == 'node' && is_numeric(arg(1)) && !$block1_visible) {  // only for single nodes
+          if (user_is_logged_in()) {
+            $accounts[] = user_load(0);  // Anonymous, too
+          }
+          foreach ($accounts as $account) {
+            $account_items = array();
+            $nid_items = array();
+            foreach ($nids as $nid) {
+              $op_items = array();
+              foreach (array('create', 'view', 'update', 'delete') as $op) {
+                $explain = _devel_node_access_explain_access($op, $nid, $account);
+                $op_items[] = "<div style='width: 5em; display: inline-block'>" . t('%op:', array('%op' => $op)) . ' </div>' . $explain[2];
+              }
+              $nid_items[] = array(
+                '#theme'  => 'item_list',
+                '#items'  => $op_items,
+                '#type'   => 'ul',
+                '#prefix' => t('to node !nid:', array('!nid' => l($nid, 'node/' . $nid))) . "\n<div style='margin-left: 2em'>",
+                '#suffix' => '</div>',
+              );
+            }
+            if (count($nid_items) == 1) {
+              $account_items = $nid_items[0];
+            }
+            else {
+              $account_items = array(
+                '#theme'  => 'item_list',
+                '#items'  => $nid_items,
+                '#type'   => 'ul',
+                '#prefix' => "\n<div style='margin-left: 2em'>",
+                '#suffix' => '</div>',
+              );
+            }
+            $variables['!username'] = theme('username', array('account' => $account));
+            $output[] = array(
+              '#prefix' => "\n<div style='text-align: left'>",
+              '#markup' => t("!username has the following access", $variables),
+              'items'   => $account_items,
+              '#suffix' => "\n</div>\n",
+            );
+          }
+        }
+      }
+
+      if (!empty($hint)) {
+        $output[] = array(
+          '#theme'        => 'form_element',
+          '#description'  => '(' . $hint . ')',
+        );
+      }
+      $output[]['#markup'] = '<br /><br />';
+      $subject = t('node_access entries for nodes shown on this page');
+      return array('subject' => $subject, 'content' => $output);
+
+    case 'dna_user':
+      // show which users can access this node
+      if (arg(0) == 'node' && is_numeric($nid = arg(1)) && arg(2) == NULL && $node = node_load($nid)) {
+        $node_type = node_type_get_type($node);
+        $headers = array(t('username'), '<span title="' . t("Create nodes of the '@Node_type' type.", array('@Node_type' => $node_type->name)) . '">' . t('create') . '</span>', t('view'), t('update'), t('delete'));
+        $rows = array();
+        // Determine whether to use Ajax or prepopulate the tables.
+        if ($ajax = variable_get('devel_node_access_user_ajax', FALSE)) {
+          drupal_add_js(drupal_get_path('module', 'devel_node_access') . '/devel_node_access.js');
+        }
+        // Find all users. The following operations are very inefficient, so we
+        // limit the number of users returned.  It would be better to make a
+        // pager query, or at least make the number of users configurable.  If
+        // anyone is up for that please submit a patch.
+        $query = db_select('users', 'u')
+          ->fields('u', array('uid'))
+          ->orderBy('access', 'DESC')
+          ->range(0, 9);
+        $uids = $query->execute()->fetchCol();
+        array_unshift($uids, 0);
+        $accounts = user_load_multiple($uids);
+        foreach ($accounts as $account) {
+          $username = theme('username', array('account' => $account));
+          if ($account->uid == $user->uid) {
+            $username = '<strong>' . $username . '</strong>';
+          }
+          $rows[] = array(
+            $username,
+            array(
+              'id' => 'create-' . $nid . '-' . $account->uid,
+              'class' => 'dna-permission',
+              'data' => $ajax ? NULL : theme('dna_permission', array('permission' => _devel_node_access_explain_access('create', $nid, $account))),
+            ),
+            array(
+              'id' => 'view-' . $nid . '-' . $account->uid,
+              'class' => 'dna-permission',
+              'data' => $ajax ? NULL : theme('dna_permission', array('permission' => _devel_node_access_explain_access('view', $nid, $account))),
+            ),
+            array(
+              'id' => 'update-' . $nid . '-' . $account->uid,
+              'class' => 'dna-permission',
+              'data' => $ajax ? NULL : theme('dna_permission', array('permission' => _devel_node_access_explain_access('update', $nid, $account))),
+            ),
+            array(
+              'id' => 'delete-' . $nid . '-' . $account->uid,
+              'class' => 'dna-permission',
+              'data' => $ajax ? NULL : theme('dna_permission', array('permission' => _devel_node_access_explain_access('delete', $nid, $account))),
+            ),
+          );
+        }
+        if (count($rows)) {
+          $output[] = array(
+            '#theme'      => 'table',
+            '#header'     => $headers,
+            '#rows'       => $rows,
+            '#attributes' => array('style' => 'text-align: left'),
+          );
+          $output[] = array(
+            '#theme'        => 'form_element',
+            '#description'  => t('(This table lists the most-recently active users. Hover your mouse over each result for more details.)'),
+          );
+
+          return array(
+            'subject' => t('Access permissions by user'),
+            'content' => $output,
+          );
+        }
+      }
+      break;
+  }
+}
+
+/**
+ * Callback function for node access by user block ajax.
+ */
+function devel_node_access_user_ajax($data_type, $cell) {
+  list($op, $nid, $uid) = explode('-', $cell);
+  $account = user_load($uid);
+  $output = array(
+    '#theme' => 'dna_permission',
+    '#permission' => _devel_node_access_explain_access($op, $nid, $account),
+  );
+  // JSON output for Ajax callbacks.
+  if ($data_type == 'json') {
+    drupal_json_output(drupal_render($output));
+    exit;
+  }
+  // HTML output for error message click-throughs.
+  if ($node = node_load($nid)) {
+    $node_title = l($node->title, 'node/' . $node->nid);
+  }
+  else {
+    $node_title = t('unknown node %nid', array('%nid' => $nid));
+  }
+  drupal_set_title(
+    t(
+      'Devel node access: %op permission for !user on !node',
+      array(
+        '%op'   => $op,
+        '!user' => theme('username', array('account' => $account)),
+        '!node' => $node_title,
+      )
+    ),
+    PASS_THROUGH
+  );
+  return $output;
+}
+
+/**
+ * Helper function that mimicks node.module's node_access() function.
+ *
+ * Unfortunately, this needs to be updated manually whenever node.module changes!
+ *
+ * @return
+ *   An array suitable for theming with theme_dna_permission().
+ */
+function _devel_node_access_explain_access($op, $node, $account = NULL) {
+  global $user;
+
+  if (is_numeric($node) && !($node = node_load($node))) {
+    return array(
+      FALSE,
+      '???',
+      t('Unable to load the node &ndash; this should never happen!'),
+    );
+  }
+  if (!in_array($op, array('view', 'update', 'delete', 'create'), TRUE)) {
+    return array(
+      FALSE,
+      t('!NO: invalid $op', array('!NO' => t('NO'))),
+      t("'@op' is an invalid operation!", array('@op' => $op)),
+    );
+  }
+
+  if ($op == 'create' && is_object($node)) {
+    $node = $node->type;
+  }
+
+  if (!empty($account)) {
+    // To try to get the most authentic result we impersonate the given user!
+    // This may reveal bugs in other modules, leading to contradictory results.
+    $saved_user = $user;
+    drupal_save_session(FALSE);
+    $user = $account;
+    $result = _devel_node_access_explain_access($op, $node, NULL);
+    $user = $saved_user;
+    drupal_save_session(TRUE);
+    $second_opinion = node_access($op, $node, $account);
+    if ($second_opinion != $result[0]) {
+      $result[1] .= '<span class="' . ($second_opinion ? 'ok' : 'error') . '" title="Core seems to disagree on this item. This is a bug in either DNA or Core and should be fixed! Try to look at this node as this user and check whether there is still disagreement.">*</span>';
+    }
+    return $result;
+  }
+
+  $variables = array(
+    '!NO'                 => t('NO'),
+    '!YES'                => t('YES'),
+    '!bypass_node_access' => t('bypass node access'),
+    '!access_content'     => t('access content'),
+  );
+
+  if (user_access('bypass node access')) {
+    return array(
+      TRUE,
+      t('!YES: bypass node access', $variables),
+      t("!YES: This user has the '!bypass_node_access' permission and may do everything with nodes.", $variables),
+    );
+  }
+
+  if (!user_access('access content')) {
+    return array(
+      FALSE,
+      t('!NO: access content', $variables),
+      t("!NO: This user does not have the '!access_content' permission and is denied doing anything with content.", $variables),
+    );
+  }
+
+  foreach (module_implements('node_access') as $module) {
+    $function = $module . '_node_access';
+    if (function_exists($function)) {
+      $result = $function($node, $op, $user);
+      if ($module == 'node') {
+        $module = 'node (permissions)';
+      }
+      if (isset($result)) {
+        if ($result === NODE_ACCESS_DENY) {
+          $denied_by[] = $module;
+        }
+        elseif ($result === NODE_ACCESS_ALLOW) {
+          $allowed_by[] = $module;
+        }
+        $access[] = $result;
+      }
+    }
+  }
+  $variables += array(
+    '@deniers'  => (empty($denied_by) ? NULL : implode(', ', $denied_by)),
+    '@allowers' => (empty($allowed_by) ? NULL : implode(', ', $allowed_by)),
+  );
+  if (!empty($denied_by)) {
+    $variables += array(
+      '%module' => $denied_by[0] . (count($denied_by) > 1 ? '+' : ''),
+    );
+    return array(
+      FALSE,
+      t('!NO: by %module', $variables),
+      empty($allowed_by)
+      ? t("!NO: hook_node_access() of the following module(s) denies this: @deniers.", $variables)
+      : t("!NO: hook_node_access() of the following module(s) denies this: @deniers &ndash; even though the following module(s) would allow it: @allowers.", $variables),
+    );
+  }
+  if (!empty($allowed_by)) {
+    $variables += array(
+      '%module' => $allowed_by[0] . (count($allowed_by) > 1 ? '+' : ''),
+      '!view_own_unpublished_content' => t('view own unpublished content'),
+    );
+    return array(
+      TRUE,
+      t('!YES: by %module', $variables),
+      t("!YES: hook_node_access() of the following module(s) allows this: @allowers.", $variables),
+    );
+  }
+
+  if ($op == 'view' && !$node->status && user_access('view own unpublished content') && $user->uid == $node->uid && $user->uid != 0) {
+    return array(
+      TRUE,
+      t('!YES: view own unpublished content', $variables),
+      t("!YES: The node is unpublished, but the user has the '!view_own_unpublished_content' permission.", $variables),
+    );
+  }
+
+  if ($op != 'create' && $node->nid) {
+    if (node_access($op, $node)) {  // delegate this part
+      $variables['@node_access_table'] = '{node_access}';
+      return array(
+        TRUE,
+        t('!YES: @node_access_table', $variables),
+        t('!YES: Node access allows this based on one or more records in the @node_access_table table (see the other DNA block!).', $variables),
+      );
+    }
+  }
+
+  return array(
+    FALSE,
+    t('!NO: no reason', $variables),
+    t("!NO: None of the checks resulted in allowing this, so it's denied.", $variables)
+    . ($op == 'create' ? ' ' . t('This is most likely due to a withheld permission.') : ''),
+  );
+}
+
+/**
+ * Helper function to create a list of the grants returned by hook_node_grants().
+ */
+function _devel_node_access_get_grant_list($nid, $ng_alter_data) {
+  //dpm($ng_alter_data, "_devel_node_access_get_grant_list($nid,");
+  $ng_alter_data = array_merge(array('all' => array(0 => array('cur' => TRUE, 'ori' => array('all')))), $ng_alter_data);
+  $items = array();
+  if (count($ng_alter_data)) {
+    foreach ($ng_alter_data as $realm => $gids) {
+      ksort($gids);
+      $gs = array();
+      foreach ($gids as $gid => $history) {
+        if ($history['cur']) {
+          if (isset($history['ori'])) {
+            $g = $gid;  // original grant, still active
+          }
+          else {
+            $g = '<u>' . $gid . '</u>';  // new grant, still active
+          }
+        }
+        else {
+          $g = '<del>' . $gid . '</del>';  // deleted grant
+        }
+
+        $ghs = array();
+        if (isset($history['ori']) && strpos($realm, $history['ori'][0]) !== 0) {
+          $ghs[] = 'by ' . $history['ori'][0];
+        }
+        if (isset($history['chg'])) {
+          foreach ($history['chg'] as $h) {
+            $ghs[] = $h;
+          }
+        }
+        if (!empty($ghs)) {
+          $g .= ' (' . implode(', ', $ghs) . ')';
+        }
+        $gs[] = $g;
+      }
+      $items[] = $realm . ': ' . implode(', ', $gs);
+    }
+    if (!empty($items)) {
+      return theme('item_list', array('items' => $items, 'type' => 'ul'));
+    }
+  }
+}
+
+/**
+ * Implements hook_node_access_explain().
+ */
+function devel_node_access_node_access_explain($row) {
+  if ($row->gid == 0 && $row->realm == 'all') {
+    foreach (array('view', 'update', 'delete') as $op) {
+      $gop = 'grant_' . $op;
+      if (!empty($row->$gop)) {
+        $ops[] = $op;
+      }
+    }
+    if (empty($ops)) {
+      return '(No access granted to ' . ($row->nid == 0 ? 'any nodes.)' : 'this node.)');
+    }
+    else {
+      return 'All users may ' . implode('/', $ops) . ($row->nid == 0 ? ' all nodes.' : ' this node.');
+    }
+  }
+}
+
+/**
+ * Helper function to return a sanitized node title.
+ */
+function _devel_node_access_get_node_title($node, $clip_and_decorate = FALSE) {
+  if (isset($node)) {
+    if (isset($node->title)) {
+      $node_title = check_plain(!is_array($node->title) ? $node->title : $node->title[LANGUAGE_NONE][0]['value']);
+      if ($clip_and_decorate) {
+        if (drupal_strlen($node_title) > 20) {
+          $node_title = "<span title='node/$node->nid: $node_title'>" . drupal_substr($node_title, 0, 15) . '...</span>';
+        }
+        $node_title = '<span title="node/' . $node->nid . '">' . $node_title . '</span>';
+      }
+      return $node_title;
+    }
+    elseif (isset($node->nid)) {
+      return $node->nid;
+    }
+  }
+  return '&mdash;';
+}
+
+/**
+ * Helper function to apply common formatting to a debug-mode table row.
+ */
+function _devel_node_access_format_row($row, $may_unpack = TRUE) {
+  if ($may_unpack && isset($row['data'])) {
+    $row['data'] = _devel_node_access_format_row($row['data'], FALSE);
+    $row['class'][] = 'even';
+    return $row;
+  }
+  if (count($row) == 1) {
+    if (is_scalar($row['data'])) {
+      $row['data'] = array('data' => $row['data']);
+    }
+    $row['data']['colspan'] = 9;
+  }
+  else {
+    $row = array_values($row);
+    foreach (array(0, 1, 4) as $j) {  // node, prio, gid
+      if (is_scalar($row[$j])) {
+        $row[$j] = array('data' => $row[$j]);
+      }
+      $row[$j]['style'][] = 'text-align: right;';
+    }
+  }
+  return $row;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function devel_node_access_theme() {
+  return array(
+    'dna_permission' => array(
+      'variables'    => array(
+        'permission' => NULL,
+      ),
+    ),
+  );
+}
+
+/**
+ * Indicate whether user has a permission or not.
+ */
+function theme_dna_permission($variables) {
+  $permission = &$variables['permission'];
+  return '<span class="' . ($permission[0] ? 'ok' : 'error') . '" title="' . $permission[2] . '">' . $permission[1] . '</span>';
+}

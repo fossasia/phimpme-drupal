@@ -1,0 +1,72 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Mollom with Statuses.
+ */
+
+/**
+ * Implements hook_mollom_form_list().
+ */
+function fbss_mollom_mollom_form_list() {
+  return array(
+    'statuses_box' => array(
+      'title' => t('Statuses update status form'),
+      'entity' => 'statuses',
+      'report access' => array(
+        'post status messages to other streams',
+        'update and view own stream',
+      ),
+      'report delete callback' => 'statuses_delete_status',
+    ),
+    'statuses_edit' => array(
+      'title' => t('Statuses edit status form'),
+      'entity' => 'statuses',
+      'report access' => array(
+        'delete all statuses',
+        'delete own statuses',
+        'delete status messages on own profile',
+        'delete status messages on own nodes',
+      ),
+      'report delete callback' => 'statuses_delete_status',
+    ),
+  );
+}
+
+/**
+ * Implements hook_mollom_form_info().
+ */
+function fbss_mollom_mollom_form_info($form_id) {
+  if ($form_id == 'statuses_box') {
+    return array(
+      'title' => t('Statuses update status form'),
+      'mode' => MOLLOM_MODE_ANALYSIS,
+      'bypass access' => array(
+        'delete all statuses',
+        'edit all statuses',
+        'send messages to all users at once',
+      ),
+      'elements' => array('fbss-status' => t('Status box')),
+      'mapping' => array(
+        'post_title' => 'fbss-status',
+      ),
+    );
+  }
+  elseif ($form_id == 'statuses_edit') {
+    return array(
+      'title' => t('Statuses edit status form'),
+      'mode' => MOLLOM_MODE_ANALYSIS,
+      'bypass access' => array(
+        'delete all statuses',
+        'edit all statuses',
+        'send messages to all users at once',
+      ),
+      'entity' => 'statuses',
+      'elements' => array('fbss-status' => t('Status box')),
+      'mapping' => array(
+        'post_id' => 'sid',
+        'post_title' => 'fbss-status',
+      ),
+    );
+  }
+}

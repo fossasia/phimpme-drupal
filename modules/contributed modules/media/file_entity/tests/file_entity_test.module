@@ -1,0 +1,100 @@
+<?php
+
+/**
+ * @file
+ * File Entity Test
+ */
+
+
+/**
+ * Implements hook_menu().
+ */
+function file_entity_test_menu() {
+  $items = array();
+
+  $items['file-entity-test/file/add'] = array(
+    'title' => 'Add file',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('file_entity_test_add_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'file_entity_test.pages.inc',
+  );
+  $items['file-entity-test/file/%file'] = array(
+    'title' => 'View file',
+    'page callback' => 'file_entity_test_view_page',
+    'page arguments' => array(2),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'file_entity_test.pages.inc',
+  );
+  $items['file-entity-test/file/%file/view'] = array(
+    'title' => 'View',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  $items['file-entity-test/file/%file/preview'] = array(
+    'title' => 'Preview',
+    'page callback' => 'file_entity_test_preview_page',
+    'page arguments' => array(2),
+    'access arguments' => array('administer site configuration'),
+    'weight' => 0,
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'file_entity_test.pages.inc',
+  );
+  $items['file-entity-test/file/%file/edit'] = array(
+    'title' => 'Edit',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('file_entity_test_edit_form', 2),
+    'access arguments' => array('administer site configuration'),
+    'weight' => 1,
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'file_entity_test.pages.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_file_type_info().
+ */
+function file_entity_test_file_type_info() {
+  return array(
+    'file_entity_test' => array(
+      'label' => t('Test'),
+      'description' => t('A file type defined by the File Entity Test module. Used for testing only.'),
+      'claim callback' => 'file_entity_test_file_type_file_entity_test_claim',
+      'default view callback' => 'file_entity_test_file_type_file_entity_test_default_view',
+      'weight' => 100,
+    ),
+  );
+}
+
+/**
+ * Implements hook_file_type_TYPE_claim().
+ *
+ * Returns TRUE if the passed in file should be assigned the 'file_entity_test'
+ * file type.
+ */
+function file_entity_test_file_type_file_entity_test_claim($file) {
+  return TRUE;
+}
+
+/**
+ * Implements hook_file_type_TYPE_default_view().
+ */
+function file_entity_test_file_type_file_entity_test_default_view($file, $view_mode, $langcode) {
+  return array(
+    '#type' => 'link',
+    '#title' => $file->filename,
+    '#href' => file_create_url($file->uri),
+  );
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function file_entity_test_entity_info_alter(&$entity_info) {
+  $entity_info['file']['view modes']['file_entity_test_preview'] = array(
+    'label' => t('Test Preview'),
+    'custom settings' => TRUE,
+  );
+}

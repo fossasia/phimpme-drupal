@@ -1,0 +1,15 @@
+name = Entity CRUD test module
+description = Provides entity types based upon the CRUD API.
+version = VERSION
+core = 7.x
+files[] = entity_test.module
+files[] = entity_test.install
+dependencies[] = entity
+hidden = TRUE
+
+; Information added by drupal.org packaging script on 2011-11-10
+version = "7.x-1.0-rc1"
+core = "7.x"
+project = "entity"
+datestamp = "1320914735"
+

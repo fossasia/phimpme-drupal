@@ -1,0 +1,19 @@
+
+/**
+ * Workarounds for IE7 bugs in the lightbox. When title/description are shown,
+ * the copyright icons overlap with the download link instead of being aligned
+ * right, so we override styles here to fix that.
+ *
+ */
+.lightbox-stack .media-gallery-detail-info {
+  display: inline-block;
+  width: 100%;
+  overflow: visible;
+}
+
+/* A little heavy handed, but it looks better than broken */
+.lightbox-stack .media-gallery-detail-info .media-license {
+  left: 146px;
+  top: 8px;
+  width: 60px;
+}

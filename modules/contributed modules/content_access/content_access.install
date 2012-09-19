@@ -1,0 +1,39 @@
+<?php
+
+/**
+ * @file
+ * Install Content Access DB schema.
+ *
+ */
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function content_access_uninstall() {
+  variable_del('content_access_settings');
+}
+
+/**
+ * Implementation of hook_schema().
+ */
+function content_access_schema() {
+  $schema['content_access'] = array(
+    'fields' => array(
+      'nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'settings' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'medium'
+      ),
+    ),
+    'primary key' => array('nid')
+  );
+  return $schema;
+}
+
+//@todo: do we need an upgrade function from D6 to D7?

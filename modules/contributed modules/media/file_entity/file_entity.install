@@ -1,0 +1,207 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the file_entity module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function file_entity_schema() {
+  $schema['file_display'] = array(
+    'description' => 'Stores configuration options for file displays.',
+    'fields' => array(
+      // @todo Can be refactored as a compond primary key after
+      //   http://drupal.org/node/924236 is implemented.
+      'name' => array(
+        'description' => 'A combined string (FILE_TYPE__VIEW_MODE__FILE_FORMATTER) identifying a file display configuration. For integration with CTools Exportables, stored as a single string rather than as a compound primary key.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Weight of formatter within the display chain for the associated file type and view mode. A file is rendered using the lowest weighted enabled display configuration that matches the file type and view mode and that is capable of displaying the file.',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'The status of the display. (1 = enabled, 0 = disabled)',
+      ),
+      'settings' => array(
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big',
+        'serialize' => TRUE,
+        'description' => 'A serialized array of name value pairs that store the formatter settings for the display.',
+      ),
+    ),
+    'primary key' => array('name'),
+    // Exportable support via CTools.
+    'export' => array(
+      'key' => 'name',
+      'key name' => 'Name',
+      'primary key' => 'name',
+      // The {file_display}.status field is used to control whether the display
+      // is active in the display chain. CTools-level disabling is something
+      // different, and it's not yet clear how to interpret it for file displays.
+      // Until that's figured out, prevent CTools-level disabling.
+      'can disable' => FALSE,
+      'default hook' => 'file_default_displays',
+      'identifier' => 'file_display',
+      'api' => array(
+        'owner' => 'file_entity',
+        'api' => 'file_default_displays',
+        'minimum_version' => 1,
+        'current_version' => 1,
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_schema_alter().
+ */
+function file_entity_schema_alter(&$schema) {
+  $schema['file_managed']['fields']['type'] = array(
+    'description' => 'The type of this file.',
+    'type' => 'varchar',
+    'length' => 50,
+    'not null' => TRUE,
+    // If the FILE_TYPE_NONE constant ever changes, then change the value here
+    // too, and add an update function to deal with existing records. The
+    // constant isn't used here, because there may be cases where this function
+    // runs without the module file loaded.
+    'default' => 'undefined',
+  );
+  $schema['file_managed']['indexes']['file_type'] = array('type');
+}
+
+/**
+ * Implements hook_install().
+ */
+function file_entity_install() {
+  $schema = array();
+  file_entity_schema_alter($schema);
+  $spec = $schema['file_managed']['fields']['type'];
+  $indexes_new = array('indexes' => $schema['file_managed']['indexes']);
+
+  // If another module (e.g., Media) had added a {file_managed}.type field,
+  // then change it to the expected specification. Otherwise, add the field.
+  if (db_field_exists('file_managed', 'type')) {
+    // db_change_field() will fail if any records have type=NULL, so update
+    // them to the new default value.
+    db_update('file_managed')->fields(array('type' => $spec['default']))->isNull('type')->execute();
+
+    // Indexes using a field being changed must be dropped prior to calling
+    // db_change_field(). However, the database API doesn't provide a way to do
+    // this without knowing what the old indexes are. Therefore, it is the
+    // responsibility of the module that added them to drop them prior to
+    // allowing this module to be installed.
+    db_change_field('file_managed', 'type', 'type', $spec, $indexes_new);
+  }
+  else {
+    db_add_field('file_managed', 'type', $spec, $indexes_new);
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function file_entity_uninstall() {
+  db_drop_field('file_managed', 'type');
+}
+
+/**
+ * Create the {file_display} database table.
+ */
+function file_entity_update_7000() {
+  $schema['file_display'] = array(
+    'description' => 'Stores configuration options for file displays.',
+    'fields' => array(
+      'name' => array(
+        'description' => 'A combined string (FILE_TYPE__VIEW_MODE__FILE_FORMATTER) identifying a file display configuration. For integration with CTools Exportables, stored as a single string rather than as a compound primary key.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Weight of formatter within the display chain for the associated file type and view mode. A file is rendered using the lowest weighted enabled display configuration that matches the file type and view mode and that is capable of displaying the file.',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'The status of the display. (1 = enabled, 0 = disabled)',
+      ),
+      'settings' => array(
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big',
+        'serialize' => TRUE,
+        'description' => 'A serialized array of name value pairs that store the formatter settings for the display.',
+      ),
+    ),
+    'primary key' => array('name'),
+  );
+  db_create_table('file_display', $schema['file_display']);
+}
+
+/**
+ * Move file display configurations from the 'file_displays' variable to the
+ * {file_display} database table.
+ */
+function file_entity_update_7001() {
+  $file_displays = variable_get('file_displays');
+  if (!empty($file_displays)) {
+    foreach ($file_displays as $file_type => $file_type_displays) {
+      if (!empty($file_type_displays)) {
+        foreach ($file_type_displays as $view_mode => $view_mode_displays) {
+          if (!empty($view_mode_displays)) {
+            foreach ($view_mode_displays as $formatter_name => $display) {
+              if (!empty($display)) {
+                db_merge('file_display')
+                  ->key(array(
+                    'name' => implode('__', array($file_type, $view_mode, $formatter_name)),
+                  ))
+                  ->fields(array(
+                    'status' => isset($display['status']) ? $display['status'] : 0,
+                    'weight' => isset($display['weight']) ? $display['weight'] : 0,
+                    'settings' => isset($display['settings']) ? serialize($display['settings']) : NULL,
+                  ))
+                  ->execute();
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  variable_del('file_displays');
+}
+
+/**
+ * Drupal 7.8 disallows empty string as the value for a bundle key, so update
+ * empty {file_managed}.type records to 'undefined' instead.
+ */
+function file_entity_update_7002() {
+  db_update('file_managed')
+    // Using 'undefined' instead of FILE_TYPE_NONE, because update functions can
+    // run for disabled modules.
+    ->fields(array('type' => 'undefined'))
+    ->condition('type', '')
+    ->execute();
+}

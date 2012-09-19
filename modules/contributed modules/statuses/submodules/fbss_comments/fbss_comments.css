@@ -1,0 +1,92 @@
+/**
+ * @group Visuals
+ *
+ * Things that you are relatively likely to want to override in your theme,
+ * like colors.
+ */
+
+.statuses-comments {
+  border: 1px solid #CCCCCC;
+}
+
+.statuses-subitem {
+  background-color: #EEEEEE;
+  border-top: 2px solid #FFFFFF;
+}
+
+.fbss-comments-form .form-submit {
+  background-color: #EEEEEE;
+  border-color: #CCCCCC;
+}
+
+/* @end */
+
+/**
+ * @group Links and buttons
+ */
+
+.statuses-media .fbss-comments-links {
+  float: right;
+}
+
+.fbss-comments-form .form-submit {
+  border-style: solid;
+  border-width: 0 1px 1px 1px;
+  cursor: pointer;
+  float: right;
+  margin: 0;
+  padding: 0.6em 1.2em;
+}
+
+/* The "Show all comments" link. */
+.fbss-comments-show-comments-link {
+  display: block;
+  padding-bottom: 0.5em;
+}
+
+/* These are "show" links that should not be visible to users with JS disabled. */
+.fbss-comments-show-comment-form,
+.fbss-comments-show-comment-form-inner,
+.fbss-comments-show-comments {
+  display: none;
+}
+
+/* @end */
+
+/**
+ * @group Comments structure
+ */
+
+.fbss-comments-comment {
+  padding-bottom: 0.75em;
+  padding-top: 0.75em;
+}
+
+/* .no-comments is unreliable; it doesn't update when a comment is saved via AJAX. */
+.statuses-comments.no-comments {
+  border: 0 none;
+}
+
+.fbss-comments-form form {
+  margin-bottom: 0 !important; /* Fix Garland's #center form { margin-bottom: 2em; } */
+}
+
+.fbss-comments-form .button {
+  margin-top: -0.75em;
+}
+
+.fbss-comments .statuses-subitem:first-child,
+.statuses-comments :first-child,
+.statuses-subitem.form-piece {
+  border-top: 0 none;
+}
+
+.fbss-comments + .statuses-subitem .fbss-comments-show-comment-form-inner {
+  padding-bottom: 0.75em;
+}
+
+.statuses-media > .content .statuses-comments {
+  margin-top: 1em;
+}
+
+/* @end */

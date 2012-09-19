@@ -1,0 +1,95 @@
+<?php
+/**
+ * Implementation of hook_install().
+ */
+function cck_install() {
+  
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function cck_uninstall() {
+  db_query("DELETE FROM {variable} WHERE name LIKE 'cck_extra_weights_%'");
+}
+
+/**
+ * Implementation of hook_schema.
+ * 
+ * Create a table to hold data for field settings CCK is managing,
+ * like custom PHP code for Allowed values and default values that we 
+ * don't want in core.
+ */
+function cck_schema() {
+ 
+  $schema['cck_field_settings'] = array(
+    'fields' => array(
+      'field_name' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'description' => 'The name of the field.',
+      ),
+      'entity_type' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The name of the entity type, NULL for field settings.',
+      ),
+      'bundle' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => FALSE,
+        'description' => 'The name of the bundle, NULL for field settings.',
+      ),
+     'language' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => FALSE,
+        'description' => 'The name of the language, NULL for field settings.',
+      ),     
+      'setting_type' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'description' => 'The type of setting that CCK is managing (field, instance, widget, display).',
+      ),
+      'setting' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'The name of the setting that CCK is managing (default_value_php, allowed_values_php, etc).',
+      ),
+      'setting_option' => array(
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => FALSE,
+        'description' => 'The custom value for this setting.',
+      ),
+    ),
+  );
+  return $schema;
+}
+
+function cck_update_7000() {
+  if (!db_field_exists('cck_field_settings', 'entity_type')) {
+    $field = array(
+      'type' => 'varchar',
+      'length' => 32,
+      'not null' => TRUE,
+      'default' => '',
+      'description' => 'The name of the entity type, NULL for field settings.',
+    );
+    db_add_field('cck_field_settings', 'entity_type', $field);
+  }
+  if (!db_field_exists('cck_field_settings', 'language')) {
+    $field = array(
+      'type' => 'varchar',
+      'length' => 32,
+      'not null' => FALSE,
+      'description' => 'The name of the language, NULL for field settings.',
+    );     
+    db_add_field('cck_field_settings', 'language', $field);
+  }
+}

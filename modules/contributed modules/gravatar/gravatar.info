@@ -1,0 +1,15 @@
+; $Id: gravatar.info,v 1.5 2010/05/29 19:57:35 davereid Exp $
+name = Gravatar
+description = "Integrate Gravatar pictures registered at Gravatar.com in Drupal sites"
+core = 7.x
+files[] = gravatar.module
+files[] = gravatar.install
+files[] = gravatar.admin.inc
+configure = admin/config/people/gravatar
+
+; Information added by drupal.org packaging script on 2011-02-17
+version = "7.x-1.1"
+core = "7.x"
+project = "gravatar"
+datestamp = "1297971182"
+

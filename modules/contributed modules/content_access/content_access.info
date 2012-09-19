@@ -1,0 +1,13 @@
+name = Content Access
+description = Provides flexible content access control.
+core = 7.x
+package = Access control
+files[] = content_access.rules.inc
+files[] = tests/content_access.test
+files[] = tests/content_access_acl.test
+; Information added by drupal.org packaging script on 2011-07-24
+version = "7.x-1.2-beta1"
+core = "7.x"
+project = "content_access"
+datestamp = "1311517015"
+

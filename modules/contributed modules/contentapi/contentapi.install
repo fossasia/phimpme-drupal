@@ -1,0 +1,35 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the Content API module.
+ */
+
+
+function contentapi_install() {
+  $node_types = array_map('check_plain', node_type_get_names());
+  variable_set('contentapi_content_types', serialize($node_types));
+  variable_set('contentapi_limit', 10);
+  variable_set('contentapi_sort_field', 'created');
+  variable_set('contentapi_sort_order', 'DESC');
+  variable_set('contentapi_show_count', TRUE);
+  variable_set('contentapi_node_hidden_fields', serialize(array()));
+
+  foreach (node_type_get_types() as $type) {
+    $name = $type->type;
+    variable_set("contentapi_$name", serialize(array()));
+  }
+}
+
+function contentapi_uninstall() {
+  variable_del('contentapi_content_types');
+  variable_del('contentapi_limit');
+  variable_del('contentapi_sort_field');
+  variable_del('contentapi_sort_order');
+  variable_del('contentapi_show_count');
+  variable_del('contentapi_node_hidden_fields');
+
+  foreach (node_type_get_types() as $type) {
+    $name = $type->type;
+    variable_del("contentapi_$name");
+  }
+}

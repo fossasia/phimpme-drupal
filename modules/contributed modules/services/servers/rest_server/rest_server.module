@@ -1,0 +1,206 @@
+<?php
+
+/**
+ * Implements hook_server_info().
+ */
+function rest_server_server_info() {
+  return array(
+    'name' => 'REST',
+    'path' => 'rest',
+    'settings' => array(
+      'file' => array('inc', 'rest_server'),
+      'form' => '_rest_server_settings',
+      'submit' => '_rest_server_settings_submit',
+    ),
+  );
+}
+
+/**
+ * Starting point of the REST server.
+ *
+ * @return type
+ */
+function rest_server_server() {
+  $endpoint_path = services_get_server_info('endpoint_path', 'services/rest');
+
+  $canonical_path = str_replace($endpoint_path . '/', '', $_GET['q']);
+  if (empty($canonical_path)) {
+    return;
+  }
+
+  try {
+    $server = new RESTServer();
+    return $server->handle($canonical_path, $endpoint_path);
+  }
+  catch (Exception $e) {
+    $server->handleException($e);
+  }
+}
+
+/**
+ * Builds a list of request parsers that are available to the RESTServer.
+ *
+ * @return array
+ *  An associative array of parser callbacks keyed by mime-type.
+ */
+function rest_server_request_parsers() {
+  static $parsers = NULL;
+  if (!$parsers) {
+    $parsers = array(
+      'application/x-www-form-urlencoded' => 'RESTServer::parseURLEncoded',
+      'application/x-yaml' => 'RESTServer::parseYAML',
+      'application/json' => 'RESTServer::parseJSON',
+      'application/vnd.php.serialized' => 'RESTServer::parsePHP',
+      'multipart/form-data' => 'RESTServer::parseMultipart',
+    );
+    drupal_alter('rest_server_request_parsers', $parsers);
+  }
+  return $parsers;
+}
+
+/**
+ * Builds a list of response formatters that are available to the RESTServer.
+ *
+ * @return array
+ *  An associative array of formatter info arrays keyed by type extension. The
+ *  formatter info specifies an array of 'mime types' that corresponds to the
+ *  output format; a 'view' class that is a subclass of RESTServerView; and
+ *  'view arguments' that should be passed to the view when it is created;
+ *  a 'model' can also be specified which the controller then must declare
+ *  support for to be able to serve data in that format.
+ */
+function rest_server_response_formatters() {
+  static $formatters = NULL;
+  if (!$formatters) {
+    $formatters = array(
+      'xml' => array(
+        'mime types' => array('application/xml', 'text/xml'),
+        'view' => 'RESTServerViewBuiltIn',
+        'view arguments' => array('format' => 'xml'),
+      ),
+      'json' => array(
+        'mime types' => array('application/json'),
+        'view' => 'RESTServerViewBuiltIn',
+        'view arguments' => array('format' => 'json'),
+      ),
+      'jsonp' => array(
+        'mime types' => array('text/javascript', 'application/javascript'),
+        'view' => 'RESTServerViewBuiltIn',
+        'view arguments' => array('format' => 'jsonp'),
+      ),
+      'php' => array(
+        'mime types' => array('application/vnd.php.serialized'),
+        'view' => 'RESTServerViewBuiltIn',
+        'view arguments' => array('format' => 'php'),
+      ),
+      'yaml' => array(
+        'mime types' => array('text/plain', 'application/x-yaml', 'text/yaml'),
+        'view' => 'RESTServerViewBuiltIn',
+        'view arguments' => array('format' => 'yaml'),
+      ),
+      'bencode' => array(
+        'mime types' => array('application/x-bencode'),
+        'view' => 'RESTServerViewBuiltIn',
+        'view arguments' => array('format' => 'bencode'),
+      ),
+      'rss' => array(
+        'model' => 'ResourceFeedModel',
+        'mime types' => array('text/xml'),
+        'view' => 'RssFormatView',
+      ),
+    );
+    drupal_alter('rest_server_response_formatters', $formatters);
+  }
+  return $formatters;
+}
+
+/**
+ * Set up settings for a rest server endpoint, fills the settings
+ * array with defaults. This is done to ensure that the default state
+ * is consistent between what's shown by default in the settings form
+ * and used by default by the REST server if it hasn't been configured.
+ *
+ * @param array $settings
+ * @return array
+ *  The standardized settings array.
+ */
+function rest_server_setup_settings($settings = array()) {
+  // Apply defaults
+  $settings = $settings + array(
+    'formatters' => array('jsonp' => FALSE),
+    'parsers' => array('application/x-www-form-urlencoded' => FALSE),
+  );
+
+  // Get all available parsers and formatters.
+  $parsers = rest_server_request_parsers();
+  $formatters = rest_server_response_formatters();
+
+  _rest_server_add_default_and_remove_unknown($settings['parsers'], array_keys($parsers), TRUE);
+  _rest_server_add_default_and_remove_unknown($settings['formatters'], array_keys($formatters), TRUE);
+
+  return $settings;
+}
+
+/**
+ * Utility function set set up an array with default values for a set
+ * of keys and remove all entries that does not match a key in the set.
+ *
+ * @param array $array
+ *  The array to modify.
+ * @param array $keys
+ *  An array of keys.
+ * @param mixed $default
+ *  A default value.
+ * @return void
+ */
+function _rest_server_add_default_and_remove_unknown(&$array, $keys, $default) {
+  // Add default values to all keys that do not
+  // exist in $array but exist in $keys.
+  foreach ($keys as $k) {
+    if (!isset($array[$k])) {
+      $array[$k] = $default;
+    }
+  }
+  // Unset all values that key exist in $array
+  // but does not exist in $keys.
+  foreach (array_keys($array) as $key) {
+    if (!in_array($key, $keys)) {
+      unset($array[$key]);
+    }
+  }
+}
+
+/**
+ * Implements hook_services_resources_alter().
+ */
+function rest_server_services_resources_alter(&$resources, $endpoint) {
+  // Set the default models for the retrieve and index controllers in the node
+  // resource if they are not already set.
+  if (isset($resources['node'])) {
+    if (isset($resources['node']['retrieve'])) {
+      if (!isset($resources['node']['retrieve']['models'])) {
+        $resources['node']['retrieve']['models'] = array();
+      }
+      $resources['node']['retrieve']['models'] += array(
+        'ResourceFeedModel' => array(
+          'class' => 'NodeResourceFeedModel',
+          'arguments' => array('source' => 'single'),
+        ),
+      );
+    }
+
+    if (isset($resources['node']['index'])) {
+      if (!isset($resources['node']['index']['models'])) {
+        $resources['node']['index']['models'] = array();
+      }
+      $resources['node']['index']['models'] += array(
+        'ResourceFeedModel' => array(
+          'class' => 'NodeResourceFeedModel',
+        ),
+        'ResourceTimeFeedModel' => array(
+          'class' => 'NodeResourceFeedModel',
+        ),
+      );
+    }
+  }
+}

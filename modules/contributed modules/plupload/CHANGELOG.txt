@@ -1,0 +1,21 @@
+CHANGELOG for Plupload integration for Drupal 7
+
+Plupload integration 7.x-1.0-rc1
+==================================
+- by slashrsm: Fix 3 Coder review notices. 
+- by slashrsm: Removed unnecessary popup caused by previous commit. 
+- #1414486 by nbucknor, annblack: Allow for Multiple Plupload elements in a form.
+- #1461884 by atlea: File uploads larger than php post_max_size broken
+- #1445172 by Moloc: Use drupal_unlink() instead unlink()
+
+Plupload integration 7.x-1.0-beta4
+==================================
+- #1230632 by ksenzee: Hard-coded file size limits.
+- #1219992 by slashrsm, axe312, Dave Reid: Add support for Drupal native translations.
+- #1111054 by George Petsagourakis: Convert plupload_fix_temporary_filename() a private function
+- #1316438 by jcfiala, slashrsm: Plupload in AJAX call causes form.submit handler to be added multiple times
+- #1300620 by jamiecuthill, ksenzee: Update to 1.5.1.1 because uploading is broken in Firefox 7
+- #1121070 by Moloc: Warning: unlink(...) [function.unlink]: Permission denied in plupload_handle_uploads()
+- #1348892 by slashrsm, Moloc: Show library version in status report
+- #1267190 by Moloc: Plupload transliteration support for d7
+- #1240654 by Dave Reid: Use a proper namespace for file_uri_to_object().

@@ -1,0 +1,8 @@
+
+Originally developed and implemented by:
+  Ankur Rishi  (user name 'ankur':  http://drupal.org/user/11703 )
+
+
+Maintained by:
+  Brandon Bergren (user name 'Bdragon' http://drupal.org/user/53801 )
+  Rebecca White (user name 'bec' http://drupal.org/user/81067)

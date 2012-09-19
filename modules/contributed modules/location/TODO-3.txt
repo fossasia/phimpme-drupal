@@ -1,0 +1,3 @@
+- Make sure that we scan for broken location table (oid -> eid)
+- lid editor
+- Remove variable 'gmap_location_map' -- gmap was taking care of it for us but we never used it.

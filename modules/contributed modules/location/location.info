@@ -1,0 +1,42 @@
+name = Location
+package = Location
+description = The location module allows you to associate a geographic location with content and users. Users can do proximity searches by postal code.  This is useful for organizing communities that have a geographic presence.
+core = 7.x
+configure = admin/config/content/location
+files[] = location.module
+files[] = location.install
+files[] = location.admin.inc
+files[] = location.georss.inc
+files[] = location.inc
+files[] = location.token.inc
+files[] = location.views.inc
+files[] = location.views_default.inc
+files[] = tests/location_testcase.php
+files[] = tests/cow.test
+files[] = tests/earth.test
+files[] = tests/google_geocoder.test
+files[] = tests/location_cck.test
+files[] = handlers/location_handler_argument_location_country.inc
+files[] = handlers/location_handler_argument_location_province.inc
+files[] = handlers/location_handler_argument_location_proximity.inc
+files[] = handlers/location_handler_field_location_address.inc
+files[] = handlers/location_handler_field_location_country.inc
+files[] = handlers/location_handler_field_location_distance.inc
+files[] = handlers/location_handler_field_location_province.inc
+files[] = handlers/location_handler_field_location_street.inc
+files[] = handlers/location_handler_filter_location_country.inc
+files[] = handlers/location_handler_filter_location_province.inc
+files[] = handlers/location_handler_sort_location_distance.inc
+files[] = handlers/location_views_handler_field_coordinates.inc
+files[] = handlers/location_views_handler_field_latitude.inc
+files[] = handlers/location_views_handler_field_longitude.inc
+files[] = handlers/location_views_handler_filter_proximity.inc
+files[] = plugins/contexts/location.inc
+files[] = plugins/relationships/location_from_node.inc
+
+; Information added by drupal.org packaging script on 2012-02-18
+version = "7.x-3.x-dev"
+core = "7.x"
+project = "location"
+datestamp = "1329524299"
+

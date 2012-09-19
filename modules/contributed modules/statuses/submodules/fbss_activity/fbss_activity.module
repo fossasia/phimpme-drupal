@@ -1,0 +1,169 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Activity 2 with Statuses.
+ */
+
+/**
+ * Implements hook_statuses_delete().
+ */
+function fbss_activity_statuses_delete($status) {
+  $result = db_query("SELECT aid FROM {activity} WHERE type = :type AND op NOT LIKE 'fbss_deleted%' AND eid = :eid", array(':type' => 'statuses', ':eid' => $status->sid));
+  $records = array();
+  while ($record = db_fetch_object($result)) {
+    $records[] = $record->aid;
+  }
+  if (!empty($records)) {
+    activity_delete($records);
+  }
+}
+
+//=====================================================================================
+// Hooks below this line are implemented on behalf of the main statuses module.
+//=====================================================================================
+
+/**
+ * Implementation of hook_activity_info().
+ */
+function statuses_activity_info() {
+  $info = new stdClass();
+  $info->api = 2;
+  $info->name = 'statuses';
+  $info->object_type = 'statuses';
+  $info->eid_field = 'sid';
+  $info->objects = array(
+    'Recipient' => 'statuses',
+    'Sender' => 'sender',
+  );
+  $hooks = array(
+    'fbss_deleted',
+    'fbss_deleted_user_self',
+    'fbss_deleted_user_other',
+    'fbss_edited',
+    'fbss_edited_user_self',
+    'fbss_edited_user_other',
+    'fbss_submitted',
+    'fbss_submitted_user_self',
+    'fbss_submitted_user_other',
+  );
+  foreach (statuses_all_contexts() as $type => $details) {
+    if ($type != 'user') {
+      $hooks[] = 'fbss_deleted_' . $type;
+      $hooks[] = 'fbss_edited_' . $type;
+      $hooks[] = 'fbss_submitted_' . $type;
+    }
+  }
+  sort($hooks);
+  $info->hooks = array('statuses' => $hooks);
+  $info->realms = array(
+    'statuses_sender' => 'Statuses Sender',
+    'statuses_recipient' => 'Statuses Recipient',
+  );
+  return $info;
+}
+
+/**
+ * Implementation of hook_activity_grants().
+ */
+function statuses_activity_grants($activity) {
+  $realms = array();
+  if ($activity->type == 'statuses') {
+    $realms['statuses_sender'] = array($activity->uid);
+    $result = db_fetch_object(db_query("SELECT recipient FROM {statuses} WHERE sid = :sid", array(':sid' => $activity->eid)));
+    $realms['statuses_recipient'] = array($result->recipient);
+  }
+  return $realms;
+}
+
+/**
+ * Implementation of hook_activity_access_grants().
+ */
+function statuses_activity_access_grants($account) {
+  return array(
+    'statuses_sender' => array($account->uid),
+    'statuses_recipient' => array($account->uid),
+  );
+}
+
+/**
+ * Implementation of hook_list_activity_actions().
+ */
+function statuses_list_activity_actions($hook, $op, $max_age) {
+  $actions = array();
+  if (!empty($max_age)) {
+    $min_time = REQUEST_TIME - $max_age;
+  }
+  else {
+    $min_time = 0;
+  }
+
+  if ($op == 'fbss_submitted_user_self') {
+    $result = db_query("SELECT sid as id, created, sender as actor FROM {statuses} WHERE created > :created AND type = :type AND sender = :sender", array(':created' => $min_time, ':type' => 'user', ':sender' => recipient));
+  }
+  elseif ($op == 'fbss_submitted_user_other') {
+    $result = db_query("SELECT sid as id, created, sender as actor FROM {statuses} WHERE created > :created AND type = :type AND sender <> :sender", array(':created' => $min_time, ':type' => 'user', ':sender' => recipient));
+  }
+  elseif (strpos($op, 'fbss_submitted_') === 0) {
+    foreach (statuses_all_contexts() as $type => $details) {
+      if ($op == 'fbss_submitted_' . $type) {
+        $result = db_query("SELECT sid as id, created, sender as actor FROM {statuses} WHERE created > :created AND type = :type", array(':created' => $min_time, ':type' => $type));
+        break;
+      }
+    }
+  }
+
+  if (isset($result)) {
+    while ($row = db_fetch_array($result)) {
+      $actions[] = $row;
+    }
+  }
+
+  return $actions;
+}
+
+/**
+ * Implementation of hook_load_activity_context().
+ */
+function statuses_load_activity_context($hook, $op, $id) {
+  $status = statuses_load($id);
+  $activity_context = array();
+
+  if (!empty($status)) {
+    $context = statuses_determine_context($status->type);
+    $recipient = $context['handler']->load_recipient($status->recipient);
+    $sender = _statuses_user_load($status->sender);
+
+    // Reduce the amount of recalculation we will need to do later.
+    $sender->statuses = $status;
+    $sender->context = $context;
+
+    $activity_context = array(
+      'hook' => 'statuses',
+      'op' => $op,
+      'sender' => $sender,
+      'recipient' => $recipient,
+      'type' => $status->type,
+      'statuses' => $status,
+      'context' => $context,
+    );
+  }
+
+  return $activity_context;
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ * Activity 2.
+ */
+function statuses_form_activity_form_alter(&$form, &$form_state) {
+  if ($form_state['storage']['values']['triggers']['hook'] == 'statuses') {
+    $op = $form_state['storage']['values']['operations']['operation'];
+    // Remove the "Recipient" field unless this is for a user posting a message to another user.
+    if ($op != 'fbss_submitted_user_other' && $op != 'fbss_edited_user_other' && $op != 'fbss_deleted_user_other') {
+      foreach (activity_enabled_languages() as $id => $language) {
+        unset($form[$id . '_fieldset']['statuses-pattern-' . $id]);
+      }
+    }
+  }
+}

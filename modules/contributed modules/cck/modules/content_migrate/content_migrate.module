@@ -1,0 +1,271 @@
+<?php
+/**
+ * @file
+ * Code For D6 to D7 field data update.
+ * 
+ * Modules can implement hook_content_migrate_field_alter(), 
+ * hook_content_migrate_instance_alter(), and hook_content_migrate_data_record_alter()
+ * to make changes to the settings or data as it is migrated.
+ */
+define('CONTENT_DB_STORAGE_PER_FIELD', 0);
+define('CONTENT_DB_STORAGE_PER_CONTENT_TYPE', 1);
+
+/**
+ * Implements hook_menu().
+ */
+function content_migrate_menu() { 
+  $items['admin/structure/content_migrate'] = array(
+    'title' => 'Migrate fields',
+    'description' => 'Migrate field settings and data from the Drupal 6 version to the Drupal 7 version.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('content_migrate_select'),
+    'access arguments' => array('administer content types'),
+    'file' => 'includes/content_migrate.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Create a D7-style field array from data stored
+ * in the D6 content field tables.
+ *
+ * @param $field_name 
+ *   Optionally request only a specific field name.
+ */
+function content_migrate_get_field_values($field_name = NULL) {
+  module_load_include('inc', 'content_migrate', 'includes/content_migrate.values');
+  return _content_migrate_get_field_values($field_name);
+}
+
+/**
+ * Create a D7-style instance array from data stored
+ * in the D6 content field tables.
+ *
+ * @param $bundle
+ *   Optionally request only instances of a specific bundle.
+ * @param $field_name
+ *   Optionally request only instances of a specific field_name.
+ */
+function content_migrate_get_instance_values($bundle = NULL, $field_name = NULL) {
+  module_load_include('inc', 'content_migrate', 'includes/content_migrate.values');
+  return _content_migrate_get_instance_values($bundle, $field_name);
+}
+
+/**
+ * Helper function for finding the table name
+ * used to store the D6 field data.
+ *
+ * @param $field_value
+ * @param $instance_value
+ */
+function content_migrate_old_table($field_value, $instance_value) {
+  $storage = content_migrate_storage_type($field_value);
+  switch ($storage) {
+    case CONTENT_DB_STORAGE_PER_CONTENT_TYPE :
+      $name = $instance_value['bundle'];
+      return "content_type_$name";
+    case CONTENT_DB_STORAGE_PER_FIELD :
+      $name = $field_value['field_name'];
+      return "content_$name";
+  }
+}
+
+/**
+ * Helper function for finding the type of table
+ * used for storing the D6 field data.
+ *
+ * @param $field_value
+ * @param $instance_value
+ */
+function content_migrate_storage_type($field_value) {
+  $storage = CONTENT_DB_STORAGE_PER_CONTENT_TYPE;
+  if (isset($field_value['db_storage'])) {
+    return $field_value['db_storage'];
+  }
+  elseif ($field_value['cardinality'] != 1 || $field_value['cardinality'] == FIELD_CARDINALITY_UNLIMITED) {
+    $storage = CONTENT_DB_STORAGE_PER_FIELD;
+  }
+  else {
+    $instance_values = content_migrate_get_instance_values(NULL, $field_value['field_name']);
+    foreach ($instance_values as $bundle => $instance_value) {
+      if (isset($instance_value['messages'])) { 
+        $messages = array_merge($messages, $instance_value['messages']);    
+        unset($instance_values[$bundle]['messages']);
+      }
+    }
+    if (count($instance_values) > 1) {
+      $storage = CONTENT_DB_STORAGE_PER_FIELD;
+    }
+  }
+  return $storage;
+}
+
+/**
+ * Helper function to find the table for a
+ * D7 field array.
+ *
+ * @param $field
+ */
+function content_migrate_new_table($field) {
+  if (empty($field['storage']['details'])) {
+    return 'field_data_'. $field['field_name'];
+  }
+  $data = $field['storage']['details']['sql'][FIELD_LOAD_CURRENT];
+  return key($data);
+}
+
+function content_migrate_new_revision($field) {
+  if (empty($field['storage']['details'])) {
+    return 'field_revision_'. $field['field_name'];
+  }
+  $data = $field['storage']['details']['sql'][FIELD_LOAD_REVISION];
+  return key($data);
+}
+
+/**
+ * Helper function for finding the column names
+ * used for storing the D6 field data.
+ *
+ * @param $field_value
+ * @param $instance_value
+ */
+function content_migrate_old_columns($field_value, $instance_value) {
+  $columns = array();
+  foreach ($field_value['columns'] as $column_name => $values) {
+    $columns[$column_name] = $field_value['field_name'] .'_'. $column_name;
+  }
+  return $columns;
+}
+/**
+ * Helper function for figuring out column names
+ * to be used when storing D7 field data.
+ *
+ * @param unknown_type $field
+ * @return unknown
+ */
+function content_migrate_new_columns($field) {
+  $columns = array();
+  if (empty($field['storage']['details'])) {
+    foreach ($field['columns'] as $column_name => $values) {
+      $columns[$column_name] = $field['field_name'] .'_'. $column_name;
+    }
+    return $columns;
+  }
+  else {
+    // There is only one table in this array, but the columns for all tables are the same so it doesn't matter.
+    foreach ($field['storage']['details']['sql'][FIELD_LOAD_CURRENT] as $table => $columns) {
+      return $columns;
+    }
+  }
+}
+
+/**
+ * Implements hook_content_migrate_field_alter().
+ * 
+ * Use this to tweak the conversion of field settings
+ * from the D6 style to the D7 style for specific
+ * situations not handled by basic conversion,
+ * as when field types or settings are changed.
+ */
+function content_migrate_content_migrate_field_alter(&$field_value, $instance_value) {
+
+  module_load_include('inc', 'content_migrate', 'modules/content_migrate.filefield');
+  content_migrate_filefield_field_alter($field_value, $instance_value);
+
+  module_load_include('inc', 'content_migrate', 'modules/content_migrate.text');
+  content_migrate_text_field_alter($field_value, $instance_value);
+
+  module_load_include('inc', 'content_migrate', 'modules/content_migrate.number');
+  content_migrate_number_field_alter($field_value, $instance_value);
+
+}
+
+/**
+ * Implements hook_content_migrate_instance_alter().
+ * 
+ * Use this to tweak the conversion of instance or widget settings
+ * from the D6 style to the D7 style for specific
+ * situations not handled by basic conversion, as when
+ * formatter or widget names or settings are changed.
+ */
+function content_migrate_content_migrate_instance_alter(&$instance_value, $field_value) {
+
+  module_load_include('inc', 'content_migrate', 'modules/content_migrate.filefield');
+  content_migrate_filefield_instance_alter($instance_value, $field_value);
+
+  module_load_include('inc', 'content_migrate', 'modules/content_migrate.text');
+  content_migrate_text_instance_alter($instance_value, $field_value);
+
+  module_load_include('inc', 'content_migrate', 'modules/content_migrate.number');
+  content_migrate_number_instance_alter($instance_value, $field_value);
+
+  module_load_include('inc', 'content_migrate', 'modules/content_migrate.optionwidgets');
+  content_migrate_optionwidgets_instance_alter($instance_value, $field_value); 
+
+}
+
+
+/**
+ * Implements hook_content_migrate_data_record_alter().
+ *
+ * Tweaks individual records in a field.
+ */
+function content_migrate_content_migrate_data_record_alter(&$record, $field, $instance) {
+
+  module_load_include('inc', 'content_migrate', 'modules/content_migrate.filefield');
+  content_migrate_filefield_data_record_alter($record, $field, $instance);
+
+}
+
+/**
+ * Helper function for migrating D6-style allowed values into D7 arrays.
+ *
+ * We could just use list_extract_allowed_values() for this, but we don't
+ * necessarily want a dependency on list.module while the migration is
+ * happening and core's function isn't very forgiving for the kinds of values
+ * that can be found in legacy databases. For example, core considers this
+ * string invalid:
+ * 0
+ * 1|Some checkbox label
+ * even though that was valid (or at least it worked) in D6.
+ *
+ * @param string $legacy_values
+ *   D6-style string containing key|value pairs delimited by newlines.
+ * @param string $field_type
+ *   The type of field to build the allowed_values array for.
+ *
+ * @return array
+ *   Array of keys and values.
+ *
+ * @see list_allowed_values_string()
+ * @see list_extract_allowed_values()
+ */
+function content_migrate_extract_allowed_values($legacy_values, $field_type) {
+  $allowed_values = array();
+
+  if ($field_type == 'list_boolean') {
+    // Initialize these so the order is proper, even if both keys aren't
+    // defined in the legacy string.
+    $allowed_values = array(0 => 0, 1 => 1);
+  }
+
+  if (!empty($legacy_values)) {
+    foreach (explode("\n", $legacy_values) as $value) {
+      $value = trim($value);
+      if (empty($value)) continue;
+      if (strstr($value, '|')) {
+        $parts = explode('|', $value);
+        $allowed_values[trim($parts[0])] = trim($parts[1]);
+      }
+      elseif (is_numeric($value)) {
+        $allowed_values[$value] = $value;
+      }
+      else {
+        $allowed_values[] = $value;
+      }
+    }
+  }
+
+  return $allowed_values;
+}

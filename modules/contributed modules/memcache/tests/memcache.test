@@ -1,0 +1,572 @@
+<?php
+
+class MemcacheTestCase extends DrupalWebTestCase {
+  protected $profile = 'testing';
+  protected $default_bin = 'cache_memcache';
+  protected $default_cid = 'test_temporary';
+  protected $default_value = 'MemcacheTest';
+
+  function setUp() {
+    parent::setUp(func_get_args());
+
+    variable_set("cache_flush_$this->default_bin", 0);
+    variable_set('cache_class_cache_memcache', 'MemcacheDrupal');
+
+    $this->resetVariables();
+  }
+
+  /**
+   * Check whether or not a cache entry exists.
+   *
+   * @param $cid
+   *   The cache id.
+   * @param $var
+   *   The variable the cache should contain.
+   * @param $bin
+   *   The bin the cache item was stored in.
+   * @return
+   *   TRUE on pass, FALSE on fail.
+   */
+  protected function checkCacheExists($cid, $var, $bin = NULL) {
+    if ($bin == NULL) {
+      $bin = $this->default_bin;
+    }
+
+    $cache = cache_get($cid, $bin);
+
+    return isset($cache->data) && $cache->data == $var;
+  }
+
+  /**
+   * Assert or a cache entry exists.
+   *
+   * @param $message
+   *   Message to display.
+   * @param $var
+   *   The variable the cache should contain.
+   * @param $cid
+   *   The cache id.
+   * @param $bin
+   *   The bin the cache item was stored in.
+   */
+  protected function assertCacheExists($message, $var = NULL, $cid = NULL, $bin = NULL) {
+    if ($bin == NULL) {
+      $bin = $this->default_bin;
+    }
+    if ($cid == NULL) {
+      $cid = $this->default_cid;
+    }
+    if ($var == NULL) {
+      $var = $this->default_value;
+    }
+
+    $this->assertTrue($this->checkCacheExists($cid, $var, $bin), $message);
+  }
+
+  /**
+   * Assert or a cache entry has been removed.
+   *
+   * @param $message
+   *   Message to display.
+   * @param $cid
+   *   The cache id.
+   * @param $bin
+   *   The bin the cache item was stored in.
+   */
+  function assertCacheRemoved($message, $cid = NULL, $bin = NULL) {
+    if ($bin == NULL) {
+      $bin = $this->default_bin;
+    }
+    if ($cid == NULL) {
+      $cid = $this->default_cid;
+    }
+
+    $cache = cache_get($cid, $bin);
+    $this->assertFalse($cache, $message);
+  }
+
+  /**
+   * Perform the general wipe.
+   * @param $bin
+   *   The bin to perform the wipe on.
+   */
+  protected function generalWipe($bin = NULL) {
+    if ($bin == NULL) {
+      $bin = $this->default_bin;
+    }
+
+    cache_clear_all(NULL, $bin);
+  }
+
+  function resetVariables() {
+    _cache_get_object($this->default_bin)->reloadVariables();
+  }
+}
+
+class MemCacheSavingCase extends MemcacheTestCase {
+  public static function getInfo() {
+    return array(
+      'name' => 'Memcache saving test',
+      'description' => 'Check our variables are saved and restored the right way.',
+      'group' => 'Memcache'
+    );
+  }
+
+  function setUp() {
+    parent::setUp();
+  }
+
+  /**
+   * Test the saving and restoring of a string.
+   */
+  function testString() {
+    $this->checkVariable($this->randomName(100));
+  }
+
+  /**
+   * Test the saving and restoring of an integer.
+   */
+  function testInteger() {
+    $this->checkVariable(100);
+  }
+
+  /**
+   * Test the saving and restoring of a double.
+   */
+  function testDouble() {
+    $this->checkVariable(1.29);
+  }
+
+  /**
+   * Test the saving and restoring of an array.
+   */
+  function testArray() {
+    $this->checkVariable(array('drupal1', 'drupal2' => 'drupal3', 'drupal4' => array('drupal5', 'drupal6')));
+  }
+
+  /**
+   * Test the saving and restoring of an object.
+   */
+  function testObject() {
+    $test_object = new stdClass();
+    $test_object->test1 = $this->randomName(100);
+    $test_object->test2 = 100;
+    $test_object->test3 = array('drupal1', 'drupal2' => 'drupal3', 'drupal4' => array('drupal5', 'drupal6'));
+
+    cache_set('test_object', $test_object, 'cache');
+    $cache = cache_get('test_object', 'cache');
+    $this->assertTrue(isset($cache->data) && $cache->data == $test_object, t('Object is saved and restored properly.'));
+  }
+
+  /*
+   * Check or a variable is stored and restored properly.
+   **/
+  function checkVariable($var) {
+    cache_set('test_var', $var, 'cache');
+    $cache = cache_get('test_var', 'cache');
+    $this->assertTrue(isset($cache->data) && $cache->data === $var, t('@type is saved and restored properly.', array('@type' => ucfirst(gettype($var)))));
+  }
+}
+
+/**
+ * Test cache_get_multiple().
+ */
+class MemCacheGetMultipleUnitTest extends MemcacheTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Fetching multiple cache items',
+      'description' => 'Confirm that multiple records are fetched correctly.',
+      'group' => 'Memcache',
+    );
+  }
+
+  function setUp() {
+    parent::setUp();
+  }
+
+  /**
+   * Test cache_get_multiple().
+   */
+  function testCacheMultiple() {
+    $item1 = $this->randomName(10);
+    $item2 = $this->randomName(10);
+    cache_set('test:item1', $item1, $this->default_bin);
+    cache_set('test:item2', $item2, $this->default_bin);
+    $this->assertTrue($this->checkCacheExists('test:item1', $item1), t('Item 1 is cached.'));
+    $this->assertTrue($this->checkCacheExists('test:item2', $item2), t('Item 2 is cached.'));
+
+    // Fetch both records from the database with cache_get_multiple().
+    $item_ids = array('test:item1', 'test:item2');
+    $items = cache_get_multiple($item_ids, $this->default_bin);
+    $this->assertEqual($items['test:item1']->data, $item1, t('Item was returned from cache successfully.'));
+    $this->assertEqual($items['test:item2']->data, $item2, t('Item was returned from cache successfully.'));
+
+    $this->assertTrue(empty($item_ids), t('Ids of returned items have been removed.'));
+
+    // Remove one item from the cache.
+    cache_clear_all('test:item2', $this->default_bin);
+
+    // Confirm that only one item is returned by cache_get_multiple().
+    $item_ids = array('test:item1', 'test:item2');
+    $items = cache_get_multiple($item_ids, $this->default_bin);
+    $this->assertEqual($items['test:item1']->data, $item1, t('Item was returned from cache successfully.'));
+    $this->assertFalse(isset($items['test:item2']), t('Item was not returned from the cache.'));
+    $this->assertTrue(count($items) == 1, t('Only valid cache entries returned.'));
+    $this->assertTrue(count($item_ids) == 1, t('Invalid cache ids still present.'));
+
+  }
+}
+
+/**
+ * Test cache clearing methods.
+ */
+class MemCacheClearCase extends MemcacheTestCase {
+  public static function getInfo() {
+    return array(
+      'name' => 'Cache clear test',
+      'description' => 'Check our clearing is done the proper way.',
+      'group' => 'Memcache'
+    );
+  }
+
+  function setUp() {
+
+    parent::setUp('memcache_test');
+    $this->default_value = $this->randomName(10);
+  }
+
+
+  /**
+   * Test clearing the cache with a cid, no cache lifetime.
+   */
+  function testClearCidNoLifetime() {
+    $this->clearCidTest();
+  }
+
+  /**
+   * Test clearing the cache with a cid, with cache lifetime.
+   */
+  function testClearCidLifetime() {
+    variable_set('cache_lifetime', 6000);
+    $this->clearCidTest();
+  }
+
+  /**
+   * Test clearing using wildcard prefixes, no cache lifetime.
+   */
+  function testClearWildcardNoLifetime() {
+    $this->clearWildcardPrefixTest();
+  }
+
+  /**
+   * Test clearing using wildcard prefix, with cache lifetime.
+   */
+  function testClearWildcardLifetime() {
+    variable_set('cache_lifetime', 6000);
+    $this->clearWildcardPrefixTest();
+  }
+
+  /**
+   * Test full bin flushes with no cache lifetime.
+   */
+  function testClearWildcardFull() {
+    cache_set('test_cid_clear1', $this->default_value, $this->default_bin);
+    cache_set('test_cid_clear2', $this->default_value, $this->default_bin);
+    $this->assertTrue($this->checkCacheExists('test_cid_clear1', $this->default_value)
+                      && $this->checkCacheExists('test_cid_clear2', $this->default_value),
+                      t('Two caches were created for checking cid "*" with wildcard true.'));
+    cache_clear_all('*', $this->default_bin, TRUE);
+    $this->assertFalse($this->checkCacheExists('test_cid_clear1', $this->default_value)
+                      || $this->checkCacheExists('test_cid_clear2', $this->default_value),
+                      t('Two caches removed after clearing cid "*" with wildcard true.'));
+  }
+
+  /**
+   * Test full bin flushes with cache lifetime.
+   */
+  function testClearCacheLifetime() {
+    variable_set('cache_lifetime', 600);
+    $this->resetVariables();
+
+    // Set a cache item with an expiry.
+    cache_set('test_cid', $this->default_value, $this->default_bin, time() + 3600);
+    $this->assertTrue($this->checkCacheExists('test_cid', $this->default_value), 'Cache item was created successfully.');
+
+    // Set a permanent cache item.
+    cache_set('test_cid_2', $this->default_value, $this->default_bin);
+
+    // Clear the page and block caches.
+    cache_clear_all(MEMCACHE_CONTENT_CLEAR, $this->default_bin);
+    // Since the cache was cleared within the current session, cache_get()
+    // should return false.
+    $this->assertFalse($this->checkCacheExists('test_cid', $this->default_value), 'Cache item was cleared successfully.');
+
+    // However permament items should stay in place.
+    $this->assertTrue($this->checkCacheExists('test_cid_2', $this->default_value), 'Cache item was not cleared');
+
+    // If $_SESSION['cache_flush'] is not set, then the expired item should be returned.
+    unset($_SESSION['cache_flush']);
+    $this->assertTrue($this->checkCacheExists('test_cid', $this->default_value), 'Cache item is still returned due to minimum cache lifetime.');
+
+    // Set a much shorter cache lifetime.
+    variable_set('cache_content_flush_' . $this->default_bin, 0);
+    variable_set('cache_lifetime', 1);
+    cache_set('test_cid_1', $this->default_value, $this->default_bin, time() + 6000);
+    $this->assertTrue($this->checkCacheExists('test_cid', $this->default_value), 'Cache item was created successfully.');
+    sleep(2);
+    cache_clear_all(MEMCACHE_CONTENT_CLEAR, $this->default_bin);
+    $this->assertFalse($this->checkCacheExists('test_cid', $this->default_value), 'Cache item is not returned once minimum cache lifetime has expired.');
+
+    // Reset the cache clear variables.
+    variable_set('cache_content_flush_' . $this->default_bin, 0);
+    variable_set('cache_lifetime', 6000);
+    $this->resetVariables();
+    sleep(1);
+
+    // Confirm that cache_lifetime does not take effect for full bin flushes.
+    cache_set('test_cid', $this->default_value, $this->default_bin, time() + 6000);
+    $this->assertTrue($this->checkCacheExists('test_cid', $this->default_value), 'Cache item was created successfully.');
+    cache_set('test_cid_2', $this->default_value, $this->default_bin);
+    $this->assertTrue($this->checkCacheExists('test_cid_2', $this->default_value), 'Cache item was created successfully.');
+
+    // Now flush the bin.
+    cache_clear_all('*', $this->default_bin, TRUE);
+    $this->assertFalse($this->checkCacheExists('test_cid', $this->default_value), 'Cache item was cleared successfully.');
+    $this->assertFalse($this->checkCacheExists('test_cid_2', $this->default_value), 'Cache item was cleared successfully.');
+  }
+
+  /**
+   * Test different wildcards to verify the wildcard optimizations.
+   */
+  function testWildCardOptimizations() {
+
+    // Set and clear a cache with a short cid/wildcard.
+    cache_set('foo:1', $this->default_value, $this->default_bin);
+
+    $this->assertCacheExists(t('Foo cache was set.'), $this->default_value, 'foo:1');
+
+    cache_clear_all('foo', $this->default_bin, TRUE);
+    $this->assertCacheRemoved(t('Foo cache was invalidated.'), 'foo:1');
+
+    // Set additional longer caches.
+    cache_set('foobar', $this->default_value, $this->default_bin);
+    cache_set('foofoo', $this->default_value, $this->default_bin);
+
+    $this->assertCacheExists(t('Foobar cache set.'), $this->default_value, 'foobar');
+    $this->assertCacheExists(t('Foofoo cache set.'), $this->default_value, 'foofoo');
+
+    // Clear one of them with a wildcard and make sure the other one is still
+    // valid.
+    cache_clear_all('foobar', $this->default_bin, TRUE);
+    $this->assertCacheRemoved(t('Foobar cache invalidated.'), 'foobar');
+    $this->assertCacheExists(t('Foofoo cache still valid.'), $this->default_value, 'foofoo');
+
+    // Set and clear a cache with a different, equally short cid/wildcard.
+    cache_set('bar:1', $this->default_value, $this->default_bin);
+    $this->assertCacheExists(t('Bar cache was set.'), $this->default_value, 'bar:1');
+
+    cache_clear_all('bar', $this->default_bin, TRUE);
+    $this->assertCacheRemoved(t('Bar cache invalidated.'), 'bar:1');
+    $this->assertCacheExists(t('Foofoo cache still valid.'), $this->default_value, 'foofoo');
+
+    // Clear cache with an even shorter wildcard. This results in a full bin
+    // bin clear, all entries are marked invalid.
+    cache_set('bar:2', $this->default_value, $this->default_bin);
+    cache_clear_all('ba', $this->default_bin, TRUE);
+    $this->assertCacheRemoved(t('Bar:1 cache invalidated.'), 'bar:1');
+    $this->assertCacheRemoved(t('Bar:2 cache invalidated.'), 'bar:2');
+    $this->assertCacheRemoved(t('Foofoo cache invalidated.'), 'foofoo');
+  }
+
+
+  /**
+   * Test clearing using a cid.
+   */
+  function clearCidTest() {
+    cache_set('test_cid_clear', $this->default_value, $this->default_bin);
+
+    $this->assertCacheExists(t('Cache was set for clearing cid.'), $this->default_value, 'test_cid_clear');
+    cache_clear_all('test_cid_clear', $this->default_bin);
+
+    $this->assertCacheRemoved(t('Cache was removed after clearing cid.'), 'test_cid_clear');
+
+    cache_set('test_cid_clear1', $this->default_value, $this->default_bin);
+    cache_set('test_cid_clear2', $this->default_value, $this->default_bin);
+    $this->assertTrue($this->checkCacheExists('test_cid_clear1', $this->default_value)
+                      && $this->checkCacheExists('test_cid_clear2', $this->default_value),
+                      t('Two caches were created for checking cid "*" with wildcard false.'));
+    cache_clear_all('*', $this->default_bin);
+    $this->assertTrue($this->checkCacheExists('test_cid_clear1', $this->default_value)
+                      && $this->checkCacheExists('test_cid_clear2', $this->default_value),
+                      t('Two caches still exists after clearing cid "*" with wildcard false.'));
+  }
+
+  /**
+   * Test cache clears using wildcard prefixes.
+   */
+  function clearWildcardPrefixTest() {
+    $this->resetVariables();
+    cache_set('test_cid_clear:1', $this->default_value, $this->default_bin);
+    cache_set('test_cid_clear:2', $this->default_value, $this->default_bin);
+    $this->assertTrue($this->checkCacheExists('test_cid_clear:1', $this->default_value)
+                      && $this->checkCacheExists('test_cid_clear:2', $this->default_value),
+                      t('Two caches were created for checking cid substring with wildcard true.'));
+    cache_clear_all('test_cid_clear:', $this->default_bin, TRUE);
+    $this->assertFalse($this->checkCacheExists('test_cid_clear:1', $this->default_value)
+                      || $this->checkCacheExists('test_cid_clear:2', $this->default_value),
+                      t('Two caches removed after clearing cid substring with wildcard true.'));
+    // Test for the case where a wildcard object disappears, for example a
+    // partial memcache restart or eviction.
+    cache_set('test_cid_clear:1', $this->default_value, $this->default_bin);
+    $this->assertTrue($this->checkCacheExists('test_cid_clear:1', $this->default_value), 'The cache was created successfully.');
+    cache_clear_all('test_', $this->default_bin, TRUE);
+    $this->assertFalse($this->checkCacheExists('test_cid_clear:1', $this->default_value), 'The cache was cleared successfully.');
+    // Delete the wildcard manually to simulate an eviction.
+    $wildcard = '.wildcard-' . 'test_cid_clear:';
+    dmemcache_delete($wildcard, $this->default_bin);
+    // Reset the memcache_wildcards() static cache.
+    // @todo: this is a class object in D7.
+    //memcache_wildcards(FALSE, FALSE, FALSE, TRUE);
+    $this->assertFalse($this->checkCacheExists('test_cid_clear:1', $this->default_value), 'The cache was cleared successfully.');
+  }
+
+  /**
+   * Test wildcard flushing on separate pages to ensure no static cache is used.
+   */
+  function testClearWildcardOnSeparatePages() {
+
+    $random_wildcard = $this->randomName(2) . ':' . $this->randomName(3);
+    $random_key = $random_wildcard . ':' . $this->randomName(4) . ':' . $this->randomName(2);
+    $random_value = $this->randomName();
+
+    $this->drupalGetAJAX('memcache-test/clear-cache');
+
+    $data = $this->drupalGetAJAX('memcache-test/set/' . $random_key . '/' . $random_value);
+
+    $this->assertTrue(is_array($data), 'Cache has data.');
+    $this->assertEqual($random_key, $data['cid'], 'Cache keys match.');
+    $this->assertEqual($random_value, $data['data'], 'Cache values match.');
+
+    $data = $this->drupalGetAJAX('memcache-test/get/' . $random_key);
+    $this->assertEqual($random_key, $data['cid'], 'Cache keys match.');
+    $this->assertEqual($random_value, $data['data'], 'Cache values match.');
+
+    $this->drupalGet('memcache-test/wildcard-clear/' . $random_wildcard);
+
+    $data = $this->drupalGetAJAX('memcache-test/get/' . $random_key);
+    $this->assertFalse($data, 'Cache was properly flushed.');
+
+    $data = $this->drupalGetAJAX('memcache-test/set/' . $random_key . '/' . $random_value);
+
+    $this->assertTrue(is_array($data), 'Cache has data.');
+    $this->assertEqual($random_key, $data['cid'], 'Cache keys match.');
+    $this->assertEqual($random_value, $data['data'], 'Cache values match.');
+
+    $data = $this->drupalGetAJAX('memcache-test/get/' . $random_key);
+    $this->assertEqual($random_key, $data['cid'], 'Cache keys match.');
+    $this->assertEqual($random_value, $data['data'], 'Cache values match.');
+
+    $this->drupalGet('memcache-test/wildcard-clear/' . $random_wildcard);
+
+    $data = $this->drupalGetAJAX('memcache-test/get/' . $random_key);
+    $this->assertFalse($data, 'Cache was properly flushed.');
+  }
+
+}
+
+/**
+ * Test some real world cache scenarios with default modules.
+ *
+ * Please make sure you've set the proper memcache settings in the settings.php.
+ * Looks like I've not chance to change the cache settings to what's needed by
+ * this test.
+ */
+class MemCacheRealWorldCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Real world cache tests',
+      'description' => 'Test some real world cache scenarios.',
+      'group' => 'Memcache'
+    );
+  }
+
+  function setUp() {
+    parent::setUp('menu');
+  }
+
+  /**
+   * Test if the menu module caching acts as expected.
+   *
+   * The menu module clears the affected menu if an menu item is changed using
+   * wildcards.
+   */
+  function testMenu() {
+    // Create and login user.
+    $account = $this->drupalCreateUser(array('access administration pages', 'administer blocks', 'administer menu', 'create article content'));
+    $this->drupalLogin($account);
+
+    // Add Menu Link to test with
+    $item = $this->addMenuLink();
+    $original_title = $item['link_title'];
+
+    // Check if menu link is displayed.
+    $this->drupalGet('');
+    $this->assertText($original_title, 'Menu item displayed in frontend');
+
+    // Change menu item multiple times and check if the change is reflected.
+    for($i=0; $i < 3; $i++) {
+      // Edit menu link.
+      $edit = array();
+      $edit['link_title'] = $this->randomName(16);;
+      $this->drupalPost("admin/structure/menu/item/{$item['mlid']}/edit", $edit, t('Save'));
+      if (!$this->assertResponse(200)) {
+        // One fail is enough.
+        break;
+      }
+      // Verify edited menu link.
+      if (!$this->drupalGet('admin/structure/menu/manage/' . $item['menu_name'])) {
+        // One fail is enough.
+        break;
+      }
+      $this->assertText($edit['link_title'], 'Menu link was edited');
+      $this->drupalGet('');
+      if (!$this->assertText($edit['link_title'], 'Change is reflected in frontend')) {
+        // One fail is enough.
+        break;
+      }
+    }
+  }
+
+  /**
+   * Adds a menu link.
+   *
+   * @see MenuTestCase::addMenuLink()
+   */
+  function addMenuLink($plid = 0, $link = '<front>', $menu_name = 'main-menu') {
+    // View add menu link page.
+    $this->drupalGet("admin/structure/menu/manage/$menu_name/add");
+    $this->assertResponse(200);
+
+    $title = '!OriginalLink_' . $this->randomName(16);
+    $edit = array(
+        'link_path' => $link,
+        'link_title' => $title,
+        'description' => '',
+        'enabled' => TRUE, // Use this to disable the menu and test.
+        'expanded' => TRUE, // Setting this to true should test whether it works when we do the std_user tests.
+        'parent' =>  $menu_name . ':' . $plid,
+        'weight' => '0',
+    );
+
+    // Add menu link.
+    $this->drupalPost(NULL, $edit, t('Save'));
+    $this->assertResponse(200);
+    // Unlike most other modules, there is no confirmation message displayed.
+    $this->assertText($title, 'Menu link was added');
+
+    $item = db_query('SELECT * FROM {menu_links} WHERE link_title = :title', array(':title' => $title))->fetchAssoc();
+    return $item;
+  }
+}

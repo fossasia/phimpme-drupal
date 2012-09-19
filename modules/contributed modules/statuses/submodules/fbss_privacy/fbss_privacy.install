@@ -1,0 +1,43 @@
+<?php
+
+/**
+ * @file
+ *   (Un)installs the Statuses Private Statuses module.
+ */
+
+/**
+ * Implements hook_schema_alter().
+ */
+function fbss_privacy_schema_alter(&$schema) {
+  $schema['statuses']['fields']['private'] = array( 
+    'type' => 'int',
+    'size' => 'tiny',
+    'unsigned' => TRUE,
+    'not null' => TRUE,
+    'default' => 0,
+    'description' => 'Whether the status is private (1) or not (0).',
+  );
+}
+
+/**
+ * Implements hook_install().
+ */
+function fbss_privacy_install() {
+  $ret = array();
+  db_add_field('statuses', 'private', array(
+    'type' => 'int',
+    'size' => 'tiny',
+    'unsigned' => TRUE,
+    'not null' => TRUE,
+    'default' => 0,
+    'description' => 'Whether the status is private (1) or not (0).',
+  ));
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function fbss_privacy_uninstall() {
+  $ret = array();
+  db_drop_field('statuses', 'private');
+}

@@ -1,0 +1,100 @@
+<?php
+
+/**
+ * Implementation of hook_services_resources
+ **/
+function contentapi_taxonomy_term_services_resources() {
+  return array(
+    'content_taxonomy_term' => array(
+      'retrieve' => array(
+        'callback' => 'contentapi_taxonomy_term_retrieve',
+        'help' => t('Get the details for a specific Term'),
+        'access callback' => 'contentapi_taxonomy_term_access',
+        'args' => array(
+          array(
+            'name' => 'tid',
+            'optional' => FALSE,
+            'description' => 'Term ID',
+            'source' => array(
+              'path' => '0',
+            ),
+          ),
+        ),
+      ),
+      'index' => array(
+        'callback' => 'contentapi_taxonomy_term_index',
+        'help' => t('Get a list of Taxonomy Terms'),
+        'access callback' => 'contentapi_taxonomy_term_access',
+      ),
+    ),
+  );
+} // end function contentapi_taxonomy_term_services_resources
+
+/**
+ * Callback for the content_taxonoy_term retrieve resource
+ **/
+function contentapi_taxonomy_term_retrieve($tid) {
+  $term = taxonomy_term_load($tid);
+
+  $term->vocabulary = taxonomy_vocabulary_load($term->vid);
+  $term->children = taxonomy_get_tree($term->vid, $term->tid);
+  
+  return array(
+    'term' => $term,
+  );
+} // end function contentapi_taxonomy_term_retrieve
+
+/**
+ * Resource callback for content_taxonomy_term index
+ **/
+function contentapi_taxonomy_term_index() {
+  $query = '
+    SELECT
+      *
+    FROM
+      {taxonomy_term_data}';
+
+  $filters = array();
+  $args = array();
+
+  $vocabularies = variable_get('contentapi_taxonomy_vocab_allowed_vocabs', FALSE);
+  if ($vocabularies !== FALSE && count($vocabularies) > 0) {
+    $vocabFilter = array();
+    foreach ($vocabularies as $vocab) {
+      $vocabFilter[] = '?';
+      $args[] = $vocab;
+    }
+    $filters[] = sprintf('vid IN (%s)', implode(', ', $vocabFilter));
+  }
+
+  if (isset($_GET['term_search'])) {
+    $args[] = check_plain(sprintf('%%%s%%', $_GET['term_search']));
+    $filters[] = 'name LIKE ?';
+  }
+
+  if (count($filters) > 0) {
+    $query .= sprintf('
+    WHERE
+      %s', implode(' AND ', $filters));
+  }
+
+  try {
+    $result = db_query($query, $args);
+  }
+  catch (Exception $e) {
+    return;
+  }
+
+  $results = array();
+  while ($row = $result->fetchAssoc()) {
+    $results[] = $row;
+  }
+  return $results;
+} // end function contentapi_taxonomy_term_index
+
+/**
+ * Access Callback for the contentapi_taxonomy_term module
+ **/
+function contentapi_taxonomy_term_access() {
+  return TRUE;
+} // end function contentapi_taxonomy_term_access

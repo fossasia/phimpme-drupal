@@ -1,0 +1,102 @@
+<?php
+
+/**
+ * @file
+ * Call the endpoint tests when no authentication is being used.
+ *
+ */
+
+/**
+ * Run test cases for the endpoint with no authentication turned on.
+ *
+ */
+class ServicesParserTests extends ServicesWebTestCase {
+  // Class variables
+  protected $privilegedUser = NULL ;
+  // Endpoint details.
+  protected $endpoint = NULL;
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(
+      'ctools',
+      'services',
+      'rest_server'
+    );
+    // Set up endpoint with disabled 'application/x-www-form-urlencoded' parser.
+    $edit = $this->populateEndpointFAPI() ;
+    $endpoint = new stdClass;
+    $endpoint->disabled = FALSE;
+    $endpoint->api_version = 3;
+    $endpoint->name = $edit['name'];
+    $endpoint->server = $edit['server'];
+    $endpoint->path = $edit['path'];
+    $endpoint->authentication = array(
+      'services' => 'services',
+    );
+    $endpoint->server_settings = array(
+      'rest_server' => array(
+        'formatters' => array(
+          'php' => TRUE,
+        ),
+        'parsers' => array(
+          'application/x-yaml' => TRUE,
+          'application/json' => TRUE,
+          'application/vnd.php.serialized' => TRUE,
+          'application/plist' => TRUE,
+          'application/plist+xml' => TRUE,
+          'application/x-www-form-urlencoded' => FALSE,
+        ),
+      ),
+    );
+    $endpoint->resources = array(
+      'user' => array(
+        'actions' => array(
+          'login' => array(
+            'enabled' => 1,
+          ),
+          'logout' => array(
+            'enabled' => 1,
+          ),
+        ),
+      ),
+    );
+    $endpoint->debug = 1;
+    $endpoint->export_type = FALSE;
+    services_endpoint_save($endpoint);
+    $endpoint = services_endpoint_load($endpoint->name);
+    $this->assertTrue($endpoint->name == $edit['name'], t('Endpoint successfully created'));
+    $this->endpoint = $endpoint;
+  }
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Parser'),
+      'description' => t('Test the Parser functionality.'),
+      'group' => t('Services'),
+    );
+  }
+
+  /**
+   * Testing parser functionality.
+   */
+  public function testParser() {
+    $account = $this->drupalCreateUser();
+
+    // Logout first.
+    $this->drupalLogout();
+
+    // Try to login. By default servicesPost uses
+    // 'application/x-www-form-urlencoded' type. So it should be refused.
+    $response = $this->servicesPost($this->endpoint->path . '/user/login', array('username' => $account->name, 'password' => $account->pass_raw));
+
+    $this->assertTrue(strpos($response['header'], '406 Not Acceptable: Unsupported request content type application/x-www-form-urlencoded') !== FALSE,
+      t('Do not accept application/x-www-form-urlencoded if disabled.'), 'Parser');
+  }
+
+}

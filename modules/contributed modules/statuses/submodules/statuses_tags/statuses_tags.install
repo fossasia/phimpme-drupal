@@ -1,0 +1,115 @@
+<?php
+
+/**
+ * @file
+ *   Converts @usernames to themed usernames and #hashtags to themed taxonomy
+ *   terms on Statuses.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function statuses_tags_schema() {
+  $schema = array();
+  $schema['statuses_tags'] = array(
+    'description' => 'Stores term-to-status relationships.',
+    'fields' => array(
+      'sid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Status ID',
+      ),
+      'rid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'unsigned' => TRUE,
+        'default' => 0,
+        'description' => 'Reference ID (Term ID or User ID)',
+      ),
+      'type' => array(
+        'type' => 'varchar',
+        'length' => 40,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Reference type',
+      ),
+      'name' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Reference name',
+      ),
+    ),
+    'indexes' => array(
+      'sid' => array('sid'),
+      'rid' => array('rid'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function statuses_tags_install() {
+  if (module_exists('taxonomy')) {
+    // Check to see if the vocabulary already existed (i.e. from a previous installation).
+    $already_exists = db_query("SELECT vid, name FROM {taxonomy_vocabulary} WHERE module = :module", array(':module' => 'statuses_tags'))->fetchObject();
+    if ($already_exists !== FALSE) {
+      variable_set('statuses_tags_vid', $already_exists->vid);
+      drupal_set_message(st('The vocabulary "@name" has been configured for use with the Statuses Tags module.', array('@name' => $already_exists->name)));
+      return;
+    }
+    // Create a default vocabulary for use with hashtags.
+    $vocabulary = (object) array(
+      'name' => st('Hashtags'),
+      'machine_name' => 'hashtags',
+      'description' => st('Contains #hashtags used in Statuses.'),
+      'hierarchy' => 0,
+      'module' => 'statuses_tags',
+      'weight' => 0,
+    );
+    taxonomy_vocabulary_save($vocabulary);
+    $vid = isset($vocabulary->vid) ? $vocabulary->vid :
+      db_query("SELECT vid FROM {taxonomy_vocabulary} WHERE machine_name = :name AND module = :module", array(':name' => 'hashtags', ':module' => 'statuses_tags'))->fetchField();
+    variable_set('statuses_tags_vid', $vid);
+    drupal_set_message(st('The vocabulary "Hashtags" has been created and configured for use with the Statuses Tags module.'));
+  }
+  else {
+    drupal_set_message(st('Statuses Tags only allows using #hashtags when the Taxonomy module is installed.'));
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function statuses_tags_uninstall() {
+  if (variable_get('statuses_tags_vid', -1) != -1) {
+    $vocabulary = taxonomy_vocabulary_load(variable_get('statuses_tags_vid', -1));
+    if (isset($vocabulary->nodes) && count($vocabulary->nodes) == 0) {
+      drupal_set_message(
+        st('The Statuses Tags module has been uninstalled.') . ' ' .
+        st(
+          'However, the vocabulary "@name," which was used to store #hashtags for the Statuses Tags module, has not been deleted.',
+          array('@name' => $vocabulary->name)
+        ) . ' ' .
+        st(
+          'This vocabulary was not used for any other purpose, so <a href="!delete_url">deleting it</a> is recommended.',
+          array('!delete_url' => url('admin/structure/taxonomy/edit/vocabulary/2', array('absolute' => TRUE)))
+        )
+      );
+    }
+  }
+
+  variable_del('statuses_tags_url');
+  variable_del('statuses_tags_vid');
+  variable_del('statuses_tags_time');
+  variable_del('statuses_tags_count');
+  // Although not deleting this leaves an unnecessary row in the variable
+  // table, it's a PITA for site admin to change its value, so it stays in case
+  // FBSST is ever installed again.
+  //variable_del('statuses_tags_alt_pattern');
+}

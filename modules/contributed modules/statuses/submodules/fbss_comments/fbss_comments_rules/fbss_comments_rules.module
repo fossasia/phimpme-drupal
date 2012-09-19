@@ -1,0 +1,34 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Rules with Statuses Comments.
+ */
+
+/*
+ * Implementation of hook_fbss_comments_after_save().
+ */
+/**
+ * @todo Please document this function.
+ * @see http://drupal.org/node/1354
+ */
+function fbss_comments_rules_fbss_comments_after_save($comment, $edit) {
+  if ($edit) {
+    rules_invoke_event('fbss_comments_edit', $comment);
+  }
+  else {
+    rules_invoke_event('fbss_comments_save', $comment);
+  }
+}
+
+/*
+ * Implementation of hook_fbss_comments_delete().
+ */
+/**
+ * @todo Please document this function.
+ * @see http://drupal.org/node/1354
+ */
+function fbss_comments_rules_fbss_comments_delete($cid) {
+  $comment = fbss_comments_load($cid);
+  rules_invoke_event('fbss_comments_delete', $comment);
+}

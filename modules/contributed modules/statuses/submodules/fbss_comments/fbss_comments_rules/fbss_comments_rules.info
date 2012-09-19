@@ -1,0 +1,16 @@
+name = Statuses Comments Rules Integration
+description = "Integrates Rules with Statuses Comments."
+dependencies[] = fbss_comments
+dependencies[] = rules
+package = Statuses
+core = 7.x
+
+files[] = fbss_comments_rules.module
+files[] = fbss_comments_rules.rules.inc
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

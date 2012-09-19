@@ -1,0 +1,566 @@
+<?php
+
+/**
+ * For the collection of memcache stats. This small .js file makes sure that the
+ * HTML displaying the stats is inside of the <body> part of the HTML
+ * document.
+ */
+function memcache_admin_init() {
+  global $user;
+  if (($user->uid == 0) || strstr($_SERVER['PHP_SELF'], 'update.php') || (isset($_GET['q']) && (in_array($_GET['q'], array('upload/js', 'admin/content/node-settings/rebuild')) || substr($_GET['q'], 0, strlen('system/files')) == 'system/files' || substr($_GET['q'], 0, strlen('batch')) == 'batch' || strstr($_GET['q'], 'autocomplete')))) {
+    // update.php relies on standard error handler
+  }
+  else {
+    if ($user->uid) {
+      drupal_add_js(drupal_get_path('module', 'memcache_admin'). '/memcache.js');
+    }
+    register_shutdown_function('memcache_admin_shutdown');
+  }
+}
+
+/**
+ * Implements hook_perm().
+ */
+function memcache_admin_permission() {
+  return array(
+    'access memcache statistics' => array(
+      'title' => t('Access memcache statistics'),
+    ),
+    'access slab cachedump' => array(
+      'title' => t('Access cachedump of memcache slab'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function memcache_admin_menu() {
+  $items['admin/config/system/memcache'] = array(
+    'title' => 'Memcache',
+    'description' => 'Show or hide memcache statistics at the bottom of each page.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('memcache_admin_admin_settings'),
+    'access arguments' => array('administer site configuration'),
+  );
+  $items['admin/reports/memcache'] = array(
+    'title' => 'Memcache statistics',
+    'description' => "View statistics for all configured memcache servers.",
+    'page callback' => 'memcache_admin_stats',
+    'access arguments' => array('access memcache statistics'),
+    'weight' => 1,
+  );
+  $memcache_servers = variable_get('memcache_servers', array('127.0.0.1:11211' => 'default'));
+  $clusters = array();
+  foreach ($memcache_servers as $server => $cluster) {
+    $clusters[$cluster]['servers'][] = $server;
+    $clusters[$cluster]['bin'] = _memcache_admin_get_bin_for_cluster($cluster);
+  }
+
+  $count = 0;
+  foreach ($clusters as $cluster => $cluster_info) {
+    if ($cluster_info['bin']) {
+      if (empty($current_cluster)) {
+        $current_cluster = arg(3);
+        if (empty($current_cluster)) {
+          $current_cluster = $cluster;
+        }
+      }
+
+      $items['admin/reports/memcache/'. $cluster] = array(
+        'title' => $cluster,
+        'type' =>  $count == 0 ? MENU_DEFAULT_LOCAL_TASK : MENU_LOCAL_TASK,
+        'page callback' => 'memcache_admin_stats',
+        'page arguments' => array($cluster),
+        'access arguments' => array('access memcache statistics'),
+        'weight' => $count++,
+      );
+      foreach ($cluster_info['servers'] as $server) {
+        $items["admin/reports/memcache/$cluster/$server"] = array(
+          'title' => check_plain($server),
+          'type' =>  MENU_CALLBACK,
+          'page callback' => 'memcache_admin_stats_raw',
+          'page arguments' => array($cluster, $server),
+          'access arguments' => array('access memcache statistics'),
+        );
+        foreach (memcache_admin_stats_types($cluster) as $type) {
+          $items["admin/reports/memcache/$cluster/$server/$type"] = array(
+            'type' => MENU_CALLBACK,
+            'page callback' => 'memcache_admin_stats_raw',
+            'page arguments' => array($cluster, $server, $type),
+            'title' => $type,
+            'access arguments' => array('access memcache statistics'),
+          );
+        }
+      }
+    }
+  }
+
+  return $items;
+}
+
+/**
+ * Settings form.
+ */
+function memcache_admin_admin_settings() {
+  $form['show_memcache_statistics'] = array('#type' => 'checkbox',
+    '#title' => t('Show memcache statistics at the bottom of each page'),
+    '#default_value' => variable_get('show_memcache_statistics', 1),
+    '#description' => t("These statistics will be visible to users with the 'access memcache statistics' permission."),
+  );
+  return system_settings_form($form);
+}
+
+function _memcache_admin_default_bin($bin) {
+  if ($bin == 'default') {
+    return 'cache';
+  }
+  return $bin;
+}
+
+function _memcache_admin_stats_connections($stats) {
+  return t('!current open of !total total', array('!current' => number_format($stats['curr_connections']), '!total' => number_format($stats['total_connections'])));
+}
+
+/**
+ * Statistics report: calculate # of set cmds and total cmds.
+ */
+function _memcache_admin_stats_sets($stats) {
+  if (($stats['cmd_set'] + $stats['cmd_get']) == 0) {
+    $sets = 0;
+  }
+  else {
+    $sets = $stats['cmd_set'] / ($stats['cmd_set'] + $stats['cmd_get']) * 100;
+  }
+  if (empty($stats['uptime'])) {
+    $average = 0;
+  }
+  else {
+    $average = $sets / $stats['uptime'];
+  }
+  return t('!average/s; !set sets (!sets%) of !total commands', array('!average' => number_format($average, 2), '!sets' => number_format($sets, 2), '!set' => number_format($stats['cmd_set']), '!total' => number_format($stats['cmd_set'] + $stats['cmd_get'])));
+}
+
+/**
+ * Statistics report: calculate # of get cmds, broken down by hits and misses.
+ */
+function _memcache_admin_stats_gets($stats) {
+  if (($stats['cmd_set'] + $stats['cmd_get']) == 0) {
+    $gets = 0;
+  }
+  else {
+    $gets = $stats['cmd_get'] / ($stats['cmd_set'] + $stats['cmd_get']) * 100;
+  }
+  if (empty($stats['uptime'])) {
+    $average = 0;
+  }
+  else {
+    $average = $stats['cmd_get'] / $stats['uptime'];
+  }
+  return t('!average/s; !total gets (!gets%); !hit hits (!percent_hit%) !miss misses (!percent_miss%)', array('!average' => number_format($average, 2), '!gets' => number_format($gets, 2), '!hit' => number_format($stats['get_hits']), '!percent_hit' => ($stats['cmd_get'] > 0 ? number_format($stats['get_hits'] / $stats['cmd_get'] * 100, 2) : '0.00'), '!miss' => number_format($stats['get_misses']), '!percent_miss' => ($stats['cmd_get'] > 0 ? number_format($stats['get_misses'] / $stats['cmd_get'] * 100, 2) : '0.00'), '!total' => number_format($stats['cmd_get'])));
+}
+
+/**
+ * Statistics report: calculate # of increments and decrements.
+ */
+function _memcache_admin_stats_counters($stats) {
+  return t('!incr increments, !decr decrements', array('!incr' => number_format($stats['incr_hits'] + $stats['incr_misses']), '!decr' => number_format($stats['decr_hits'] + $stats['decr_misses'])));
+}
+
+/**
+ * Statistics report: calculate bytes transferred.
+ */
+function _memcache_admin_stats_transfer($stats) {
+  if ($stats['bytes_written'] == 0) {
+    $written = 0;
+  }
+  else {
+    $written = $stats['bytes_read'] / $stats['bytes_written'] * 100;
+  }
+  return t('!to:!from (!written% to cache)', array('!to' => format_size((int)$stats['bytes_read']), '!from' => format_size((int)$stats['bytes_written']), '!written' => number_format($written, 2)));
+}
+
+/**
+ * Statistics report: calculate per-connection averages.
+ */
+function _memcache_admin_stats_average($stats) {
+  if ($stats['total_connections'] == 0) {
+    $get = 0;
+    $set = 0;
+    $read = 0;
+    $write = 0;
+  }
+  else {
+    $get = $stats['cmd_get'] / $stats['total_connections'];
+    $set = $stats['cmd_set'] / $stats['total_connections'];
+    $read = $stats['bytes_written'] / $stats['total_connections'];
+    $write = $stats['bytes_read'] / $stats['total_connections'];
+  }
+  return t('!read in !get gets; !write in !set sets', array('!get' => number_format($get, 2), '!set' => number_format($set, 2), '!read' => format_size(number_format($read, 2)), '!write' => format_size(number_format($write, 2))));
+}
+
+/**
+ * Statistics report: calculate available memory.
+ */
+function _memcache_admin_stats_memory($stats) {
+  if ($stats['limit_maxbytes'] == 0) {
+    $percent = 0;
+  }
+  else {
+    $percent = 100 - $stats['bytes'] / $stats['limit_maxbytes'] * 100;
+  }
+  return t('!available (!percent%) of !total', array('!available' => format_size($stats['limit_maxbytes'] - $stats['bytes']), '!percent' => number_format($percent, 2), '!total' => format_size($stats['limit_maxbytes'])));
+}
+
+/**
+ * Helper function, reverse map the memcache_bins variable.
+ */
+function memcache_admin_bin_mapping($bin = 'cache') {
+  $bins = array_flip(variable_get('memcache_bins', array('cache' => 'default')));
+  if (isset($bins[$bin])) {
+    return $bins[$bin];
+  }
+  else {
+    // The default bin is 'cache'.
+    return _memcache_admin_default_bin($bin);
+  }
+}
+
+/**
+ * Memcache Stats page
+ *
+ * @return string
+ */
+function memcache_admin_stats($bin = 'cache') {
+  $bin = memcache_admin_bin_mapping($bin);
+
+  $stats = dmemcache_stats($bin, 'default', TRUE);
+
+  $memcache_servers = variable_get('memcache_servers', array('127.0.0.1:11211' => 'default'));
+
+  if (is_array($stats[$bin]) && count($stats[$bin])) {
+    $stats = $stats[$bin];
+
+    $mc = dmemcache_object($bin);
+    if ($mc instanceof Memcached) {
+      $version = t('Memcached v!version', array('!version' => phpversion('Memcached')));
+    }
+    elseif ($mc instanceof Memcache) {
+      $version = t('Memcache v!version', array('!version' => phpversion('Memcache')));
+    }
+    else {
+      $version = t('Unknown');
+      drupal_set_message(t('Failed to detect the memcache PECL extension.'), 'error');
+    }
+    // Building per-server stats for the current memcache bin.
+    $servers = array();
+    foreach ($memcache_servers as $server => $b) {
+      $b = memcache_admin_bin_mapping($b);
+      if ($b == $bin) {
+        $servers[] = $server;
+
+        if (empty($stats[$server]['uptime'])) {
+          drupal_set_message(t('Failed to connect to server at %server.', array('%server' => $server)), 'error');
+        }
+        $data['server_overview'][$server] = t('v!version running !uptime', array('!version' => check_plain($stats[$server]['version']), '!uptime' => format_interval($stats[$server]['uptime'])));
+        $data['server_pecl'][$server] = t('n/a');
+        $data['server_time'][$server] = format_date($stats[$server]['time']);
+        $data['server_connections'][$server] = _memcache_admin_stats_connections($stats[$server]);
+        $data['cache_sets'][$server] = _memcache_admin_stats_sets($stats[$server]);
+        $data['cache_gets'][$server] = _memcache_admin_stats_gets($stats[$server]);
+        $data['cache_counters'][$server] = _memcache_admin_stats_counters($stats[$server]);
+        $data['cache_transfer'][$server] = _memcache_admin_stats_transfer($stats[$server]);
+        $data['cache_average'][$server] = _memcache_admin_stats_average($stats[$server]);
+        $data['memory_available'][$server] = _memcache_admin_stats_memory($stats[$server]);
+        $data['memory_evictions'][$server] = number_format($stats[$server]['evictions']);
+      }
+    }
+    // Building a report as a custom formatted array of arrays that gets
+    // properly displayed by theme_memcache_admin_stats_table.
+    $report = array(
+      'Server overview' => array(
+        array_merge(
+          array('header' => t('Uptime')),
+          array('total' => t('n/a')),
+          $data['server_overview']),
+        array_merge(
+          array('header' => t('PECL extension')),
+          array('total' => $version),
+          $data['server_pecl']),
+        array_merge(
+          array('header' => t('Server time')),
+          array('total' => t('n/a')),
+          $data['server_time']),
+        array_merge(
+          array('header' => t('Connections')),
+          array('total' => _memcache_admin_stats_connections($stats['total'])),
+          $data['server_connections']),
+      ),
+      'Cache statistics' => array(
+        array_merge(
+          array('header' => t('Sets')),
+          array('total' => _memcache_admin_stats_sets($stats['total'])),
+          $data['cache_sets']),
+        array_merge(
+          array('header' => t('Gets')),
+          array('total' => _memcache_admin_stats_gets($stats['total'])),
+          $data['cache_gets']),
+        array_merge(
+          array('header' => t('Counters')),
+          array('total' => _memcache_admin_stats_counters($stats['total'])),
+          $data['cache_counters']),
+        array_merge(
+          array('header' => t('Transferred')),
+          array('total' => _memcache_admin_stats_transfer($stats['total'])),
+          $data['cache_transfer']),
+        array_merge(
+          array('header' => t('Per-connection average')),
+          array('total' => _memcache_admin_stats_average($stats['total'])),
+          $data['cache_average']),
+      ),
+      'Memory overview' => array(
+        array_merge(
+          array('header' => t('Available memory')),
+          array('total' => _memcache_admin_stats_memory($stats['total'])),
+          $data['memory_available']),
+        array_merge(
+          array('header' => t('Evictions')),
+          array('total' => $stats['total']['evictions']),
+          $data['memory_evictions']),
+      ),
+    );
+    $output = theme('memcache_admin_stats_table', array('bin' => $bin, 'servers' => $servers, 'report' => $report));
+  }
+  else {
+    $output = '';
+    drupal_set_message(t('There are no statistics being reported for this bin.'), 'error');
+  }
+
+  return $output;
+}
+
+function memcache_admin_stats_raw($bin, $server, $type = 'default') {
+  $cluster = memcache_admin_bin_mapping($bin);
+  $slab = (int)arg(7);
+  if (arg(6) == 'cachedump' && !empty($slab) && user_access('access slab cachedump')) {
+    $stats = dmemcache_stats($cluster, arg(7), FALSE);
+  }
+  else {
+    $stats = dmemcache_stats($cluster, $type, FALSE);
+  }
+  $breadcrumbs = array(l(t('Home'), NULL), l(t('Administer'), 'admin'), l(t('Reports'), 'admin/reports'), l(t('Memcache'), 'admin/reports/memcache'), l(t($bin), "admin/reports/memcache/$bin"));
+  if ($type == 'slabs' && arg(6) == 'cachedump' && user_access('access slab cachedump')) {
+    $breadcrumbs[] = l($server, "admin/reports/memcache/$bin/$server");
+    $breadcrumbs[] = l('slabs', "admin/reports/memcache/$bin/$server/$type");
+  }
+  drupal_set_breadcrumb($breadcrumbs);
+  if (isset($stats[$cluster][$server]) && is_array($stats[$cluster][$server]) && count($stats[$cluster][$server])) {
+    $output = theme('memcache_admin_stats_raw_table', array('cluster' => $cluster, 'server' => $server, 'stats' => $stats[$cluster][$server], 'type' => $type));
+  }
+  elseif ($type == 'slabs' && is_array($stats[$cluster]) && count($stats[$cluster])) {
+    $output = theme('memcache_admin_stats_raw_table', array('cluster' => $cluster, 'server' => $server, 'stats' => $stats[$cluster], 'type' => $type));
+  }
+  else {
+    $output = theme('memcache_admin_stats_raw_table', array('cluster' => $cluster, 'server' => $server, 'stats' => array(), 'type' => $type));
+    drupal_set_message(t('No @type statistics for this bin.', array('@type' => $type)));
+  }
+  return $output;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function memcache_admin_theme() {
+  return array(
+    'memcache_admin_stats_table' => array(
+      'variables' => array('bin' => NULL, 'servers' => NULL, 'report' => NULL),
+    ),
+    'memcache_admin_stats_raw_table' => array(
+      'variables' => array('bin' => NULL, 'server' => NULL, 'stats' => NULL, 'type' => NULL),
+    )
+  );
+}
+
+/**
+ * Theme function for rendering the output from memcache_admin_stats
+ */
+function theme_memcache_admin_stats_table($variables) {
+  $bin = $variables['bin'];
+  $servers = $variables['servers'];
+  $stats = $variables['report'];
+
+  $output = '';
+  $links = array();
+  $memcache_bins = variable_get('memcache_bins', array('cache' => 'default'));
+  foreach ($servers as $server) {
+    $link_bin = $memcache_bins[$bin];
+    $links[] = l($server, check_plain("admin/reports/memcache/$link_bin/$server"));
+  }
+  $headers = array_merge(array('', t('Totals')), $links);
+  foreach ($stats as $table => $data) {
+    $rows = array();
+    foreach ($data as $row) {
+      if (isset($row[2]) && is_array($row[2])) {
+        $row[2] = implode(', ', $row[2]);
+      }
+      else {
+        $row[2] = '';
+      }
+      $rows[] = $row;
+    }
+    $output .= theme('table', array('header' => $headers, 'rows' => $rows));
+  }
+  return $output;
+}
+
+function memcache_admin_stats_types($bin) {
+  module_load_include('inc', 'memcache', 'dmemcache');
+  if ($mc = dmemcache_object($bin)) {
+    if ($mc instanceof Memcache) {
+      // TODO: Determine which versions of the PECL memcache extension have
+      // these other stats types: 'malloc', 'maps', optionally detect this
+      // version and expose them.  These stats are "subject to change without
+      // warning" unfortunately.
+      return array('default', 'slabs', 'items', 'sizes');
+    }
+    else {
+      // The Memcached PECL extension only offers the default statistics.
+      return array('default');
+    }
+  }
+  else {
+    return array();
+  }
+}
+ 
+function theme_memcache_admin_stats_raw_table($variables) {
+  $cluster = $variables['cluster'];
+  $server = $variables['server'];
+  $stats = $variables['stats'];
+  $current_type = isset($variables['type']) ? $variables['type'] : 'default';
+
+  $memcache_bins = variable_get('memcache_bins', array());
+  $bin = isset($memcache_bins[$cluster]) ? $memcache_bins[$cluster] : 'default';
+  // Provide navigation for the various memcache stats types
+  if (count(memcache_admin_stats_types($bin)) > 1) {
+    foreach (memcache_admin_stats_types($bin) as $type) {
+      if ($current_type == $type) {
+        $links[] = '<strong>' . l(t($type), "admin/reports/memcache/$bin/$server/". ($type == 'default' ? '' : $type)) .'</strong>';
+      }
+      else {
+        $links[] = l(t($type), "admin/reports/memcache/$bin/$server/". ($type == 'default' ? '' : $type));
+      }
+    }
+  }
+  $output = !empty($links) ? implode($links, ' | ') : '';
+
+  $headers = array(t('Property'), t('Value'));
+  $rows = array();
+  // Items are returned as an array within an array within an array.  We step
+  // in one level to properly display the contained statistics.
+  if ($current_type == 'items' && isset($stats['items'])) {
+    $stats = $stats['items'];
+  }
+  foreach ($stats as $key => $value) {
+    // Add navigation for getting a cachedump of individual slabs
+    if (($current_type == 'slabs' || $current_type == 'items') && is_int($key) && user_access('access slab cachedump')) {
+      $key = l($key, "admin/reports/memcache/$bin/$server/slabs/cachedump/$key");
+    }
+    if (is_array($value)) {
+      $rs = array();
+      foreach ($value as $k => $v) {
+        // Format timestamp when viewing cachedump of individual slabs.
+        if ($current_type == 'slabs' && user_access('access slab cachedump') && arg(6) == 'cachedump' && $k == 0) {
+          $k = t('Size');
+          $v = format_size($v);
+        }
+        else if ($current_type == 'slabs' && user_access('access slab cachedump') && arg(6) == 'cachedump' && $k == 1) {
+          $k = t('Expire');
+          $full_stats = dmemcache_stats($cluster, 'default');
+          $infinite = $full_stats[$cluster][$server]['time'] - $full_stats[$cluster][$server]['uptime'];
+          if ($v == $infinite) {
+            $v = t('infinite');
+          }
+          else {
+            $v = t('in @time', array('@time' => format_interval($v - time())));
+          }
+        }
+        $rs[] = array(check_plain($k), check_plain($v));
+       }
+      $rows[] = array($key, theme('table', array('rows' => $rs)));
+    }
+    else {
+      $rows[] = array(check_plain($key), check_plain($value));
+    }
+  }
+  $output .= theme('table', array('header' => $headers, 'rows' => $rows));
+  return $output;
+}
+
+/**
+ * Retrieve the cluster for any given bin
+ *
+ * @param string $cluster - Cluster ID
+ * @return string
+ */
+function _memcache_admin_get_bin_for_cluster($cluster) {
+  static $cluster_map = array();
+
+  if (!isset($cluster_map[$cluster])) {
+    $memcache_bins = variable_get('memcache_bins', array());
+    if ($mapping = array_search($cluster, $memcache_bins)) {
+      $cluster_map[$cluster] = $mapping;
+    }
+    else {
+      $cluster_map[$cluster] = 'default';
+    }
+  }
+
+  return $cluster_map[$cluster];
+}
+
+/**
+ * See memcache_admin_init() which registers this function as a shutdown function.
+ * Displays memcache stats in the footer.
+ */
+function memcache_admin_shutdown() {
+  global $_memcache_statistics;
+
+  // Don't call theme() during shutdown if the registry has been rebuilt (such
+  // as when enabling/disabling modules on admin/build/modules) as things break.
+  // Instead, simply exit without displaying admin statistics for this page
+  // load.  See http://drupal.org/node/616282 for discussion.
+  if (!function_exists('theme_get_registry') || !theme_get_registry()) {
+    return;
+  }
+
+  // Try not to break non-HTML pages.
+  if (function_exists('drupal_get_http_header')) {
+    $header = drupal_get_http_header('content-type');
+    if ($header) {
+      $formats = array('xml', 'javascript', 'json', 'plain', 'image', 'application', 'csv', 'x-comma-separated-values');
+      foreach ($formats as $format) {
+        if (strstr($header, $format)) {
+          return;
+        }
+      }
+    }
+  }
+
+  if (variable_get('show_memcache_statistics', TRUE) && function_exists('user_access') && user_access('access memcache statistics')) {
+    if (!empty($_memcache_statistics)) {
+      foreach ($_memcache_statistics as $row => $stats) {
+        $_memcache_statistics[$row][1] = check_plain($stats[1]);
+        $_memcache_statistics[$row][2] = check_plain($stats[2]);
+      }
+
+      $variables = array('header' => array(t('Operation'), t('Bin'), t('Key'), t('Hit')),
+                         'rows' => $_memcache_statistics);
+      $output = theme('table', $variables);
+
+      // this makes sure all of the HTML is within the <body> even though this <script> is outside it
+      print '<div id="memcache-devel"><h2>'. t('Memcache statistics'). '</h2>'. $output. '</div>';
+    }
+  }
+}

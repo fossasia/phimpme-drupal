@@ -1,0 +1,16 @@
+name = Location Taxonomy
+description = Associate locations with taxonomy terms.
+dependencies[] = location
+dependencies[] = taxonomy
+package = Location
+core = 7.x
+files[] = location_taxonomy.module
+files[] = location_taxonomy.install
+
+
+; Information added by drupal.org packaging script on 2012-02-18
+version = "7.x-3.x-dev"
+core = "7.x"
+project = "location"
+datestamp = "1329524299"
+

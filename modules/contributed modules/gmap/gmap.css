@@ -1,0 +1,63 @@
+
+/**
+ * @file
+ * GMap CSS rules.
+ */
+
+.gmap-popup {
+
+}
+
+.gmap-tooltip {
+   padding: 2px;
+   margin: 0;
+   border: solid black 1px;
+}
+
+.gmap-left {
+  float: left;
+}
+
+.gmap-center {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.gmap-right {
+  float: right;
+}
+
+.gmap-map {
+  /* Don't let long copyright texts stick out the side of the map div. */
+  overflow: hidden;
+}
+
+/* Clean up unwanted styling for google toolbar */
+.gmap-map .gmnoprint table {
+  margin: 0;
+}
+
+.gmap-map .gmnoprint tbody {
+  border-top: none;
+}
+
+.gmap-custom-control-button {
+  position: absolute;
+  background-color: white;
+  border: 1px solid black;
+  text-align: center;
+  width: 5em;
+  cursor: pointer;
+}
+
+.gmap-custom-control-button div {
+  font-size: 12px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: white rgb(176, 176, 176) rgb(176, 176, 176) white;
+}
+
+.gmap-custom-control-button-disabled {
+  color: grey;
+}
+

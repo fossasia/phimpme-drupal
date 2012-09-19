@@ -1,0 +1,208 @@
+<?php
+/**
+ * @file
+ * Install, uninstall and update the Services module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function services_schema() {
+  $schema = array();
+
+  $schema['services_endpoint'] = array(
+    'description' => 'Stores endpoint information for services',
+    'fields' => array(
+      'eid' => array(
+        'type'        => 'serial',
+        'description' => 'Primary ID field for the table. Not used for anything except internal lookups.',
+        'unsigned'    => TRUE,
+        'not null'    => TRUE,
+        'no export'   => TRUE,
+      ),
+      'name' => array(
+        'description' => 'The name of the endpoint.',
+        'type'        => 'varchar',
+        'length'      => 255,
+        'not null'    => TRUE,
+      ),
+      'server' => array(
+        'description' => 'The name of the server used in this endpoint.',
+        'type'        => 'varchar',
+        'length'      => 32,
+        'not null'    => TRUE,
+      ),
+      'path' => array(
+        'description' => 'The path to the endpoint for this server.',
+        'type'        => 'varchar',
+        'length'      => 255,
+        'not null'    => TRUE,
+      ),
+      'authentication' => array(
+        'description'    => 'The authentication settings for the endpoint.',
+        'type'           => 'text',
+        'size'           => 'big',
+        'not null'       => TRUE,
+        'serialize'      => TRUE,
+        'object default' => array(),
+      ),
+      'server_settings' => array(
+         'description'    => 'The server settings for the endpoint.',
+         'type' => 'blob',
+         'size' => 'big',
+         'not null' => TRUE,
+         'serialize' => TRUE
+      ),
+      'resources' => array(
+        'description'    => 'Information about the resources exposed in this endpoint.',
+        'type'           => 'text',
+        'size'           => 'big',
+        'not null'       => TRUE,
+        'serialize'      => TRUE,
+        'object default' => array(),
+      ),
+      'debug' => array(
+       'description' => 'Set the endpoint in debug mode.',
+         'type'        => 'int',
+         'length'      => 2,
+         'not null'    => TRUE,
+         'default'     => 0
+      ),
+    ),
+    'primary key' => array('eid'),
+    'unique keys' => array(
+      'name' => array('name'),
+    ),
+    'export' => array(
+      'key' => 'name',
+      'identifier' => 'endpoint',
+      'primary key' => 'name',
+      'api' => array(
+        'owner' => 'services',
+        'api' => 'services',
+        'minimum_version' => 3,
+        'current_version' => 3,
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function services_requirements($phase) {
+  $requirements = array();
+  $t = get_t();
+  // Warn users of the possible threat.
+  if ($phase == 'runtime') {
+    //Pull endpoints that do not have services authentication enabled
+    $result = db_query('SELECT * FROM {services_endpoint} AS se WHERE se.authentication NOT LIKE :services', array(':services' => '%services%'));
+    $items = array();
+    // Build our items array
+    foreach ($result as $endpoint) {
+      $items[] = l($endpoint->name, 'admin/structure/services/list/'. $endpoint->name .'/edit');
+    }
+    // theme the endpoints list
+    $endpoints = '';
+    if (!empty($items)) {
+      $endpoints = theme('item_list', array('items' => $items));
+    }
+    // Only display the list if we have at least one endpoint without services authentication.
+    if (count($items)) {
+      $requirements['services'] = array(
+        'description' => $t('Services authentication mechanism has not been enabled for the following endpoints. Requests to these endpoints will always be anonymous.'),
+        'severity' => REQUIREMENT_ERROR,
+        'value' => $endpoints,
+        'title' => 'Services Authentication Mechanism',
+      );
+    } else {
+      $requirements['services'] = array(
+        'severity' => REQUIREMENT_OK,
+        'value' => 'Enabled for all Endpoints',
+        'title' => 'Services Authentication Mechanism',
+      );
+    }
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function services_uninstall() {
+  $ret = array();
+
+  // Drop legacy tables
+  $legacy_tables = array('services_keys', 'services_timestamp_nonce');
+  foreach ($legacy_tables as $table) {
+    if (db_table_exists($table)) {
+      db_drop_table($ret, $table);
+    }
+  }
+
+  variable_del('services_use_key');
+  variable_del('services_use_sessid');
+  variable_del('services_debug');
+  variable_del('services_auth_module');
+}
+
+/**
+ * Update 7301 adds debugging to each endopint to facilitate easier development
+ */
+function services_update_7301() {
+  $table = 'services_endpoint';
+  db_add_field($table, 'debug', array('type' => 'int', 'not null' => TRUE, 'default' => 0));
+  db_add_field($table, 'status', array('type' => 'int', 'not null' => TRUE, 'default' => 1));
+}
+
+/**
+ * Update 7302 restores the usage of Chaos tools to check for enable/disable-status
+ */
+function services_update_7302() {
+  $table = 'services_endpoint';
+  db_drop_field($table, 'status');
+}
+
+/**
+ * Update 7303 adds the possibility to configure server settings on a per-endpoint basis.
+ * and sets upgrades all new servers to have at least services session enabled.
+ */
+function services_update_7303() {
+  // Add the new server settings field.
+  db_add_field('services_endpoint', 'server_settings', array(
+    'description'    => 'The server settings for the endpoint.',
+    'type' => 'blob',
+    'size' => 'big',
+    'not null' => TRUE,
+    'serialize' => TRUE,
+    'initial' => '',
+  ));
+  // Fetch all endpoints that currently exist
+  $result = db_select('services_endpoint', 'se')
+    ->fields('se')
+    ->execute()
+    ->fetchAll();
+  // Loop through every endpoint and update the authentication section.
+  // Note, this will not removw previous authentication settings, it will 
+  // only add to them.
+  foreach($result as $services_endpoint_object) {
+    $new_authentication = array(
+      'services' => 'services',
+    );
+    $unserial_endpoint_settings = unserialize($services_endpoint_object->authentication);
+    db_update('services_endpoint')
+      ->fields(array('authentication' => serialize(array_merge($unserial_endpoint_settings, $new_authentication))))
+      ->condition('eid',  $services_endpoint_object->eid)
+      ->execute();
+  }
+}
+/**
+ * Update 7304 removes the title as it is no longer used
+ */
+function services_update_7399() {
+  $table = 'services_endpoint';
+  db_drop_field($table, 'title');
+}

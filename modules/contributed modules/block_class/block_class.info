@@ -1,0 +1,13 @@
+name = Block Class
+description = Allows assigning CSS classes to blocks.
+core = 7.x
+
+files[] = block_class.install
+files[] = block_class.module
+
+; Information added by drupal.org packaging script on 2012-03-07
+version = "7.x-1.1"
+core = "7.x"
+project = "block_class"
+datestamp = "1331079937"
+

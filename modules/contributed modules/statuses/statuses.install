@@ -1,0 +1,151 @@
+<?php
+
+/**
+ * @file
+ *   Install, update, and uninstall functions for the Statuses module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function statuses_schema() {
+  $schema = array();
+  $schema['statuses'] = array(
+    'description' => 'Stores statuses.',
+    'fields' => array(
+      'sid' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'unsigned' => TRUE,
+        'description' => 'The Status ID.',
+      ),
+      'sender' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The User ID of the user who created the status message.',
+      ),
+      'recipient' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The ID of the entity that received the status message.',
+      ),
+      'type' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The stream context type.',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The time the status message was saved.',
+      ),
+      'message' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'description' => 'The status message.',
+      ),
+    ),
+    'indexes' => array(
+      'sender' => array('sender'),
+      'recipient' => array('recipient'),
+      'type' => array('type'),
+      'created' => array('created'),
+    ),
+    'primary key' => array('sid'),
+  );
+  $schema += _statuses_contexts_schema();
+  return $schema;
+}
+
+/**
+ * Specifies the schema for the contexts table.
+ */
+function _statuses_contexts_schema() {
+  $schema = array();
+  $schema['statuses_contexts'] = array(
+    'description' => 'Stores stream context configurations.',
+    'fields' => array(
+      'type' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The stream context type.',
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'unsigned' => FALSE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The weight of the component.',
+      ),
+      'view' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The view used as the stream.',
+      ),
+      'selectors' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'description' => 'Additional DOM selectors representing sections of the page that should be automatically refreshed via AJAX when a status is saved.',
+      ),
+      'visibility' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => -1,
+        'size' => 'tiny',
+        'description' => 'Flag to indicate how to apply contexts on pages. ' .
+          '(-1 = Use module default settings, 0 = Show on all pages except listed pages, 1 = Show only on listed pages, 2 = Use custom PHP code to determine visibility, 3 = use a Context)',
+      ),
+      'pages' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'description' => 'Contains either a list of paths on which to include/exclude the context or PHP code, depending on "visibility" setting.',
+      ),
+      'context' => array(
+        'description' => 'The primary identifier for a context.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'indexes' => array(
+      'weight' => array('weight'),
+    ),
+    'primary key' => array('type'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function statuses_uninstall() {
+  variable_del('statuses_default_text_other');
+  variable_del('statuses_imagecache_preset');
+  variable_del('statuses_user_other_view');
+  variable_del('statuses_default_text');
+  variable_del('statuses_hide_length');
+  variable_del('statuses_block_view');
+  variable_del('statuses_reply_type');
+  variable_del('statuses_share_view');
+  variable_del('statuses_box_rows');
+  variable_del('statuses_profile');
+  variable_del('statuses_refresh');
+  variable_del('statuses_filter');
+  variable_del('statuses_length');
+  variable_del('statuses_repost');
+  variable_del('statuses_enter');
+  variable_del('statuses_nl2br');
+  variable_del('statuses_ahah');
+}

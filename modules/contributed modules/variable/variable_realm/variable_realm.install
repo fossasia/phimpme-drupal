@@ -1,0 +1,13 @@
+<?php
+/**
+ * @file
+ * Variable API module install file
+ */
+
+/**
+ * Implements hook_install()
+ */
+function variable_realm_install() {
+  // Set module weight for it to run before most modules and initialize variable realms
+  db_query("UPDATE {system} SET weight = -1000 WHERE name = 'variable_realm' AND type = 'module'");
+}

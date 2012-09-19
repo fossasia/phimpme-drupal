@@ -1,0 +1,17 @@
+.quicktabs-hide {
+  display: none;
+}
+
+ul.quicktabs-tabs {
+  margin-top: 0;
+}
+ul.quicktabs-tabs li {
+  display: inline;
+  background: none;
+  list-style-type: none;
+  padding: 2px;
+  white-space: nowrap;
+}
+ul.quicktabs-tabs li a:focus {
+  outline: none;
+}

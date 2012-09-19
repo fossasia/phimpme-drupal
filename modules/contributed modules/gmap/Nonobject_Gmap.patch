@@ -1,0 +1,15 @@
+diff --git a/gmap.module b/gmap.module
+index ebc6a5d..f02030a 100644
+--- a/gmap.module
++++ b/gmap.module
+@@ -552,7 +552,9 @@ function gmap_regenerate_markers() {
+   // Make sure js/ exists in the files folder.
+   if (file_prepare_directory($dir, FILE_CREATE_DIRECTORY)) {
+     $file = file_save_data($contents, 'public://js/gmap_markers.js', FILE_EXISTS_REPLACE);
+-    variable_set('gmap_marker_file', $file->fid);
++    if (!empty($file)) {
++      variable_set('gmap_marker_file', $file->fid);
++    }
+   }
+   else {
+     drupal_set_message(t('GMap is unable to save the marker bundle. Markers will not work!'), 'error');

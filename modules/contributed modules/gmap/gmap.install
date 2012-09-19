@@ -1,0 +1,113 @@
+<?php
+
+/**
+ * @file
+ *  GMap install/uninstall routines.
+ */
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function gmap_uninstall() {
+  variable_del('gmap_method');
+  variable_del('gmap_wms');
+  variable_del('gmap_default');
+  variable_del('gmap_mm_type');
+  variable_del('gmap_load_zoom_plugin');
+  variable_del('gmap_markermanager');
+  variable_del('gmap_markerfiles');
+  variable_del('gmap_node_markers');
+  variable_del('gmap_private_markerfile');
+
+  variable_del('googlemap_api_key');
+}
+
+/**
+ * Updates from 5.x-1.0alpha1 to 5.x-1.0.
+ * Do some tidying up of the settings.
+ */
+function gmap_update_5000() {
+  $ret = array();
+
+  $d = variable_get('gmap_default', array());
+
+  // Add the previous implicit baselayers back in.
+  if (!isset($d['baselayers'])) {
+    $d['baselayers'] = array(
+      // Default map type
+      'maptype' => isset($d['maptype']) ? $d['maptype'] : 'Map',
+      'Map' => 1,
+      'Satellite' => 1,
+      'Hybrid' => 1,
+      'Physical' => 0,
+    );
+  }
+
+  // Default maptype was moved into baselayers.
+  unset($d['maptype']);
+
+  // Determine the map type control that was in use.
+  if (!isset($d['mtc'])) {
+    // User had the notype behavior flag set.
+    if (!empty($d['behavior']['notype'])) {
+      $d['mtc'] = 'none';
+    }
+    else {
+      $d['mtc'] = 'standard';
+    }
+  }
+
+  // notype is gone, mtc is more generic.
+  if (isset($d['behavior']['notype'])) {
+    unset($d['behavior']['notype']);
+  }
+
+  variable_set('gmap_default', $d);
+  return $ret;
+}
+
+/**
+ * Post 5.x-1.0beta2 update 1.
+ * We added a menu callback, force a rebuild.
+ */
+function gmap_update_5001() {
+  $ret = array();
+  menu_rebuild();
+  return $ret;
+}
+
+/**
+ * Mini-update -- mousewheel.js no longer needed.
+ */
+function gmap_update_5002() {
+  $ret = array();
+  variable_del('gmap_load_zoom_plugin');
+  return $ret;
+}
+
+/**
+ * Mini-update -- slight tweak to marker manager settings format.
+ */
+function gmap_update_5003() {
+  $ret = array();
+  $val = variable_get('gmap_markermanager', array());
+  if (isset($val['clusterer']) && isset($val['clusterer']['clusterer_file']) && !empty($val['clusterer']['clusterer_file'])) {
+    $val['clusterer']['filename'] = $val['clusterer']['clusterer_file'];
+    unset($val['clusterer']['clusterer_file']);
+    variable_set('gmap_markermanager', $val);
+  }
+  drupal_set_message(t('Border Padding on marker managers is now defaulting to the recommended 256 pixels, rather than 0 pixels. You may wish to change your marker manager settings on the <a href="@url">GMap settings page</a> to match.', array('@url' => url('admin/settings/gmap'))));
+  return $ret;
+}
+
+/**
+ * Drupal 7 clean up.
+ */
+/*
+function gmap_update_7000() {
+  $ret = array();
+  variable_del('gmap_private_markerfile');
+  
+  return $ret;
+}
+*/

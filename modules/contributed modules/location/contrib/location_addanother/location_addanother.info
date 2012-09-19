@@ -1,0 +1,16 @@
+name = Location Add Another
+description = Allows you to quickly add locations directly from a node without having to click 'edit' first.
+dependencies[] = location
+dependencies[] = location_node
+package = Location
+core = 7.x
+files[] = location_addanother.module
+files[] = location_addanother.install
+
+
+; Information added by drupal.org packaging script on 2012-02-18
+version = "7.x-3.x-dev"
+core = "7.x"
+project = "location"
+datestamp = "1329524299"
+

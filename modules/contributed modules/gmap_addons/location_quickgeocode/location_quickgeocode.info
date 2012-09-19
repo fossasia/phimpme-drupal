@@ -1,0 +1,13 @@
+name = Location QuickGeocode
+description = Bulk data entry modifications.
+package = Location
+core = 6.x
+dependencies[] = gmap
+dependencies[] = location
+
+; Information added by drupal.org packaging script on 2011-03-30
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "gmap_addons"
+datestamp = "1301443754"
+

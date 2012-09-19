@@ -1,0 +1,177 @@
+<?php
+
+/**
+ * @file
+ * Tests the basic functionality of Varnish.
+ */
+
+/**
+ * Base class for Varnish Test Cases.
+ */
+class VarnishTestCase extends DrupalWebTestCase {
+  function setUp() {
+    // Save off varnish settings, we will need to set these later
+    // on in order to perform tests.
+    parent::setUp('varnish', 'system_test');
+    $this->setUpVariables();
+  }
+
+  /**
+   * Set up variables so that drupal sends out appropriate headers
+   * to Varnish.
+   */
+  function setUpVariables() {
+    $variables = array(
+      'cache' => 1,
+      'cache_lifetime' => 0,
+      'page_cache_maximum_age' => 1800,
+    );
+    foreach ($variables as $key => $variable) {
+      variable_set($key, $variable);
+    }
+    $this->refreshVariables();
+  }
+
+  /**
+   * Run a varnish command and make sure it worked for us.
+   * @param string $cmd the command to execute.
+   */
+  function assertVarnishCommand($cmds) {
+    $statuses = _varnish_terminal_run($cmds);
+    foreach ($statuses as $terminal => $commands) {
+      foreach ($commands as $command => $status) {
+        $this->assertEqual($status['code'], '200', t('Command: %command
+          was executed properly.', array('%command' => $command)));
+      }
+    }
+  }
+}
+
+/**
+ * Test Varnish Connection.
+ */
+class VarnishConnectionTestCase extends VarnishTestCase {
+  public static function getInfo() {
+    return array(
+      'name' => 'Varnish Connection',
+      'description' => 'Test Communication between varnish admin terminal and Drupal.',
+      'group' => 'Varnish'
+    );
+  }
+
+  function testVarnishStatus() {
+    $this->assertVarnishCommand(array('status'));
+  }
+
+  function testVarnishStats() {
+    if (variable_get('varnish_version', 2.1) < 3) {
+      $this->assertVarnishCommand(array('stats'));
+    }
+  }
+
+  function testMultipleCommands() {
+    $this->assertVarnishCommand(array('stats', 'status'));
+  }
+}
+
+class VarnishCacheInvalidationCase extends VarnishTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Varnish Cache Expiration',
+      'description' => 'Tests Cache Expiration.',
+      'group' => 'Varnish'
+    );
+  }
+
+  function  setUp() {
+    parent::setUp();
+    // Expire all cached pages.
+    varnish_purge_all_pages();
+  }
+
+  function assertRegexpPattern($content, $pattern, $message = '') {
+    $this->assertTrue(preg_match($pattern, $content), $message);
+  }
+  /**
+   * Test that makes sure that the varnish cache get's invalidated
+   * at the appropriate times.
+   */
+  function testVarnishCacheExpiration() {
+    $not_cached_pattern = '/[0-9]{8,9}$/';
+    $cached_pattern = '/[0-9]{8,9} [0-9]{8,9}$/';
+    // Tell the Varnish module that it is OK to cache.
+    variable_set('varnish_cache_clear', 1);
+    // Fill the cache.
+    $this->drupalGet('system-test/set-header', array('query' => array('name' => 'Foo', 'value' => 'bar')));
+    $this->assertRegexpPattern($this->drupalGetHeader('X-Varnish'), $not_cached_pattern, t('Varnish header is indicating that it did not have this page in the cache.'));
+    // Request the page again. It should be in the cache.
+    $this->drupalGet('system-test/set-header', array('query' => array('name' => 'Foo', 'value' => 'bar')));
+    $this->assertRegexpPattern($this->drupalGetHeader('X-Varnish'), $cached_pattern , t('Varnish header is indicating that it had the page in the cache.'));
+    $headers = $this->drupalGetHeaders(TRUE);
+    // Clear the cache_page bin. This should trigger an invalidation of the page in Varnish.
+    cache_clear_all(NULL, 'cache_page');
+    $this->drupalGet('system-test/set-header', array('query' => array('name' => 'Foo', 'value' => 'bar')));
+    $this->assertRegexpPattern($this->drupalGetHeader('X-Varnish'), $not_cached_pattern , t('Varnish header is indicating that it did not have the page in the cache after a cache purge.'));
+    // Tell the Varnish module to not invalidate any pages in Varnish.
+    variable_set('varnish_cache_clear', 0);
+    cache_clear_all(NULL, 'cache_page');
+    $this->drupalGet('system-test/set-header', array('query' => array('name' => 'Foo', 'value' => 'bar')));
+    $this->assertRegexpPattern($this->drupalGetHeader('X-Varnish'), $cached_pattern , t('Varnish header is indicating that it had the page in the cache, even after a cache clear'));
+    // Set a minimum cache lifetime for the cache to avoid having varnish purging the cache.
+    variable_set('cache_lifetime', 3600);
+    // Cache the page.
+    $this->drupalGet('system-test/set-header', array('query' => array('name' => 'Foo', 'value' => 'bar')));
+    // Try to invalidate the cache, it should fail.
+    cache_clear_all(NULL, 'cache_page');
+    $this->drupalGet('system-test/set-header', array('query' => array('name' => 'Foo', 'value' => 'bar')));
+    $this->assertRegexpPattern($this->drupalGetHeader('X-Varnish'), $cached_pattern , t('Varnish cache did not invalidate itself when minimum cache lifetime was set.'));
+  }
+}
+
+class VarnishAdminTestCase extends VarnishTestCase {
+  var $admin_user;
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Varnish Administration',
+      'description' => 'Tests Varnish Administration.',
+      'group' => 'Varnish'
+    );
+  }
+
+  function setUp() {
+    parent::setUp();
+    // Create a user that can administrate varnish.
+    $permissions = array(
+      'administer varnish',
+      'access administration pages',
+      'administer site configuration',
+      'access content',
+    );
+    $this->admin_user = $this->drupalCreateUser($permissions);
+  }
+
+  function testVarnishSettingsPage() {
+    $this->drupalLogin($this->admin_user);
+    $this->drupalGet('admin/config/development/varnish');
+    $values = $this->_getVarnishSettingsValues();
+    // Try to set the timeout value to something else than a numeric value.
+    // This should result in an error.
+    $values['varnish_socket_timeout'] = 'asdf';
+    $this->drupalPost('admin/config/development/varnish', $values, t('Save configuration'));
+    $this->assertText(t('Varnish connection timeout must be a positive number.'),
+            t('Error message was given trying to set timeout to a string.'));
+  }
+
+  function _getVarnishSettingsValues() {
+    return array(
+      'varnish_control_terminal' => variable_get('varnish_control_terminal', '127.0.0.1:6082'),
+      'varnish_flush_cron' => variable_get('varnish_flush_cron', 0),
+      'varnish_version' => variable_get('varnish_version', 2.1),
+      'varnish_control_key' => variable_get('varnish_control_key', 0),
+      'varnish_socket_timeout' => variable_get('varnish_socket_timeout', 100),
+      'varnish_cache_clear' => variable_get('varnish_cache_clear', 0),
+    );
+  }
+}

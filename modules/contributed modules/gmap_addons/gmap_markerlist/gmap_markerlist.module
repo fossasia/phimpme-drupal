@@ -1,0 +1,20 @@
+<?php
+
+/**
+ * @file
+ * Short description.
+ */
+
+/**
+ * Implementation of hook_gmap().
+ */
+function gmap_markerlist_gmap($op, &$map) {
+  switch ($op) {
+    case 'pre_theme_map':
+      drupal_add_css(drupal_get_path('module', 'gmap_markerlist') .'/gmap_markerlist.css');
+      drupal_add_js(drupal_get_path('module', 'gmap_markerlist') .'/gmap_markerlist.js');
+      break;
+    case 'parse_macro':
+      break;
+  }
+}

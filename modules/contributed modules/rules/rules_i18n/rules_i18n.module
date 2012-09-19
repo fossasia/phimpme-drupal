@@ -1,0 +1,131 @@
+<?php
+
+/**
+ * @file
+ * Rules i18n integration.
+ */
+
+
+/**
+ * Implements hook_menu().
+ */
+function rules_i18n_rules_ui_menu_alter(&$items, $base_path, $base_count) {
+
+  $items[$base_path . '/manage/%rules_config/edit'] = array(
+    'title' => 'Edit',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -100,
+  );
+
+  // For reaction-rules i18n generates the menu items, for the others we provide
+  // further i18n menu items for all other base paths.
+
+  if ($base_path != 'admin/config/workflow/rules/reaction') {
+
+    $items[$base_path . '/manage/%rules_config/translate'] = array(
+      'title' => 'Translate',
+      'page callback' => 'i18n_page_translate_localize',
+      'page arguments' => array('rules_config', $base_count + 1),
+      'access callback' => 'i18n_object_translate_access',
+      'access arguments' => array('rules_config', $base_count + 1),
+      'type' => MENU_LOCAL_TASK,
+      'file' => 'i18n.pages.inc',
+      'file path' => drupal_get_path('module', 'i18n'),
+      'weight' => 10,
+    );
+
+    $items[$base_path . '/manage/%rules_config/translate/%i18n_language'] = array(
+      'title' => 'Translate',
+      'page callback' => 'i18n_page_translate_localize',
+      'page arguments' => array('rules_config', $base_count + 1, $base_count + 3),
+      'access callback' => 'i18n_object_translate_access',
+      'access arguments' => array('rules_config', $base_count),
+      'type' => MENU_CALLBACK,
+      'file' => 'i18n.pages.inc',
+      'file path' => drupal_get_path('module', 'i18n'),
+      'weight' => 10,
+    );
+  }
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function rules_i18n_entity_info_alter(&$info) {
+  // Enable i18n support via the entity API.
+  $info['rules_config']['i18n controller class'] = 'RulesI18nStringController';
+}
+
+/**
+ * Implements hook_rules_config_insert().
+ */
+function rules_i18n_rules_config_insert($rules_config) {
+  // Do nothing when rebuilding defaults to avoid multiple cache rebuilds.
+  // @see rules_i18n_rules_config_defaults_rebuild()
+  if (!empty($rules_config->is_rebuild)) {
+    return;
+  }
+
+  i18n_string_object_update('rules_config', $rules_config);
+}
+
+/**
+ * Implements hook_rules_config_update().
+ */
+function rules_i18n_rules_config_update($rules_config, $original = NULL) {
+  // Do nothing when rebuilding defaults to avoid multiple cache rebuilds.
+  // @see rules_i18n_rules_config_defaults_rebuild()
+  if (!empty($rules_config->is_rebuild)) {
+    return;
+  }
+  $original = $original ? $original : $rules_config->original;
+
+  // Account for name changes.
+  if ($original->name != $rules_config->name) {
+    i18n_string_update_context("rules:rules_config:{$original->name}:*", "rules:rules_config:{$rules_config->name}:*");
+  }
+
+  // We need to remove the strings of any disappeared properties, i.e. strings
+  // from translatable parameters of deleted actions.
+
+  // i18n_object() uses a static cache per config, so bypass it to wrap the
+  // original entity.
+  $old_i18n_object = new RulesI18nStringObjectWrapper('rules_config', $original);
+  $old_strings = $old_i18n_object->get_strings(array('empty' => TRUE));
+
+  // Note: For the strings to have updated values, the updated entity needs to
+  // be handled last due to i18n's cache.
+  $strings = i18n_object('rules_config', $rules_config)->get_strings(array('empty' => TRUE));
+
+  foreach (array_diff_key($old_strings, $strings) as $name => $string) {
+    $string->remove(array('empty' => TRUE));
+  }
+  // Now update the remaining strings.
+  foreach ($strings as $string) {
+    $string->update(array('empty' => TRUE, 'update' => TRUE));
+  }
+}
+
+/**
+ * Implements hook_rules_config_delete().
+ */
+function rules_i18n_rules_config_delete($rules_config) {
+  i18n_string_object_remove('rules_config', $rules_config);
+}
+
+/**
+ * Implements hook_rules_config_defaults_rebuild().
+ */
+function rules_i18n_rules_config_defaults_rebuild($rules_configs, $originals) {
+  // Once all defaults have been rebuilt, update all i18n strings at once. That
+  // way we build the rules cache once the rebuild is complete and avoid
+  // rebuilding caches for each updated rule.
+  foreach ($rules_configs as $name => $rule_config) {
+    if (empty($originals[$name])) {
+      rules_i18n_rules_config_insert($rule_config);
+    }
+    else {
+      rules_i18n_rules_config_update($rule_config, $originals[$name]);
+    }
+  }
+}

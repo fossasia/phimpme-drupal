@@ -1,0 +1,16 @@
+name = Quicktabs
+description = Render content with tabs and other display styles
+core = 7.x
+files[] = quicktabs.module
+files[] = quicktabs.classes.inc
+files[] = includes/quicktabs_style_plugin.inc
+files[] = tests/quicktabs.test
+configure = admin/structure/quicktabs
+dependencies[] = "ctools"
+
+; Information added by drupal.org packaging script on 2012-03-29
+version = "7.x-3.4"
+core = "7.x"
+project = "quicktabs"
+datestamp = "1332980461"
+

@@ -1,0 +1,36 @@
+=================
+ ABOUT THIS CODE
+=================
+
+The code in this module is usually a fairly straightforward implementation of
+the Services 3.x API. However, there is one important trick which is
+implemented in hook_services_resources_post_processing_alter(). The basic
+problem is that Services' REST server expects actions at endpoints to have
+specific request methods, so any request except "retrieve" and "index" cannot
+use a GET request. However, standard web APIs expect all "read" actions to be
+GET requests. One way to get around this problem would have been to write an
+entirely new REST server, but that would have meant a lot of duplicate code to
+alter the behavior of only a single function (RESTServer->resolveController()).
+Instead, we alter the list of action resources by determining to which action
+the Services module will assign the request, and then replacing the information
+required to execute that action with the information of the action that we
+actually want to execute. For example, when polling /status/public_stream.xml
+using GET, Services will try to use the "retrieve" action -- so we replace
+$resources['status']['retrieve'] with $resources['status']['public_timeline'].
+
+
+======================
+ USING THE PUBLIC API
+======================
+
+There are two public APIs provided by this module. One uses the default
+Services operations: create, retrieve, update, delete, and index. This is the
+more robust API from the perspective that it provides information specifically
+designed for the Statuses module (that is, a retrieve request
+returns the actual properties of a status object) but less robust in the sense
+that it isn't as well suited to building streams of status updates. It could
+use some love in that respect. You can find documentation on this API here:
+
+http://drupal.org/node/736522
+
+The other API is TBD.

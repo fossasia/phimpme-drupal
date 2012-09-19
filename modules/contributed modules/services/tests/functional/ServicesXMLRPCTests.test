@@ -1,0 +1,232 @@
+<?php
+
+class ServicesXMLRPCTestCase extends DrupalWebTestCase {
+  // Endpoint details.
+  protected $endpoint = NULL;
+  // Session ID.
+  protected $sessid = NULL;
+  // Session name.
+  protected $session_name = NULL;
+
+  /**
+   * Implements getInfo().
+   */
+  public static function getInfo() {
+   return array(
+     'name'        => t('XMLRPC Server'),
+     'description' => t('Test XMLRPC server.'),
+     'group'       => t('Services'),
+   );
+  }
+
+  public function setUp() {
+    parent::setUp('ctools', 'services', 'xmlrpc_server', 'services_test_resource');
+    // Set up endpoint.
+    $this->endpoint =  $this->saveNewEndpoint();
+  }
+
+  /**
+   * Test list.Methods call.
+   *
+   * Regression http://drupal.org/node/1072844.
+   */
+  function testlistMethods() {
+    $result = $this->servicesXMLRPC('system.listMethods', array());
+    $this->assertFalse(in_array('node.index', $result['body']), t('Not able to find not enabled node.index method.'), 'XMLRPC: listMethods');
+  }
+
+  /**
+   * Test user login.
+   */
+  function testUserLogin() {
+    // Create user.
+    $user = $this->drupalCreateUser(array('access user profiles'));
+    $args = array(
+      'username' => $user->name,
+      'password' => $user->pass_raw,
+    );
+    $result = $this->servicesXMLRPC('user.login', $args);
+    $this->assertEqual($result['body']['user']['uid'], $user->uid,
+      t('User %user logged in successfully.', array('%user' => $user->name)), 'XMLRPC: UserLogin');
+
+    $this->sessid = $result['body']['sessid'];
+    $this->session_name = $result['body']['session_name'];
+
+    // Call index method as logged in user.
+    $args = array(
+      'page' => 0,
+      'fields' => '*',
+      'parameters' => array(),
+    );
+    $result = $this->servicesXMLRPC('user.index', $args);
+    // There should be three users available: anonymous, admin and newly created.
+    $this->assertTrue(count($result['body']) == 3, t('Users listed properly.'), 'XMLRPC: UserLogin');
+  }
+
+  /**
+   * Precedence CRUD methods > Actions > Relations > Targeted Actions
+   *
+   * @see http://drupal.org/node/1016350
+   */
+  function testPrecedence() {
+    $args = array('arg1' => $this->randomName());
+    $result = $this->servicesXMLRPC('services_test.retrieve', $args);
+    $this->assertEqual($result['body'], 'CRUD Retrieve ' . $args['arg1'], t('XMLRPC precedence works properly (CRUD higher priority than action).'), 'XMLRPC: Precedence');
+  }
+
+  public function saveNewEndpoint() {
+    $edit = $this->populateEndpointFAPI() ;
+    $endpoint = new stdClass;
+    $endpoint->disabled = FALSE; /* Edit this to true to make a default endpoint disabled initially */
+    $endpoint->api_version = 3;
+    $endpoint->name = $edit['name'];
+    $endpoint->title = $edit['title'];
+    $endpoint->server = $edit['server'];
+    $endpoint->path = $edit['path'];
+    $endpoint->authentication = array(
+      'services' => 'services',
+    );
+    $endpoint->server_settings = array(
+      'rest_server' => array(
+        'formatters' => array(
+          'json' => TRUE,
+          'bencode' => TRUE,
+          'rss' => TRUE,
+          'plist' => TRUE,
+          'xmlplist' => TRUE,
+          'php' => TRUE,
+          'yaml' => TRUE,
+          'jsonp' => FALSE,
+          'xml' => FALSE,
+        ),
+        'parsers' => array(
+          'application/x-yaml' => TRUE,
+          'application/json' => TRUE,
+          'application/vnd.php.serialized' => TRUE,
+          'application/plist' => TRUE,
+          'application/plist+xml' => TRUE,
+          'application/x-www-form-urlencoded' => TRUE,
+        ),
+      ),
+    );
+    $endpoint->resources = array(
+      'system' => array(
+        'alias' => '',
+        'actions' => array(
+          'connect' => array(
+            'enabled' => 1,
+          ),
+          'get_variable' => array(
+            'enabled' => 1,
+          ),
+          'set_variable' => array(
+            'enabled' => 1,
+          ),
+        ),
+      ),
+      'user' => array(
+        'alias' => '',
+        'operations' => array(
+          'create' => array(
+            'enabled' => 1,
+          ),
+          'retrieve' => array(
+            'enabled' => 1,
+          ),
+          'update' => array(
+            'enabled' => 1,
+          ),
+          'delete' => array(
+            'enabled' => 1,
+          ),
+          'index' => array(
+            'enabled' => 1,
+          ),
+        ),
+        'actions' => array(
+          'login' => array(
+            'enabled' => 1,
+          ),
+          'logout' => array(
+            'enabled' => 1,
+          ),
+        ),
+      ),
+      'services_test' => array(
+        'alias' => '',
+        'operations' => array(
+          'retrieve' => array(
+            'enabled' => 1,
+          ),
+        ),
+        'actions' => array(
+          'retrieve' => array(
+            'enabled' => 1,
+          ),
+        ),
+      ),
+    );
+    $endpoint->debug = 1;
+    $endpoint->export_type = FALSE;
+    services_endpoint_save($endpoint);
+    $endpoint = services_endpoint_load($endpoint->name);
+    $this->assertTrue($endpoint->name == $edit['name'], t('Endpoint successfully created'));
+    return $endpoint;
+  }
+
+  public function populateEndpointFAPI() {
+    return array(
+      'name'   => 'machinename',
+      'title'  => $this->randomName(20),
+      'path'   => $this->randomName(10),
+      'server' => 'xmlrpc_server',
+    );
+  }
+
+  /**
+   * Do XMLRPC call.
+   *
+   * @param string $method
+   *   Name of method to call.
+   * @param array $args
+   *   Arguments to pass to call.
+   * @param bool $sessid
+   *   Add cookies in order to log in.
+   * @param bool $assert_no_error
+   *   Whether assert that no error returned.
+   * @return array
+   *   array(
+   *     'body' -- answer of call
+   *     'error_message' -- error message if any
+   *   )
+   */
+  public function servicesXMLRPC($method, $args = array(), $sessid = TRUE, $assert_no_error = TRUE) {
+    if (!is_array($args)) {
+      $args = array($args);
+    }
+
+    // Set up cookies.
+    $options = array();
+    if ($sessid && !empty($this->sessid)) {
+      $options = array('headers' => array('Cookie' => $this->session_name . '=' . $this->sessid));
+    }
+
+    $output = xmlrpc(url($this->endpoint->path, array('absolute' => TRUE)), array($method => $args), $options);
+
+    $error_message = xmlrpc_error_msg();
+
+    if ($assert_no_error) {
+      $this->assertTrue(empty($error_message), t('XMLRPC call %method run without errors.', array('%method' => $method)), 'XMLRPC call');
+    }
+    $this->verbose('XMLRPC request to: ' . $method .
+                   '<hr />Arguments: ' . highlight_string('<?php ' . var_export($args, TRUE), TRUE) .
+                   '<hr />Response: ' . highlight_string('<?php ' . var_export($output, TRUE), TRUE) .
+                   '<hr />Error: ' . $error_message);
+
+    if (!empty($error_message)) {
+      return array('error_message' => $error_message, 'body' => '');
+    }
+
+    return array('error_message' => '', 'body' => $output);
+  }
+}

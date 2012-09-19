@@ -1,0 +1,13 @@
+.random_photos_row {
+	float: left;
+	margin-right: 6px;
+}
+.random-photos-row {
+    float: left;
+	margin-right: 6px;
+}
+.random-photos-block {
+	width: 940px;
+	overflow: hidden; /*This solve a problem that the container's height is not calculated */
+}
+

@@ -1,0 +1,303 @@
+
+This file describes the public API for the CivicSpace location system as defined by
+ in the library implemented by "location.inc" and its supporting files.
+
+For a example of this API's usage, please consult "location.module"
+
+
+FUNCTION SPECIFICATIONS DESCRIBED IN THIS FILE:
+----------------------------------------------
+  location_get_postalcode_data(): A function that takes a (postalcode,country) pair an returns lat/lon, city, province.  This
+                  function is meant to replace location_latlon_rough(); see below.
+
+  location_latlon_rough(): A function that returns the latitude and longitude of the specified postal-code/country pair.
+                  This latitude and longitude will be of the approximate center of the postal-code's area.  This function
+                  will soon be removed from the API as it has been replaced by the more comprehensive
+                  location_get_postalcode_data() described above. [TO BE DEPRECATED]
+
+  location_latlon_exact(): A function that returns the latitude and longitude of the given full location.  Typically implemented
+                  on top of a web-service. [TO BE IMPLEMENTED]
+
+  location_map_link(): A function that returns, based on the site configuration, either NULL or 1 or more deep-links to mapping
+                   web sites for the parameter location array.
+
+  location_driving_directions_link(): A function that returns, given 2 locationes, a deep-link to Yahoo! Maps or some other site
+                  that provides driving directions.  The site chosen depends on the implementation at the country-level.
+
+  location_proximity_form(): A function that generates a form for collecting proximity search parameters.
+
+  location_valid(): A function for validating locationes. [TO BE SPECIFIED]
+
+  theme_location(): A function that takes in an location and themes it.  (e.g., $output .= theme('location', $location)).
+
+  location_distance_between(): A function that, given a pair of lat/lon pairs, returns the distance between them.
+
+
+"[TO BE SPECIFIED]"   => Function spec has not been completed and may possibly be eliminated from spec.
+"[TO BE IMPLEMENTED]" => Function spec exists but is to be implemented in a future release.
+"[TO BE DEPRECATED]"  => This function will soon be removed from the API.
+----------------------------------------------
+
+
+
+IMPORTANT NOTES:
+----------------
+Formats
+---
+In the following API, a 'location' is merely an associative array with the following keys:
+  'street'      => A string for the street portion of an location
+  'additional'  => A string for the additional street portion of an location
+  'province'    => An upper-case, standard postal abbreviation of a state/province/territory
+  'postal_code' => A string or integer for the postal code
+  'country'     => The lower-case of the ISO 3166 two-letter alpha code (e.g., 'us' for U.S., 'ca' for Canada).
+
+For locations that are passed to location_form() for the $prefilled_values parameter, the same format applies
+except that the 'province' field is the concatenation of the country code, '-', and the province abbreviation.
+For example, 'CA' is the value for California for all purposes, but when passing this in a location for prefilled
+values, it should be 'us-CA'.  There are two functions to help convert back and forth between these formats:
+location_form2api() and location_api2form().  These are described further below.
+
+Delegation
+---
+With the exception of location_form() and location_proximity_form(), the calls to functions listed here are, in the end,
+dispatched to country-specific location libraries which are implemented in country-specific '.inc' files.  For example,
+location_latlon_rough(), when given a U.S. location, really returns a result that is determined by call to
+"location_latlon_rough_us()" which is implemented in the file "location.us.inc".
+
+Current Implementation
+---
+Currently, the only country supported is the United States.  For the future, however, there will be documentation for how to
+implement a country-specific include file that can be plugged into the system to support these calls for new countries.  This
+scheme will revolve around method signatures for a handful of simple-to-write functions.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function location_get_postalcode_data($location = array());                                            +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Takes a location and uses the combination of postal code and country to return an array that gives the
+city, province, and lat/lon dat for that postal code.
+
+@param $location
+  An associative array $location where
+    'street'       => the street portion of the location
+    'additional' => additional street portion of the location
+    'province'     => the province, state, or territory
+    'country'      => lower-cased two-letter ISO code (REQUIRED)
+    'postal_code'  => international postal code (REQUIRED)
+
+@return
+  NULL if data cannot be found.
+  Otherwise, an associative array where
+    'lat' => is a floating point of the latitude coordinate of this location
+    'lon' => is a floating point of the longitude coordinate of this location
+    'city' => is a string for the city this postalcode is in (or the most recognized city at the given postal)
+    'province' => the province of the given postal code.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function location_latlon_rough($location = array());                                                   +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Takes an location and returns a "rough" latitude/longitude pair based on the postal code
+data available for the given country.
+
+@param $location
+  An associative array $location where
+    'street'       => the street portion of the location
+    'additional' => additional street portion of the location
+    'province'     => the province, state, or territory
+    'country'      => lower-cased two-letter ISO code (REQUIRED)
+    'postal_code'  => international postal code (REQUIRED)
+
+@return
+  NULL if data cannont be found.
+  Otherwise, an associative array where
+    'lat' => is a floating point of the latitude coordinate of this location
+    'lon' => is a floating point of the longitude coordinate of this location
+
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function location_latlon_exact($location = array());                                                     +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Currently, this is not a priority until there is an implementable use for exact longitude,
+latitude coordinates for an location.  The idea is that this call will eventually retrieve
+information through a web-service.  Whereas location_latlon_rough() returns an approximate
+lat/lon pair based strictly on the postal code where this lat/lon pair is pulled from a
+database table, this function is intended to send the entire location to a web-service and
+to retrieve exact lat/lon coordinates.
+
+@param $location
+  An array where
+    -> the key values are 'street', 'additional', 'province', 'country', 'postal_code'
+    -> the values are:
+        'street'         => the string representing the street location (REQUIRED)
+        'additional'     => the string representing the additional street location portion in the location form
+        'city'           => the city name (REQUIRED)
+        'province'       => the province code defined in the country-specific include file
+        'country'        => the lower-case of the two-letter ISO code (REQUIRED)
+        'postal_code'    => the postal-code (REQUIRED)
+
+@return
+  NULL if the delegated-to function that does the actual look-up does not exist.
+  If the appropriate function exists, then this function returns an associative array where
+     'lon' => A floating point number for the longitude coordinate of the parameter location
+     'lat' => A floating point number for the latitude coordinate of the parameter location
+
+
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function location_map_link($location = array(), $link_text = 'See map');                                 +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Get deep-links to a mapping services such as Yahoo! Maps or MapQuest (actual providers depend on configuration
+of location module) given a location.  The call is delegated based on the 'country' value in the $location parameter.
+
+@param $location
+  An associative array where
+     'street'       => A string representing the street location
+     'additional'   => A string for any additional portion of the street location
+     'city'         => A string for the city name
+     'province'     => The standard postal abbreviation for the province
+     'country'      => The two-letter ISO code for the country of the location (REQUIRED)
+     'postal_code'  => The international postal code for the location
+
+@return
+  NULL if there are not mapping providers configured for the country or if no links could be generated.
+  A string of the form "See map: Yahoo! Maps, MapQuest" where Yahoo! Maps and Mapquest are links to the
+  given location and can be replaced with other options (e.g., Google) available in the location module settings.
+  The idea is to encode the appropriate parameters as HTTP GET variables to the URL.
+
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function location_driving_directions_link($locationA = array(), $locationB = array(), $link_text = 'Get directions');
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Takes two locationes and tries to return a deep-link to driving directions.
+
+Parameters:
+@param $locationA
+  An associative array that represents an location where
+     'street'       => the street portions of the location
+     'additional'   => additional street portion of the location
+     'city'         => the city name
+     'province'     => the province, state, or territory
+     'country'      => lower-cased two-letter ISO code (REQUIRED)
+     'postal_code'  => the postal code
+
+@param $locationB
+  An associative array that represents an location in the same way that
+  parameter $locationA does.
+
+@param $link_text
+  The text of the HTML link that is to be generated.
+
+@return
+  A deep-link to driving directions on Yahoo! or some other mapping service, if enough fields are filled in the parameters.
+  A deep-link to a form for driving directions with information pre-filled if not enough, but some fields are filled in the parameters.
+  The empty string if no information is provided (or if so little information is provided that there is no function to which to delegate
+  the call.
+
+  We dispatch the call to a country-specific function.  The country-specific function, in this case,
+  will be the one reflected by the country parameter of the first function.  We require that
+  both locationes supplied have a country field at the minimum.
+
+  The country-specific functions will ultimately decide, with the parameters given, whether to
+  to link to a form for driving directions is provided, where this form will be
+  pre-populated with whatever values were available or whether to link directly to the driving
+  directions themselves if enough fields are filled for each location.
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function location_proximity_form($location_form = '', $label = '', $description = '', $prefilled_values = array(), $form_name = 'location');
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+This function generates a form for doing proximity searches within a certain distance
+of a specified point.
+
+Depending on the context within which this function is called, the search-point can either
+be user-supplied via the location form that is passed (if one is available) or done within
+a search-point extracted from a contact table or some other location source specified by
+the programmer calling this function.
+
+@param $location_form
+  An optional location form, preferably generated by location_form().  If the script processing this
+  form also needs a user-supplied location, this parameter is used to specify a form for collecting the
+  search-point about which this search is being done.  If the caller does not supply a form, it is
+  assumed that the caller already has a search point in mind and that this will be made clear in
+  the $description parameter.
+
+@param $label
+  The label you want to apply to the form group that is returned (passed as $legend param to form_group()).
+
+@param $description
+  A text description of what is being searched for (e.g., 'Find all upcoming events near you.')
+
+@param $prefilled_values
+  An associative array for prefilled values for the proximity search parameters, where
+    'distance' => is the prefilled int value to be selected for the distance scalar
+    'distance_unit' => is 'km' or 'mile'
+
+@param $form_name
+  An additional parameter to help prevent HTML input name collisions.  If the caller is using this
+  function to generate more than 1 location proximity form on a page, then the generated name for
+  each HTML input's "name" attribute will be $form_name.  Allowing the caller to pass $form_name allows
+  the caller the flexibility of using more than one location proximity search form on one page.
+
+@return
+  An HTML form (generated by Drupal form functions) that lets users specify proximity search parameters that include distance,
+  the unit of distance, and a search-point if the optional $location_form parameter is passed.  If one is not passed,
+  the caller of this function will be assumed to already have one.
+
+
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function theme_location($location = array());                                                            +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Generates HTML for the passed location.
+
+@param $location
+  An associative array where
+     'street'       => A string representing the street location
+     'additional'   => A string for any additional portion of the street location
+     'city'         => A string for the city name
+     'province'     => The standard postal abbreviation for the province
+     'country'      => The two-letter ISO code for the country of the location (REQUIRED)
+     'postal_code'  => The international postal code for the location
+
+@return
+  An HTML string with special tags for locationes.
+
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function location_distance_between($latlonA = array(), $latlonB = array(), $distance_unit = 'km');      +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Given two points in lat/lon form, returns the distance between them.
+
+@param $latlonA
+  An associative array where
+     'lon' => is a floating point of the longitude coordinate for the point given by latlonA
+     'lat' => is a floating point of the latitude coordinate for the point given by latlonB
+
+@param $latlonB
+     Another point formatted like $latlonB
+
+@param $distance_unit
+     A string that is either 'km' or 'mile'.
+     If neither 'km' or 'mile' is passed, the parameter is forced to 'km'
+
+@return
+   NULL if sense can't be made of the parameters.
+   An associative array where
+     'scalar' => Is the distance between the two lat/lon parameter points
+     'distance_unit' => Is the unit of distance being represented by 'scalar'.
+                        This will be 'km' unless 'mile' is passed for the $distance_unit param

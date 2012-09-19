@@ -1,0 +1,70 @@
+<?php
+
+/*
+ * Extend block's classes with any user defined classes.
+ */
+function block_class_preprocess_block(&$vars) {
+  $block = $vars['block'];
+  $classes = block_class($block);
+  $vars['classes_array'] = array_merge($vars['classes_array'], explode(' ', $classes));
+}
+
+
+/**
+ * Return classes as string
+ */
+function block_class($block) {
+  $ret = db_query('SELECT css_class FROM {block_class} WHERE module = :module AND delta = :delta', array(':module' => $block->module, ':delta' => $block->delta))->fetchField();
+  return $ret ? check_plain ($ret) : '';
+}
+
+
+/**
+ * Alter block edit form
+ */
+function block_class_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'block_admin_configure' || $form_id == 'block_add_block_form') {
+    $block = new stdClass;
+    $block->module = $form['module']['#value'];
+    $block->delta = $form['delta']['#value'];
+    $css_class = block_class($block);
+
+    // Create a more technical description for users with administer blocks permission.
+    $description = t('Customize the styling of this block by adding CSS classes. Separate multiple classes by spaces.');
+
+    $form['block_class'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Block Class settings'),
+      '#collapsible' => TRUE,
+      '#weight' => -1,
+      '#description' => $description,
+    );
+    $form['block_class']['css_class'] = array(
+      '#type' => 'textfield',
+      '#title' => t('CSS class(es)'),
+      '#default_value' => $css_class,
+      '#description' => t('Separate classes with a space.'),
+      '#maxlength' => 255,
+    );
+
+    $form['#submit'][] = 'block_class_form_submit';
+  }
+}
+
+
+/**
+ * Save supplied class.
+ */
+function block_class_form_submit($form, &$form_state) {
+  if ($form_state['values']['form_id'] == 'block_admin_configure' || $form_state['values']['form_id'] == 'block_add_block_form') {
+    if (isset($form_state['values']['css_class']) && user_access('administer blocks')) {
+      $module = $form_state['values']['module'];
+      $delta = $form_state['values']['delta'];
+      $class = $form_state['values']['css_class'];
+      db_delete('block_class')->condition('module', $module)->condition('delta', $delta)->execute();
+      if (!empty($class)) {
+        $id = db_insert('block_class')->fields(array('module' => $module, 'delta' => $delta, 'css_class' => $class))->execute();
+      }
+    }
+  }
+}

@@ -1,0 +1,105 @@
+ul.nice-menu {
+  color: #fff;
+  background: #cf4913;
+  list-style: none outside none;
+  position: relative;
+  z-index: 5;
+  border-radius: 6px;
+  padding: 0;
+  margin: 0
+}
+
+ul.nice-menu li a:hover {
+  background: #f29b68;
+  text-decoration: none;
+}
+
+ul.nice-menu li a:active {
+  text-decoration: none;
+}
+
+ul.nice-menu li {
+  border: 0;
+  background-color: #cf4913;
+  float: left;
+}
+ul.nice-menu li.even {
+  /* Create short border */
+  height: 14px;
+  border-left: 1px solid #ffd9b0;
+  border-right: 1px solid #ffd9b0;
+  margin-top: 7px;
+}
+
+ul.nice-menu li.even a {
+  /* Create short border */
+  margin-top: -7px;
+}
+
+ul.nice-menu li.even a:hover {
+  background: #f29b68;
+  text-decoration: none;
+}
+
+ul.nice-menu li.even a:active {
+  background: #f29b68;
+  text-decoration: none;
+}
+
+ul.nice-menu li.even ul li a {
+  /* Stop the affect of the above style */
+  margin-top: 0;
+}
+
+ul.nice-menu li a {
+  padding: 0.3em 5px;
+  background: #cf4913;
+  color: white;
+  margin: 0 5px;
+  height: 25px;
+  line-height: 2em;
+  font-size: 13px;
+}
+
+ul.nice-menu li ul {
+  padding: 0;
+  -moz-box-shadow:    -1px 1px 2px 1px #888a85;
+  -webkit-box-shadow: -1px 1px 2px 1px #888a85;
+  box-shadow:         -1px 1px 2px 1px #888a85;
+}
+
+ul.nice-menu-down li {
+    border: 0;
+}
+ul.nice-menu-down li li {
+    border-top: 0 none;
+}
+ul.nice-menu-down ul {
+    left: 0;
+}
+ul.nice-menu-down ul li {
+    clear: both;
+}
+ul.nice-menu-down li ul li ul {
+    left: 12.5em;
+    top: -1px;
+}
+ul.nice-menu li.menuparent a {
+    background: url("../../../modules/nice_menus/arrow-down.png") no-repeat scroll right #cf4913;
+    padding-right: 25px; /* Space for the down arrow */
+}
+
+ul.nice-menu li.menuparent ul li a{
+    background: none;
+}
+
+ul.nice-menu li {
+    background-image: none;
+    margin: 0;
+    padding-left: 0;
+}
+
+img.menuicon {
+  vertical-align: middle;
+  width: 25px;
+}

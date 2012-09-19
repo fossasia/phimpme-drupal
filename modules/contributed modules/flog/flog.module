@@ -1,0 +1,109 @@
+<?php
+// $Id: flog.module,v 1.4 2011/01/04 21:06:52 dwightaspinwall Exp $
+
+/**
+ * @file
+ * File logger.  Dump a variable to a configurable file.
+ *
+ * This is a simple module that allows developers to configure a log file from within Drupal and
+ * dumps variables to it from within a running Drupal app.  Its sole function is to support 
+ * debugging, and avoids the awkwardness of dumping variables either to the console or to the 
+ * watchdog table.  Instead, using the unix tail command, a developer can easily view debugging 
+ * output.  This is particularly useful when dumping large data structures such as nodes, menus,
+ * views, etc.
+ */
+
+/**
+ * Implementation of hook_menu()
+ */
+function flog_menu() {
+  $items['admin/config/development/flog'] = array(
+    'title' => 'File logging',
+    'description' => 'Simple file-based logging.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('flog_settings'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'flog.admin.inc',
+  );
+  
+  return $items;
+}
+
+/**
+ * Dump a variable to a file.
+ *
+ * @param $var
+ *  The variable you wish to dump.  Formatted using print_r()
+ * @param $label
+ *  An optional label to include with the output.
+ * @param $filename
+ *  An optional filename to write to. If not provided uses the default.
+ * @return
+ *  TRUE: file write succeeded
+ *  FALSE: file write failed
+ *
+ * @see print_r()
+ */
+function flog_it($var, $label = NULL, $filename = NULL) {
+  
+  if (!variable_get('flog_enabled', 0)) {
+    return FALSE;
+  }
+  
+  if (!($path = variable_get('flog_path', '/var/log'))) {
+    watchdog('flog', 'No path defined for log file.', array(), WATCHDOG_ERROR);
+    return FALSE;
+  }
+
+  if (!isset($filename)) {
+    if (!($filename = variable_get('flog_file', 'drupal.log'))) {
+      watchdog('flog', 'No name defined for default log file.', array(), WATCHDOG_ERROR);
+      return FALSE;
+    }
+  }
+
+  $logfile = $path . '/' . $filename;    
+  
+  $date_format = variable_get('flog_date', 'Y-m-d H:i:s');
+  $formatted_var = print_r($var, TRUE);
+  
+  $output = $date_format ? '[' . date($date_format) . '] ' : '';
+  $output .= $label ? '(' . $label . ') ' : '';
+  $output .= $formatted_var . "\n";
+  
+  // Open the log file, or create it if it doesn't exist.
+  if (!$handle = fopen($logfile, 'a')) {
+    watchdog('flog', 'Cannot open log file %file', array('%file' => $logfile), WATCHDOG_ERROR);
+    return FALSE;
+  }
+  if (fwrite($handle, $output) === FALSE) {
+    watchdog('flog', 'Cannot write log file %file', array('%file' => $logfile), WATCHDOG_ERROR);
+    return FALSE;
+  }
+
+  fclose($handle);
+  return TRUE;
+}
+
+/**
+ * Dump the php stack to a file using debug_backtrace().
+ *
+ * @param $label
+ *  An optional label to include with the output.
+ * @param $filename
+ *  An optional filename to write to. If not provided uses the default.
+ * @return
+ *  TRUE: file write succeeded
+ *  FALSE: file write failed
+ *
+ * @see print_r()
+ * @see debug_backtrace()
+ */
+function flog_stack($label = 'STACK', $filename = NULL) {
+  $trace = debug_backtrace();
+  foreach ($trace as $trace_item) {
+    $results .= $trace_item['function'] . ', from line ' . $trace_item['line'] . " in\n";
+  }
+  return flog_it($results, $label, $filename);
+}
+

@@ -1,0 +1,437 @@
+<?php
+
+/**
+ * @file
+ * Tests for location_cck.module.
+ */
+
+require_once drupal_get_path('module', 'location') . '/tests/location_testcase.php';
+
+class LocationCCKTest extends LocationTestCase {
+  /**
+   * A global administrative user.
+   */
+  var $admin_user;
+
+  /**
+   * A global normal user.
+   */
+  var $normal_user;
+
+  /**
+   * A default content type.
+   */
+  var $content_type;
+
+  function getInfo() {
+    return array(
+      'name' => t('Location CCK checks'),
+      'description' => t('Test corner cases of the CCK Location module.'),
+      'group' => t('Location'),
+    );
+  }
+
+  function setUp() {
+    parent::setUp('location', 'content', 'location_cck', 'devel');
+    $this->admin_user = $this->drupalCreateUser(array('administer nodes', 'submit latitude/longitude', 'administer site configuration', 'access administration pages', 'administer content types'));
+    $this->normal_user = $this->drupalCreateUser(array('access content'));
+
+    $this->drupalLogin($this->admin_user);
+  }
+
+  function addLocationContentType(&$settings, $add = array()) {
+
+    $field_name = 'loctest';
+
+    // Let the caller mess with some relevant cck stuff.
+    $required = isset($add['cck_required']) ? $add['cck_required'] : FALSE;
+    $multiple = isset($add['cck_multiple']) ? $add['cck_multiple'] : 0;
+    unset($add['cck_required']);
+    unset($add['cck_multiple']);
+
+    // find a non-existent random type name.
+    do {
+      $name = strtolower($this->randomName(3, 'type_'));
+    } while (node_get_types('type', $name));
+
+    $form = array(
+      'name' => $name,
+      'type' => $name,
+    );
+
+    $this->flattenPostData($form);
+    //$add = array('location_settings' => $add);
+    //$this->flattenPostData($add);
+    //$settings = array_merge($settings, $add);
+    $this->drupalPost('admin/content/types/add', $form, 'Save content type');
+    $this->refreshVariables();
+
+    $form = array(
+      '_add_new_field' => array(
+        'label' => 'Location',
+        'weight' => 10,
+//        'hidden_name' => '_add_new_field',
+        'field_name' => $field_name,
+        'type' => 'location',
+        'widget_type' => 'location',
+      ),
+    );
+    $this->flattenPostData($form);
+    $this->drupalPost('admin/content/node-type/'. str_replace('_', '-', $name) .'/fields', $form, 'Save');
+
+    $this->refreshVariables();
+    drupal_get_schema(NULL, TRUE);
+
+    // Get the (settable) defaults.
+    $defaults = $this->getLocationFieldDefaults();
+
+    $form = array(
+      'required' => $required,
+      'multiple' => $multiple,
+      'location_settings' => array(
+        'form' => array(
+          'fields' => $defaults,
+        ),
+        // 'display'
+      ),
+    );
+
+    $this->flattenPostData($form);
+    $add = array('location_settings' => $add);
+    $this->flattenPostData($add);
+
+    $this->drupalPost(NULL, $form, 'Save field settings');
+
+    // @@@ This is stupid, but I don't know the api for pulling this stuff up.
+    // @@@ _content_type_info() perhaps?
+    $result = db_query("SELECT global_settings FROM {content_node_field} WHERE field_name = 'field_%s' AND type = 'location'", $field_name);
+    $row = db_fetch_object($result);
+    $settings = array();
+    $settings = unserialize($row->global_settings);
+    $settings = $settings['location_settings'];
+
+    $this->refreshVariables();
+
+    // Reset the schema again, if it was a multiple value field added,
+    // schema has a new table to worry about.
+    drupal_get_schema(NULL, TRUE);
+
+    // Reset the content type info in the context of the test framework.
+    // This took me way too long to figure out.
+    _content_type_info(TRUE);
+
+    return $name;
+  }
+
+  /**
+   * Create a location via cck.
+   */
+  function testCreateLocation() {
+    $settings = array();
+    $location_type = $this->addLocationContentType($settings);
+
+    $location1_name = $this->randomName();
+
+    $node = $this->drupalCreateNode(array(
+      'type' => $location_type,
+      'field_loctest' => array(
+        array(
+          'name' => $location1_name,
+          'street' => '48072 289th St.',
+          'province' => 'SD',
+          'country' => 'us',
+  //        'location_settings' => $settings,
+        ),
+      ),
+    ));
+    cache_clear_all();
+
+    // Reload the node.
+    $node2 = node_load($node->nid, NULL, TRUE);
+    $location = $node2->field_loctest[0];
+
+    $this->assertEqual($location1_name, $location['name'], t('Testing basic save/load'));
+
+  }
+
+  function testLocpickOnly() {
+    $settings = array();
+    $location_type = $this->addLocationContentType($settings);
+
+    $location1_name = $this->randomName();
+
+    $node = $this->drupalCreateNode(array(
+      'type' => $location_type,
+      'field_loctest' => array(
+        array(
+          'locpick' => array(
+            'user_latitude' => '44.25',
+            'user_longitude' => '-10.25',
+          ),
+//          'location_settings' => $settings,
+        ),
+      ),
+    ));
+
+    // Reload the node.
+    $node2 = node_load($node->nid, NULL, TRUE);
+    $this->pass(var_export($node2->locations, TRUE));
+    $this->assertEqual($node2->field_loctest[0]['latitude'], 44.25, t('Testing coordinate-only save/load'));
+  }
+
+  function testMultipleLocationOnSingleNode() {
+    $settings = array();
+    $location_type = $this->addLocationContentType($settings, array('cck_multiple' => 10));
+
+    $location1_name = $this->randomName();
+    $location2_name = $this->randomName();
+    $location3_name = $this->randomName();
+
+    $node = $this->drupalCreateNode(array(
+      'type' => $location_type,
+      'field_loctest' => array(
+        array(
+          'name' => $location1_name,
+//          'location_settings' => $settings,
+        ),
+        array(
+          'name' => $location2_name,
+//          'location_settings' => $settings,
+        ),
+        array(
+          'name' => $location3_name,
+//          'location_settings' => $settings,
+        ),
+      ),
+    ));
+
+    // Reload the node.
+    $node2 = node_load($node->nid, NULL, TRUE);
+
+    $this->assertEqual($location1_name, $node2->field_loctest[0]['name'], t('Testing multi location 1/3'));
+    $this->assertEqual($location2_name, $node2->field_loctest[1]['name'], t('Testing multi location 2/3'));
+    $this->assertEqual($location3_name, $node2->field_loctest[2]['name'], t('Testing multi location 3/3'));
+    $this->assertNotEqual($node2->field_loctest[0]['lid'], $node2->field_loctest[1]['lid'], t('Ensuring location id uniqueness'));
+    $this->assertNotEqual($node2->field_loctest[1]['lid'], $node2->field_loctest[2]['lid'], t('Ensuring location id uniqueness'));
+    $this->assertNotEqual($node2->field_loctest[2]['lid'], $node2->field_loctest[0]['lid'], t('Ensuring location id uniqueness'));
+  }
+
+  function testSharedLocation() {
+    $settings = array();
+    $location_type = $this->addLocationContentType($settings);
+
+    $location1_name = $this->randomName();
+
+    $node = $this->drupalCreateNode(array(
+      'type' => $location_type,
+      'field_loctest' => array(
+        array(
+          'name' => $location1_name,
+//          'location_settings' => $settings,
+        ),
+      ),
+    ));
+
+    // Reload the node.
+    $node = node_load($node->nid, NULL, TRUE);
+
+    // Get the full location
+    $location = $node->field_loctest[0];
+
+    $node2 = $this->drupalCreateNode(array(
+      'type' => $location_type,
+      'field_loctest' => array(
+        0 => $location,
+      ),
+    ));
+
+    // Reload second node.
+    $node2 = node_load($node2->nid, NULL, TRUE);
+
+    $this->assertNotEqual($node->nid, $node2->nid, t('Ensuring nodes are seperate'));
+    $this->pass(var_export($node, TRUE));
+    $this->pass(var_export($node2, TRUE));
+    $this->assertEqual($node->field_loctest[0]['lid'], $node2->field_loctest[0]['lid'], t('Testing shared location'));
+
+    $this->deleteNode($node->nid);
+
+    // Force another reload.
+    $node2 = node_load($node2->nid, NULL, TRUE);
+
+    $this->assertEqual($node2->field_loctest[0]['lid'], $location['lid'], t('Ensuring shared location is not prematurely garbage collected'));
+
+    $this->deleteNode($node2->nid);
+
+    $result = db_query('SELECT * FROM {location} WHERE lid = %d', $location['lid']);
+    if ($row = db_fetch_object($result)) {
+      $this->fail(t('Ensuring shared location is garbage collected'));
+    }
+    else {
+      $this->pass(t('Ensuring shared location is garbage collected'));
+    }
+  }
+
+  function testNodeRevisionCOW() {
+    $settings = array();
+    $location_type = $this->addLocationContentType($settings, array('cck_multiple' => 10));
+
+    $location1_name = $this->randomName();
+    $location2_name = $this->randomName();
+    $location3_name = $this->randomName();
+
+    $node = $this->drupalCreateNode(array(
+      'type' => $location_type,
+      'field_loctest' => array(
+        0 => array( // First
+          'name' => $location1_name,
+//          'location_settings' => $settings,
+        ),
+        1 => array( // Second
+          'name' => $location2_name,
+//          'location_settings' => $settings,
+        ),
+      ),
+    ));
+
+    // Reload the node.
+    $node = node_load($node->nid, NULL, TRUE);
+
+    $changes = array(
+      'revision' => TRUE,
+      'log' => $this->randomName(20),
+      'field_loctest' => array(
+        0 => array( // Delete First
+          'delete_location' => TRUE,
+        ),
+        2 => array( // Third
+          'name' => $location3_name,
+        ),
+      ),
+    );
+    $this->flattenPostData($changes);
+    $this->drupalPost('node/'. $node->nid .'/edit', $changes, 'Save');
+
+    // Reload the node again.
+    $node1 = node_load($node->nid, $node->vid, TRUE);
+    $node2 = node_load($node->nid, NULL, TRUE);
+
+    // Ensure locations are in a consistent order.
+    $this->reorderLocations($node, 'field_loctest');
+    $this->reorderLocations($node1, 'field_loctest');
+    $this->reorderLocations($node2, 'field_loctest');
+
+    $this->assertEqual(count($node1->field_loctest), 2, t('Ensuring second revision did not affect first revision'));
+
+    $this->pass(count($node1->field_loctest));
+    $this->assertEqual($node->field_loctest[0]['lid'], $node1->field_loctest[0]['lid'], t('Ensuring second revision did not affect first revision'));
+    $this->assertEqual($node->field_loctest[1]['lid'], $node1->field_loctest[1]['lid'], t('Ensuring second revision did not affect first revision'));
+
+    $this->assertEqual(count($node2->field_loctest), 2, t('Ensuring second revision does not have stealth locations'));
+
+    // Delete first revision.
+    db_query("DELETE FROM {node_revisions} WHERE nid = %d AND vid = %d", $node1->nid, $node1->vid);
+    node_invoke_nodeapi($node1, 'delete revision');
+
+    $result = db_query('SELECT * FROM {location} WHERE lid = %d', $node1->field_loctest[0]['lid']);
+    if ($row = db_fetch_object($result)) {
+      $this->fail(t('Ensuring location on deleted revision is garbage collected'));
+    }
+    else {
+      $this->pass(t('Ensuring location on deleted revision is garbage collected'));
+    }
+
+    $result = db_query('SELECT * FROM {location} WHERE lid = %d', $node1->field_loctest[1]['lid']);
+    if ($row = db_fetch_object($result)) {
+      $this->pass(t('Ensuring shared location on deleted revision is NOT garbage collected'));
+    }
+    else {
+      $this->fail(t('Ensuring shared location on deleted revision is NOT garbage collected'));
+    }
+  }
+
+  function testNodeRevisionCleanup() {
+    $settings = array();
+    $location_type = $this->addLocationContentType($settings);
+
+    $location1_name = $this->randomName();
+
+    $node = $this->drupalCreateNode(array(
+      'type' => $location_type,
+      'field_loctest' => array(
+        array( // First
+          'name' => $location1_name,
+//          'location_settings' => $settings,
+        ),
+      ),
+    ));
+
+    // Reload the node.
+    $node = node_load($node->nid, NULL, TRUE);
+
+    $changes = array(
+      'revision' => TRUE,
+      'log' => $this->randomName(20),
+//      'field_loctest' => array(
+//        $node->field_loctest[0],
+//      ),
+    );
+    $this->flattenPostData($changes);
+    $this->drupalPost('node/'. $node->nid .'/edit', $changes, 'Save');
+
+    // Reload the node again.
+    $node1 = node_load($node->nid, $node->vid, TRUE);
+    $node2 = node_load($node->nid, NULL, TRUE);
+
+    $this->deleteNode($node->nid);
+
+    $result = db_query('SELECT * FROM {location} WHERE lid = %d', $node1->field_loctest[0]['lid']);
+    if ($row = db_fetch_object($result)) {
+      $this->fail(t('Ensuring all revisions are cleaned up when a multiple revision node is deleted'));
+    }
+    else {
+      $this->pass(t('Ensuring all revisions are cleaned up when a multiple revision node is deleted'));
+    }
+  }
+
+  function testCOWConservation() {
+    $settings = array();
+    $location_type = $this->addLocationContentType($settings);
+
+    $location1_name = $this->randomName();
+
+    $node = $this->drupalCreateNode(array(
+      'type' => $location_type,
+      'field_loctest' => array(
+        0 => array(
+          'name' => $location1_name,
+          'location_settings' => $settings,
+        ),
+      ),
+    ));
+
+    // Reload the node.
+    $node = node_load($node->nid, NULL, TRUE);
+
+    $changes = array(
+      'field_loctest' => array(
+        0 => array(
+          // Update name.
+          'name' => $location1_name .'_CHANGE',
+        ),
+      ),
+    );
+    $this->flattenPostData($changes);
+    $this->drupalPost('node/'. $node->nid .'/edit', $changes, 'Save');
+
+    // Reload the node again.
+    $node1 = node_load($node->nid, NULL, TRUE);
+
+    // Ensure locations are in a consistent order.
+    $this->reorderLocations($node, 'field_loctest');
+    $this->reorderLocations($node1, 'field_loctest');
+
+    $this->assertEqual($node->field_loctest[0]['lid'], $node1->field_loctest[0]['lid'], t('Ensuring LIDs are conserved'));
+
+  }
+
+}

@@ -1,0 +1,23 @@
+** Work in progress **
+
+Node Markers:
+
+  function theme_{nodetype}_gmapnodelabel($node, $opt);
+  function theme_gmapnodelabel($node, $opt);
+
+  $opt is an extra parameter passed by the dynamic info box loader.
+
+  Example:
+<?php
+function theme_image_gmapnodelabel($n) {
+  $out = '<a href="'. url('node/'. $n->nid) .'">'. check_plain($n->title) .'</a> <br>';
+  $out .= image_display($n, 'thumbnail');
+  return $out;
+}
+?>
+
+
+Drupal 6 theming updates:
+
+*_gmapnodelabel changed to gmap_location_infowindow_node__*.
+gmap_location_user_html changed to gmap_location_infowindow_user.

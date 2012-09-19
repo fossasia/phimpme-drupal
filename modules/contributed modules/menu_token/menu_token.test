@@ -1,0 +1,54 @@
+<?php
+
+/**
+ * @file
+ * Menu Token tests.
+ */
+
+
+class MenuTokenTestCase extends DrupalWebTestCase {
+  public $admin_user;
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Menu Token test',
+      'description' => 'Create tokenized menu item.',
+      'group' => 'Menu Token',
+    );
+  }
+
+  /**
+   * Enable modules and create users with specific permissions.
+   */
+  function setUp() {
+    parent::setUp('token', 'menu_token');
+
+    // Create user and login.
+    $this->admin_user = $this->drupalCreateUser(array('administer menu'));
+    $this->drupalLogin($this->admin_user);
+  }
+
+  /**
+   * Create menu item and check it works properly.
+   */
+  function testCreateMenuItem() {
+    // Add new menu item.
+    $edit = array(
+      'link_title' => '[current-user:name]',
+      'link_path' => 'user/[current-user:uid]',
+      'menu_token_enabled' => TRUE,
+    );
+    $this->drupalPost('admin/structure/menu/manage/user-menu/add', $edit, t('Save'));
+
+    // Go to front page and assert menu item exists.
+    $this->drupalGet('');
+    $admin_user = $this->admin_user;
+    $this->assertLink($admin_user->name, 0, t('Tokenized menu item found by title.'), 'Menu token');
+    $this->assertLinkByHref('user/' . $admin_user->uid, 0, t('Tokenized menu item found by href.'), 'Menu token');
+
+    // Logout and assert that our menu item is not shown to anonymous user.
+    $this->drupalLogout();
+    $this->drupalGet('');
+    $this->assertNoLinkByHref('user/0', t('Tokenized link user/[uid] not shown to anonymous user.'), 'Menu token');
+  }
+}

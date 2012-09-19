@@ -1,0 +1,467 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function plupload_menu() {
+  $items['plupload-handle-uploads'] = array(
+    'title' => 'Handles uploads',
+    'page callback' => 'plupload_handle_uploads',
+    'type' => MENU_CALLBACK,
+    'access callback' => 'plupload_upload_access',
+    'access arguments' => array('access content'),
+  );
+  $items['plupload-test'] = array(
+    'title' => 'Test Plupload',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('plupload_test'),
+    //@todo: change this to something appropriate, not sure what.
+    'access arguments' => array('Administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Verifies the token for this request.
+ */
+function plupload_upload_access() {
+  foreach (func_get_args() as $permission) {
+    if (!user_access($permission)) {
+      return FALSE;
+    }
+  }
+  return !empty($_REQUEST['plupload_token']) && drupal_valid_token($_REQUEST['plupload_token'], 'plupload-handle-uploads');
+}
+
+
+function plupload_test($form, &$form_state) {
+  $form['pud'] = array(
+    '#type' => 'plupload',
+    '#title' => 'Plupload',
+    //'#validators' => array(...);
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  );
+
+  return $form;
+}
+
+function plupload_test_submit($form, &$form_state) {
+  $saved_files = array();
+  $scheme = variable_get('file_default_scheme', 'public') . '://';
+  // We can't use file_save_upload() because of http://www.jacobsingh.name/content/tight-coupling-no-not
+  //file_uri_to_object();
+  foreach ($form_state['values']['pud'] as $uploaded_file) {
+    if ($uploaded_file['status'] == 'done') {
+      $source = $uploaded_file['tmppath'];
+      $destination = file_stream_wrapper_uri_normalize($scheme . $uploaded_file['name']);
+      // Rename it to its original name, and put it in its final home.
+      // Note - not using file_move here because if we call file_get_mime
+      // (in file_uri_to_object) while it has a .tmp extension, it horks.
+      $destination = file_unmanaged_move($source, $destination, FILE_EXISTS_RENAME);
+      $file = plupload_file_uri_to_object($destination);
+      file_save($file);
+      $saved_files[] = $file;
+    }
+    else {
+      // @todo: move this to element validate or something and clean up t().
+      form_set_error('pud', "Upload of {$uploaded_file['name']} failed");
+    }
+  }
+}
+
+/**
+ * Implements hook_element_info().
+ */
+function plupload_element_info() {
+  $types = array();
+  $module_path = drupal_get_path('module', 'plupload');
+  $types['plupload'] = array(
+    '#input' => TRUE,
+    '#attributes' => array('class' => array('plupload-element')),
+    // @todo
+    //'#element_validate' => array('file_managed_file_validate'),
+    '#theme_wrappers' => array('form_element'),
+    '#theme' => 'container',
+    '#value_callback' => 'plupload_element_value',
+    '#attached' => array(
+      'library' => array(array('plupload', 'plupload')),
+      'js' => array($module_path . '/plupload.js'),
+      'css' => array($module_path . '/plupload.css'),
+    ),
+    '#process' => array('plupload_element_process'),
+    '#element_validate' => array('plupload_element_validate'),
+    '#pre_render' => array('plupload_element_pre_render'),
+  );
+  return $types;
+}
+
+function plupload_element_value(&$element, $input = FALSE, $form_state = NULL) {
+  $id = $element['#id'];
+  $files = array();
+  foreach ($form_state['input'] as $key => $value) {
+    if (preg_match('/' . $id . '_([0-9]+)_(.*)/', $key, $reg)) {
+      $i = $reg[1];
+      $key = $reg[2];
+
+      // Only add the keys we expect.
+      if (!in_array($key, array('tmpname', 'name', 'status'))) {
+        continue;
+      }
+
+      // Munge the submitted file names for security.
+      //
+      // Similar munging is normally done by file_save_upload(), but submit
+      // handlers for forms containing plupload elements can't use
+      // file_save_upload(), for reasons discussed in plupload_test_submit().
+      // So we have to do this for them.
+      //
+      // Note that we do the munging here in the value callback function
+      // (rather than during form validation or elsewhere) because we want to
+      // actually modify the submitted values rather than reject them outright;
+      // file names that require munging can be innocent and do not necessarily
+      // indicate an attempted exploit. Actual validation of the file names is
+      // performed later, in plupload_element_validate().
+      if (in_array($key, array('tmpname', 'name'))) {
+        // Find the whitelist of extensions to use when munging. If there are
+        // none, we'll be adding default ones in plupload_element_process(), so
+        // use those here.
+        if (isset($element['#upload_validators']['file_validate_extensions'][0])) {
+          $extensions = $element['#upload_validators']['file_validate_extensions'][0];
+        }
+        else {
+          $validators = _plupload_default_upload_validators();
+          $extensions = $validators['file_validate_extensions'][0];
+        }
+        $value = file_munge_filename($value, $extensions, FALSE);
+        // To prevent directory traversal issues, make sure the file name does
+        // not contain any directory components in it. (This more properly
+        // belongs in the form validation step, but it's simpler to do here so
+        // that we don't have to deal with the temporary file names during form
+        // validation and can just focus on the final file name.)
+        //
+        // This step is necessary since this module allows a large amount of
+        // flexibility in where its files are placed (for example, they could
+        // be intended for public://subdirectory rather than public://, and we
+        // don't want an attacker to be able to get them back into the top
+        // level of public:// in that case).
+        $value = rtrim(basename($value), '.');
+      }
+
+      // The temporary file name has to be processed further so it matches what
+      // was used when the file was written; see plupload_handle_uploads().
+      if ($key == 'tmpname') {
+        $value = _plupload_fix_temporary_filename($value);
+        // We also define an extra key 'tmppath' which is useful so that submit
+        // handlers do not need to know which directory plupload stored the
+        // temporary files in before trying to copy them.
+        $files[$i]['tmppath'] = variable_get('plupload_temporary_uri', 'temporary://') . $value;
+      }
+      elseif ($key == 'name') {
+        if (module_exists('transliteration')) {
+          $value = transliteration_clean_filename($value);
+        }
+      }
+
+      // Store the final value in the array we will return.
+      $files[$i][$key] = $value;
+    }
+  }
+  return $files;
+}
+
+/**
+ * #process callback.
+ */
+function plupload_element_process($element) {
+  if (!isset($element['#upload_validators'])) {
+    $element['#upload_validators'] = array();
+  }
+  $element['#upload_validators'] += _plupload_default_upload_validators();
+  return $element;
+}
+
+/**
+ * Element validation handler for a Plupload element.
+ */
+function plupload_element_validate($element, &$form_state) {
+  foreach ($element['#value'] as $file_info) {
+    // @todo Here we create a $file object for a file that doesn't exist yet,
+    //   because saving the file to its destination is done in a submit handler.
+    //   Need more investigation into what else is needed for it to be okay to
+    //   call file_validate(). For example, file_validate_size() will not have
+    //   access to a meaningful $file->filesize unless we set that here. For
+    //   now, we can at least rely on file_validate_extensions() running
+    //   successfully.
+    $destination = variable_get('file_default_scheme', 'public') . '://' . $file_info['name'];
+    $file = plupload_file_uri_to_object($destination);
+    foreach (file_validate($file, $element['#upload_validators']) as $error_message) {
+      form_error($element, $error_message);
+    }
+  }
+}
+
+/**
+ * #pre_render callback to attach JavaScript settings for the plupload element.
+ */
+function plupload_element_pre_render($element) {
+  $settings = isset($element['#plupload_settings']) ? $element['#plupload_settings'] : array();
+
+  // The Plupload library supports client-side validation of file extension, so
+  // pass along the information for it to do that. However, as with all client-
+  // side validation, this is a UI enhancement only, and not a replacement for
+  // server-side validation.
+  if (empty($settings['filters']) && isset($element['#upload_validators']['file_validate_extensions'][0])) {
+    $settings['filters'][] = array(
+      // @todo Some runtimes (e.g., flash) require a non-empty title for each
+      //   filter, but I don't know what this title is used for. Seems a shame
+      //   to hard-code it, but what's a good way to avoid that?
+      'title' => t('Allowed files'),
+      'extensions' => str_replace(' ', ',', $element['#upload_validators']['file_validate_extensions'][0]),
+    );
+  }
+
+  if (empty($element['#description'])) {
+    $element['#description'] = '';
+  }
+  $element['#description'] = theme('file_upload_help', array('description' => $element['#description'], 'upload_validators' => $element['#upload_validators']));
+
+  $element['#attached']['js'][] = array(
+    'type' => 'setting',
+    'data' => array('plupload' => array($element['#id'] => $settings)),
+  );
+
+  return $element;
+}
+
+/**
+ * Returns the path to the plupload library.
+ */
+function _plupload_library_path() {
+  return variable_get('plupload_library_path', module_exists('libraries') ? libraries_get_path('plupload') : 'sites/all/libraries/plupload');
+}
+
+/**
+ * Implements hook_library().
+ */
+function plupload_library() {
+  $library_path = _plupload_library_path();
+  $libraries['plupload'] = array(
+    'title' => 'Plupload',
+    'website' => 'http://www.plupload.com',
+    'version' => '1.5.1.1',
+    'js' => array(
+      // @todo - only add gears JS if gears is an enabled runtime.
+      // $library_path . '/js/gears_init.js' => array(),
+      $library_path . '/js/jquery.plupload.queue/jquery.plupload.queue.js' => array(),
+      $library_path . '/js/plupload.full.js' => array(),
+      array('type' => 'setting', 'data' => array('plupload' => array(
+        // Element-specific settings get keyed by the element id (see
+        // plupload_element_pre_render()), so put default settings in
+        // '_default' (Drupal element ids do not have underscores, because
+        // they have hyphens instead).
+        '_default' => array(
+          // @todo Provide a settings page for configuring these.
+          'runtimes' => 'html5,flash,html4',
+          'url' => url('plupload-handle-uploads', array('query' => array('plupload_token' => drupal_get_token('plupload-handle-uploads')))),
+          'max_file_size' => file_upload_max_size() . 'b',
+          'chunk_size' => '1mb',
+          'unique_names' => TRUE,
+          'flash_swf_url' => file_create_url($library_path . '/js/plupload.flash.swf'),
+          'silverlight_xap_url' => file_create_url($library_path . '/js/plupload.silverlight.xap'),
+        ),
+        // The plupload.js integration file in the module folder can do
+        // additional browser checking to remove unsupported runtimes. This is
+        // in addition to what is done by the Plupload library.
+        '_requirements' => array(
+          'html5' => array(
+            // The Plupload library recognizes Firefox 3.5 as supporting HTML 5,
+            // but Firefox 3.5 does not support the HTML 5 "multiple" attribute
+            // for file input controls. This makes the html5 runtime much less
+            // appealing, so we treat all Firefox versions less than 3.6 as
+            // ineligible for the html5 runtime.
+            'mozilla' => '1.9.2',
+          ),
+        ),
+      ))),
+    ),
+  );
+
+  if (module_exists('locale')) {
+    $module_path = drupal_get_path('module', 'plupload');
+    $libraries['plupload']['js'][$module_path . '/js/i18n.js'] = array('scope' => 'footer');
+  }
+
+  return $libraries;
+}
+
+function plupload_handle_uploads() {
+
+  // @todo: Implement file_validate_size();
+
+  // Added a variable for this because in HA environments, temporary may need
+  // to be a shared location for this to work.
+  $temp_directory = variable_get('plupload_temporary_uri', 'temporary://');
+  $writable = file_prepare_directory($temp_directory, FILE_CREATE_DIRECTORY);
+  if (!$writable) {
+    die('{"jsonrpc" : "2.0", "error" : {"code": 104, "message": "Failed to open temporary directory."}, "id" : "id"}');
+  }
+  // Try to make sure this is private via htaccess.
+  file_create_htaccess($temp_directory, TRUE);
+
+  // Chunk it?
+  $chunk = isset($_REQUEST["chunk"]) ? $_REQUEST["chunk"] : 0;
+
+  // Get and clean the filename.
+  $file_name = isset($_REQUEST["name"]) ? $_REQUEST["name"] : '';
+  $file_name = _plupload_fix_temporary_filename($file_name);
+
+  // Check the file name for security reasons; it must contain letters, numbers
+  // and underscores followed by a (single) ".tmp" extension. Since this check
+  // is more stringent than the one performed in plupload_element_value(), we
+  // do not need to run the checks performed in that function here. This is
+  // fortunate, because it would be difficult for us to get the correct list of
+  // allowed extensions to pass in to file_munge_filename() from this point in
+  // the code (outside the form API).
+  if (empty($file_name) || !preg_match('/^\w+\.tmp$/', $file_name)) {
+    die('{"jsonrpc" : "2.0", "error" : {"code": 105, "message": "Invalid temporary file name."}, "id" : "id"}');
+  }
+
+  // Look for the content type header
+  if (isset($_SERVER["HTTP_CONTENT_TYPE"])) {
+    $content_type = $_SERVER["HTTP_CONTENT_TYPE"];
+  }
+  if (isset($_SERVER["CONTENT_TYPE"])) {
+    $content_type = $_SERVER["CONTENT_TYPE"];
+  }
+
+  // Is this a multipart upload?
+  if (strpos($content_type, "multipart") !== FALSE) {
+    if (isset($_FILES['file']['tmp_name']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
+      // Open temp file
+      $out = fopen($temp_directory . $file_name, $chunk == 0 ? "wb" : "ab");
+      if ($out) {
+        // Read binary input stream and append it to temp file
+        $in = fopen($_FILES['file']['tmp_name'], "rb");
+
+        if ($in) {
+          while ($buff = fread($in, 4096)) {
+            fwrite($out, $buff);
+          }
+          fclose($in);
+        }
+        else {
+          die('{"jsonrpc" : "2.0", "error" : {"code": 101, "message": "Failed to open input stream."}, "id" : "id"}');
+        }
+
+        fclose($out);
+        drupal_unlink($_FILES['file']['tmp_name']);
+      }
+      else {
+        die('{"jsonrpc" : "2.0", "error" : {"code": 102, "message": "Failed to open output stream."}, "id" : "id"}');
+      }
+    }
+    else {
+      die('{"jsonrpc" : "2.0", "error" : {"code": 103, "message": "Failed to move uploaded file."}, "id" : "id"}');
+    }
+  }
+  else {
+    // Open temp file
+    $out = fopen($temp_directory . $file_name, $chunk == 0 ? "wb" : "ab");
+    if ($out) {
+      // Read binary input stream and append it to temp file
+      $in = fopen("php://input", "rb");
+
+      if ($in) {
+        while ($buff = fread($in, 4096)) {
+          fwrite($out, $buff);
+        }
+        fclose($in);
+      }
+      else {
+        die('{"jsonrpc" : "2.0", "error" : {"code": 101, "message": "Failed to open input stream."}, "id" : "id"}');
+      }
+
+      fclose($out);
+    }
+    else {
+      die('{"jsonrpc" : "2.0", "error" : {"code": 102, "message": "Failed to open output stream."}, "id" : "id"}');
+    }
+  }
+
+  // Return JSON-RPC response
+  die('{"jsonrpc" : "2.0", "result" : null, "id" : "id"}');
+}
+
+/**
+ * Returns a file object which can be passed to file_save().
+ *
+ * @param $uri
+ *  A string containing the URI, path, or filename.
+ * @return
+ *  A file object, or FALSE on error.
+ *
+ * @todo Replace with calls to this function with file_uri_to_object() when
+ * http://drupal.org/node/685818 is fixed in core.
+ */
+function plupload_file_uri_to_object($uri) {
+  global $user;
+  $uri = file_stream_wrapper_uri_normalize($uri);
+  $wrapper = file_stream_wrapper_get_instance_by_uri($uri);
+  $file = new StdClass;
+  $file->uid = $user->uid;
+  $file->filename = basename($uri);
+  $file->uri = $uri;
+  $file->filemime = file_get_mimetype($uri);
+  // This is gagged because some uris will not support it.
+  $file->filesize = @filesize($uri);
+  $file->timestamp = REQUEST_TIME;
+  $file->status = FILE_STATUS_PERMANENT;
+  return $file;
+}
+
+/**
+ * Fix the temporary filename provided by the plupload library.
+ *
+ * Newer versions of the plupload JavaScript library upload temporary files
+ * with names that contain the intended final prefix of the uploaded file
+ * (e.g., ".jpg" or ".png"). Older versions of the plupload library always use
+ * ".tmp" as the temporary file extension.
+ *
+ * We prefer the latter behavior, since although the plupload temporary
+ * directory where these files live is always expected to be private (and we
+ * protect it via .htaccess; see plupload_handle_uploads()), in case it ever
+ * isn't we don't want people to be able to upload files with an arbitrary
+ * extension into that directory.
+ *
+ * This function therefore fixes the plupload temporary filenames so that they
+ * will always use a ".tmp" extension.
+ *
+ * @param $filename
+ *   The original temporary filename provided by the plupload library.
+ *
+ * @return
+ *   The corrected temporary filename, with a ".tmp" extension replacing the
+ *   original one.
+ */
+function _plupload_fix_temporary_filename($filename) {
+  $pos = strpos($filename, '.');
+  if ($pos !== FALSE) {
+    $filename = substr_replace($filename, '.tmp', $pos);
+  }
+  return $filename;
+}
+
+/**
+ * Helper function to add defaults to $element['#upload_validators'].
+ */
+function _plupload_default_upload_validators() {
+  return array(
+    // See file_save_upload() for details.
+    'file_validate_extensions' => array('jpg jpeg gif png txt doc xls pdf ppt pps odt ods odp'),
+  );
+}

@@ -1,0 +1,124 @@
+<?php
+
+/**
+ * Implementation of hook_menu()
+ **/
+function contentapi_taxonomy_vocab_menu() {
+  $items = array();
+  $items['admin/config/services/contentapi/taxonomy'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'title' => 'Taxonomy',
+    'description' => 'Manage the Content Taxonomies for a service',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('contentapi_taxonomy_vocab_admin_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'contentapi_taxonomy_vocab.admin.inc',
+  );
+  return $items;
+} // end function contentapi_taxonomy_vocab_menu
+
+/**
+ * Implementation of hook_services_resources
+ * @return array
+ **/
+function contentapi_taxonomy_vocab_services_resources() {
+  $resource = array(
+    'content_taxonomy_vocab' => array(
+      'retrieve' => array(
+        'callback' => '_contentapi_taxonomy_vocab_retrieve',
+        'help' => t('Get a list of Taxonomy Terms'),
+        'access callback' => 'contentapi_taxonomy_vocab_access',
+        'args' => array(
+          array(
+            'name' => 'vid',
+            'optional' => TRUE,
+            'description' => 'Vocabulary ID',
+            'source' => array(
+              'path' => '0',
+            ),
+          ),
+        ),
+      ),
+      'index' => array(
+        'callback' => '_contentapi_taxonomy_vocab_index',
+        'help' => t('Get a list of Taxonomy Vocabularies'),
+        'access callback' => 'contentapi_taxonomy_vocab_access',
+      ),
+    ),
+  );
+
+  return $resource;
+} // end function contentapi_taxonomy_vocab_services_resources
+
+/**
+ * Callback for the content_taxonomy's retrieve resource
+ * @return array
+ **/
+function _contentapi_taxonomy_vocab_retrieve($vid) {
+  $vocabularies = variable_get('contentapi_taxonomy_vocab_allowed_vocabs', FALSE);
+  if (($vocabularies === FALSE || count($vocabularies) == 0) || in_array($vid, $vocabularies)) {
+    $term = taxonomy_vocabulary_load($vid);
+    if (isset($term) && !empty($term)) {
+      $term->terms = taxonomy_get_tree($vid);
+      return (object) array(
+        'vocabulary' => $term,
+      );
+    }
+  }
+} // end function _contentapi_taxonomy_vocab_retrieve
+
+/**
+ * Callback for the content_taxonomy's index resource
+ * @return array
+ **/
+function _contentapi_taxonomy_vocab_index() {
+  $query = '
+    SELECT
+      *
+    FROM
+      {taxonomy_vocabulary}';
+
+  $filters = array();
+  $args = array();
+  $vocabularies = variable_get('contentapi_taxonomy_vocab_allowed_vocabs', FALSE);
+  if ($vocabularies !== FALSE && count($vocabularies) > 0) {
+    $vocabFilter = array();
+    foreach ($vocabularies as $vocab) {
+      $vocabFilter[] = '?';
+      $args[] = $vocab;
+    }
+    $filters[] = sprintf('vid IN (%s)', implode(', ', $vocabFilter));
+  }
+
+  if (isset($_GET['vocab_search'])) {
+    $args[] = sprintf('%%%%%s%%', check_plain($_GET['vocab_search']));
+    $filters[] = 'name LIKE ?';
+  }
+
+  if (count($filters) > 0) {
+    $query .= sprintf('
+    WHERE
+      %s', implode(' AND ', $filters)); 
+  }
+
+  try {
+    $result = db_query($query, $args);
+  }
+  catch (Exception $e) {
+    return;
+  }
+
+  $results = array();
+  while ($row = $result->fetchAssoc()) {
+    $results[] = $row;
+  }
+  return $results;
+} // end function _contentapi_taxonomy_vocab_index
+
+/**
+ * Access function
+ * @return boolean
+ **/
+function contentapi_taxonomy_vocab_access() {
+  return TRUE;
+} // end function contentapi_taxonomy_vocab_access

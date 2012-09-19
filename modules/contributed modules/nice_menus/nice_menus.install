@@ -1,0 +1,34 @@
+<?php
+
+/**
+ * @file
+ *  Update functions for Nice menus.
+ */
+
+/**
+ * Implements hook_update_N().
+ */
+function nice_menus_update_6000() {
+  // Existing blocks need to be set to no caching.
+  $ret = array();
+  // TODO update_sql has been removed. Use the database API for any schema or data changes.
+  $ret[] = array() /* update_sql("UPDATE {block} SET cache = -1 WHERE module = 'nice_menus'") */;
+  // hook_update_N() no longer returns a $ret array. Instead, return
+  // nothing or a translated string indicating the update ran successfully.
+  // See http://drupal.org/node/224333#update_sql.
+  return t('TODO Add a descriptive string here to show in the UI.') /* $ret */;
+}
+
+/**
+ * Implements hook_update_N().
+ */
+function nice_menus_update_6001() {
+  // Switch the JS toggle variable name.
+  $old_setting = variable_get('nice_menus_ie', 1);
+  variable_set('nice_menus_js', $old_setting);
+  variable_del('nice_menus_ie');
+  // hook_update_N() no longer returns a $ret array. Instead, return
+  // nothing or a translated string indicating the update ran successfully.
+  // See http://drupal.org/node/224333#update_sql.
+  return t('TODO Add a descriptive string here to show in the UI.') /* array() */;
+}

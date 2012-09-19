@@ -1,0 +1,21 @@
+name = Content Migrate
+description = Migrate fields and field data from CCK D6 format to the D7 field format. Required to migrate data, can be disabled once all fields have been migrated.
+core = 7.x
+package = CCK
+files[] = content_migrate.module
+files[] = content_migrate.api.php
+files[] = includes/content_migrate.admin.inc
+files[] = includes/content_migrate.values.inc
+files[] = includes/content_migrate.drush.inc
+files[] = modules/content_migrate.text.inc
+files[] = modules/content_migrate.number.inc
+files[] = modules/content_migrate.optionwidgets.inc
+files[] = modules/content_migrate.filefield.inc
+files[] = tests/content_migrate.test
+
+; Information added by drupal.org packaging script on 2011-08-23
+version = "7.x-2.x-dev"
+core = "7.x"
+project = "cck"
+datestamp = "1314057963"
+

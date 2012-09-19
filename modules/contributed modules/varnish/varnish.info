@@ -1,0 +1,15 @@
+name = Varnish 
+description = "Provides integration with the Varnish HTTP accelerator."
+core = 7.x
+configure = admin/config/development/varnish
+package = Caching
+files[] = varnish.admin.inc
+files[] = varnish.cache.inc
+files[] = varnish.test
+
+; Information added by drupal.org packaging script on 2012-01-31
+version = "7.x-1.0-beta1"
+core = "7.x"
+project = "varnish"
+datestamp = "1328034066"
+

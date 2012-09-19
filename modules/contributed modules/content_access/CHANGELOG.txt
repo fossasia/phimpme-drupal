@@ -1,0 +1,22 @@
+Content Access 7.x-1.2-beta1, 2011-07-24
+--------------------------------------
+#1058526 by BenK, good_man: Rules 2.x integration.
+#572812 by NikLP, good_man: Add content type to permission title.
+#1135466 by Firewolf, videographics, good_man: Renaming a content type results
+  in notices.
+#1144510 by good_man: Fix roles selection in test case.
+#1110860 by FiNeX, eosrei, good_man: Content access rules integration -
+  missing function.
+#1159402 by FiNeX, dcmouyard, jjs, good_man: Wrong operations on rules
+  integration.
+#1057400 by xaverx, dooug, jhayzhon, cnolle, Firewolf, Bitnetix, maciej.zgadzaj,
+  karilu_ec, ChoY, BenK, good_man: Taxonomy access.
+#1097248 by ordermind, Itangalo, good_man: PDOException error 1062 when using
+  rules on create node.
+#1209004 by Itangalo, good_man: "Reset content permissions" action doesn't go
+  all the way.
+#1147526 by tmm360, good_man, Akaoni, danielb, Crusher, mithman, BenK, fago:
+  Unpublished nodes displayed to anonymous users.
+#1115794 by rorydflynn, Waldknoblauch, aocoder, good_man, SNaKeMe, cgross,
+  commanderflash, bryrock, enrikito, BenK, karilu_ec: Conflict with views
+  module.
