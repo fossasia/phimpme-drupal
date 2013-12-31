@@ -1,0 +1,577 @@
+<?php
+
+/**
+ * Implementation of hook_menu().
+ */
+function contentapi_menu() {
+  $items = array();
+
+  $items['admin/config/services/contentapi'] = array(
+    'title' => 'Content API Settings',
+    'description' => 'Customize the Content API.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('contentapi_settings'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  foreach (node_type_get_types() as $type) {
+    $items['admin/config/services/contentapi/' . $type->type] = array(
+      'title' => $type->name,
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('contentapi_nodetype_display_form', $type->type),
+      'access arguments' => array('administer site configuration'),
+      'type' => MENU_LOCAL_TASK,
+    );
+  }
+
+  return $items;
+}
+
+function contentapi_nodetype_display_form($form, &$form_state, $type) {
+  $fields = field_info_instances('node', $type);
+
+  $form = array();
+
+  $form['type'] = array(
+    '#type' => 'hidden',
+    '#value' => $type,
+  );
+
+  $hidden_fields = unserialize(variable_get("contentapi_$type", ''));
+
+  $form['fields'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Fields'),
+  );
+
+  foreach ($fields as $field => $info) {
+    // Only show 'field' fields
+    if (substr($field, 0, 6) == 'field_') {
+      $default = (is_array($hidden_fields) && in_array($field, $hidden_fields));
+      $form['fields'][$field] = array(
+        '#title' => check_plain($info['label']),
+        '#type' => 'checkbox',
+        '#default_value' => !$default
+      );
+    }
+  }
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit'
+  );
+
+  return $form;
+}
+
+function contentapi_nodetype_display_form_submit($form, &$form_state) {
+  $hidden_fields = array();
+  $name = $form_state['values']['type'];
+
+  foreach ($form_state['values'] as $key => $value) {
+    if (substr($key, 0, 6) == 'field_' && $value === 0) {
+      $hidden_fields[] = $key;
+    }
+  }
+
+  variable_set("contentapi_$name", serialize($hidden_fields));
+  drupal_set_message(t('The configuration options have been saved.'));
+}
+
+function contentapi_node_type($op, $info) {
+  if ($op == 'insert') {
+    $name = $info->type;
+    variable_set("contentapi_$name", serialize(array()));
+  }
+
+  if ($op == 'delete') {
+    $name = $info->type;
+    variable_del("contentapi_$name");
+  }
+}
+
+/**
+ * Drupal get_form function for the admin settings menu for the node resource.
+ */
+function contentapi_settings() {
+  $form = array();
+
+  $hidden_fields = unserialize(variable_get("contentapi_node_hidden_fields", ''));
+  $node_fields = array('created'  => 'created',
+                       'changed'  => 'changed',
+                       'title'    => 'title',
+                       'webUrl'   => 'webUrl',
+                       'nid'      => 'nid',
+                       'type'     => 'type',
+                       'body'     => 'body',
+                       'vid'      => 'vid',
+                       'taxonomy' => 'taxonomy',
+                       'language' => 'language'
+                 );
+  $defaults = array();
+
+  foreach ($node_fields as $field) {
+    $defaults[$field] = $field;
+    if (is_array($hidden_fields) && in_array($field, $hidden_fields)) {
+      unset($defaults[$field]);
+    }
+  }
+
+  $form['contentapi_node_hidden_fields'] = array(
+    '#type' => 'checkboxes',
+    '#options' => $node_fields,
+    '#default_value' => $defaults,
+    '#title' => 'Node fields',
+    '#description' => 'Only checked node fields will display in the api'
+  );
+
+  $form['contentapi_limit'] = array(
+    '#type' => 'textfield',
+    '#default_value' => variable_get('contentapi_limit', 10),
+    '#title' => 'Node return limit',
+    '#description' => 'Maximum number of nodes to return per api call'
+  );
+
+  $form['contentapi_sort_field'] = array(
+    '#type' => 'textfield',
+    '#default_value' => variable_get('contentapi_sort_field', 'created'),
+    '#title' => 'Default sort field'
+  );
+
+  $form['contentapi_sort_order'] = array(
+    '#type' => 'select',
+    '#options' => array('ASC' => 'Ascending', 'DESC' => 'Descending'),
+    '#title' => 'Default sort order',
+    '#default_value' => variable_get('contentapi_sort_order', 'DESC')
+  );
+
+  $form['contentapi_show_count'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Show count item as first result',
+    '#description' => 'Check to show an item that includes count, pages, itemsPerPage and currentPage',
+    '#default_value' => variable_get('contentapi_show_count', TRUE)
+  );
+
+  $options = array_map('check_plain', node_type_get_names());
+  $checked_options = variable_get('contentapi_content_types', '');
+
+  $form['contentapi_content_types'] = array(
+    '#type' => 'checkboxes',
+    '#options' => $options,
+    '#title' => 'Node Types to publish in API',
+    '#description' => 'Select the node types to publish in the api',
+    '#default_value' => $checked_options
+  );
+
+  return system_settings_form($form);
+}
+
+
+function contentapi_settings_validate($form, &$form_state) {
+  $hidden_fields = $form_state['values']['contentapi_node_hidden_fields'];
+
+  if ($hidden_fields) {
+    $hide_fields = array();
+    foreach ($hidden_fields as $field => $show) {
+      if ($show === 0) $hide_fields[] = $field;
+    }
+    $form_state['values']['contentapi_node_hidden_fields'] = serialize($hide_fields);
+  }
+
+  // TODO: add more validation
+}
+
+/**
+ * Implementation of hook_services_resources()
+ * @return array
+ */
+function contentapi_services_resources() {
+  $content_resource = array(
+    'content' => array(
+      'retrieve' => array(
+        'callback' => '_contentapi_retrieve',
+        'args' => array(
+          array(
+            'name' => 'nid',
+            'optional' => FALSE,
+            'source' => array('path' => 0),
+            'type' => 'int',
+            'description' => 'The nid of the node to get',
+          ),
+        ),
+        'access callback' => '_contentapi_access',
+        'access arguments' => array('view'),
+        'access arguments append' => TRUE,
+      ),
+      'index' => array(
+        'callback' => '_contentapi_index',
+        'access arguments' => array('access content'),
+      ),
+    ),
+  );
+
+  return $content_resource;
+}
+
+/**
+ * Determine whether the current user can access a node resource.
+ * Code from Services 3.x (drupal.org/project/services) _node_resource_access() function
+ *
+ * @param $op
+ *   One of view, update, create, delete per node_access().
+ * @param $args
+ *   Resource arguments passed through from the original request.
+ * @return bool
+ *
+ * @see node_access()
+ */
+function _contentapi_access($op = 'view', $args = array()) {
+  // Adds backwards compatability with regression fixed in #1083242
+  if (is_array($args[0])) {
+    if (key_exists('node', $args[0])) {
+      $args[0] = $args[0]['node'];
+    }
+  }
+
+  // Make sure we have an object or this all fails, some servers can
+  // mess up the types.
+  if (is_array($args[0])) {
+    $args[0] = (object) $args[0];
+  }
+  elseif (!is_array($args[0]) && !is_object($args[0])) {  //This is to determine if it is just a string happens on node/%NID
+    $args[0] = (object)array('nid' => $args[0]);
+  }
+
+  if ($op != 'create' && !empty($args)) {
+    $node = node_load($args[0]->nid);
+  }
+  elseif ($op == 'create') {
+    if (isset($args[0]->type)) {
+      $node = $args[0]->type;
+      return node_access($op, $node);
+    }
+    else {
+      return services_error(t('Node type is required'), 406);
+    }
+  }
+  if (isset($node->nid) && $node->nid) {
+    return node_access($op, $node);
+  }
+  else {
+    return services_error(t('Node @nid could not be found', array('@nid' => $args[0]->nid)), 404);
+  }
+}
+
+function contentapi_load_blacklisted_fields() {
+  $blacklist = array();
+
+  foreach (node_type_get_types() as $type) {
+    $type_name = $type->type;
+    $blacklist[$type_name] = unserialize(variable_get("contentapi_$type_name", ''));
+  }
+
+  return $blacklist;
+}
+
+/**
+ * Returns the results of a node_load() for the specified node.
+ *
+ * This returned node may optionally take content_permissions settings into
+ * account, based on a configuration setting.
+ *
+ * @param $nid
+ *   NID of the node we want to return.
+ * @param $fields
+ *   boolean value to toggle showing all fields related to a node, default false
+ * @return
+ *   Node object or FALSE if not found.
+ *
+ */
+function _contentapi_retrieve($nid, $fields = TRUE) {
+  global $language;
+  static $fields_blacklist;
+  static $hidden_fields;
+
+  $raw_node = node_load($nid);
+
+  $allowed_types = variable_get('contentapi_content_types', FALSE);
+  if ($allowed_types !== FALSE && !in_array($raw_node->type, array_values($allowed_types), TRUE)) {
+    return;
+  }
+
+  if (!is_array($fields_blacklist)) {
+    $fields_blacklist = contentapi_load_blacklisted_fields();
+  }
+
+  if (!is_array($hidden_fields)) {
+    $hide_fields = variable_get('contentapi_node_hidden_fields', '');
+    $hidden_fields = ($hide_fields) ? unserialize($hide_fields) : array();
+  }
+
+  // Only load published nodes
+  if ($raw_node->status != 1) {
+    return;
+  }
+
+  if ($raw_node) {
+    // Create a new node object with only the desired fields
+    // We are creating a whitelist of node fields that can be displayed to users
+    $node = new stdClass;
+    if (!in_array('nid', $hidden_fields)) $node->nid = $raw_node->nid;
+    if (!in_array('title', $hidden_fields)) $node->title = $raw_node->title;
+    if (!in_array('created', $hidden_fields)) $node->created = date('Y-m-d', $raw_node->created);
+    if (!in_array('changed', $hidden_fields)) $node->changed = date('Y-m-d', $raw_node->changed);
+    if (!in_array('type', $hidden_fields)) $node->type = $raw_node->type;
+    if (!in_array('webUrl', $hidden_fields)) $node->webUrl = url(drupal_get_path_alias('node/' . $raw_node->nid), array('absolute' => TRUE));
+    if (!in_array('language', $hidden_fields)) $node->language = $raw_node->language;
+
+    // Provide the Translation Node ID if Content Translation module enabled
+    if (module_exists('translation')) $node->tnid = $raw_node->tnid;
+
+    if ($fields) {
+      $lang = $raw_node->language;
+      if (!in_array('body', $hidden_fields))
+        $node->body = $raw_node->body[$lang];
+      if (!in_array('vid', $hidden_fields))
+        $node->vid = $raw_node->vid;
+
+      foreach ($raw_node as $key => $value) {
+        if (substr($key, 0, 6) == 'field_' && !in_array($key, $fields_blacklist[$raw_node->type])) {
+          $value = $raw_node->$key;
+          $node->fields[$key] = (isset($value[$lang])) ? $value[$lang] : $value;
+        }
+      }
+
+      if (!in_array('taxonomy', $hidden_fields)) {
+        $node->taxonomy = array();
+
+        $term_query = 'SELECT DISTINCT td.name, td.vid, td.tid
+                  FROM {taxonomy_index} ti
+                  LEFT JOIN {taxonomy_term_data} td
+                  ON ti.tid = td.tid
+                  WHERE ti.nid = :nid';
+        $term_results = db_query($term_query, array('nid' => $node->nid));
+
+        foreach ($term_results as $term) {
+          $node->taxonomy[] = $term;
+        }
+      }
+    }
+
+    $node->uri = services_resource_uri(array('content', $raw_node->nid));
+    return $node;
+  }
+  return services_error('Node nid ' . $nid . ' not found', 404);
+}
+
+/**
+ * Return an array of node objects based on input query parameters
+ *
+ * @return
+ *   An array of node objects.
+ */
+function _contentapi_index() {
+
+  // Match all field query parameters
+  // Fields are dynamic, so we use the field api to get all the fields and match against any input
+  // field parameters. We can then get a list of nids that match the corresponding fields.
+
+  // Build a list of nids that meet the conditions for input filters
+  $nids = array();
+  $params = array();
+
+  // All field queries must start with 'field_'
+  foreach ($_GET as $key => $value) {
+    if (substr($key, 0, 6) == 'field_') {
+      $params[$key] = $value;
+    }
+  }
+  // If cck query params were passed, get a list of nids that meet the query parameters from our helper function
+  if (!empty($params)) $nids = _contentapi_fields_query($params);
+
+  // Join any nids into our base node query
+  $field_nids = ($nids) ? ' AND n.nid in (' . implode(',', $nids) . ')' : '';
+
+  // Now that we've collected a series of nids, we'll perform a base query for node fields, taxonomy and include
+  // pagination, limit and sort order using only nids we've verified meet the query conditions
+
+  $params = array();
+  $args = array();
+  // Set filters for fields in the node table
+  if (isset($_GET['title'])) {
+    $params['title'] = check_plain($_GET['title']);
+  }
+  if (isset($_GET['created_before'])) {
+    $params['created_before'] = check_plain($_GET['created_before']);
+  }
+  if (isset($_GET['created_after'])) {
+    $params['created_after'] = check_plain($_GET['created_after']);
+  }
+  if (isset($_GET['changed_before'])) {
+    $params['changed_before'] = check_plain($_GET['changed_before']);
+  }
+  if (isset($_GET['changed_after'])) {
+    $params['changed_after'] = check_plain($_GET['changed_after']);
+  }
+  if (isset($_GET['type']) && !is_array($_GET['type'])) {
+    $params['type'] = check_plain($_GET['type']);
+  }
+  $params['status'] = 1; // Hard coding in status value, api is for external consumption so all nodes should be published
+  $cond = array();
+  // Create db query conditions for each parameter
+  foreach ($params as $key => $value) {
+    // Properly format date parameters and search operators
+    if (substr($key, -7, 7) == '_before') {
+      $cond[] = 'n.' . db_escape_table(substr($key, 0, -7)) . ' <= :' . $key;
+      $args[$key] = strtotime($value);
+    }
+    elseif (substr($key, -6, 6) == '_after') {
+      $cond[] = 'n.' . db_escape_table(substr($key, 0, -6)) . ' >= :' . $key;
+      $args[$key] = strtotime($value);
+    }
+    else {
+      $cond[] = 'n.' . db_escape_table($key) . " = :" . $key;
+      $args[$key] = $value;
+    }
+  }
+  $cond = (!empty($cond) ? implode(' AND ', $cond) : '' );
+
+  // If types is given as plural, it should be an array so we filter by type IN (types) instead of type = type
+  $types = array();
+  if (isset($_GET['types']) && is_array($_GET['types'])) {
+    foreach ($_GET['types'] as $type) {
+      $types[] = "'" . check_plain($type) . "'";
+    }
+  }
+  if (!empty($types)) {
+    $type_sql = 'AND n.type IN (' . implode(',', $types) . ')';
+  }
+  else {
+    $type_sql = '';
+  }
+
+  // Now check type settings and only include white-listed node types
+  $access_types = unserialize(variable_get('contentapi_content_types', ''));
+  if ($access_types) {
+    $checked_types = array();
+    foreach ($access_types as $type_name) {
+      if (!is_int($type_name))
+        //   $checked_types[] = '"' . $type_name . '"';
+        $checked_types[] = "'$type_name'";
+      }
+      $type_access_sql = 'AND n.type IN(' . implode(',', $checked_types) . ')';
+    }
+    else {
+      $type_access_sql = '';
+    }
+
+  $terms = array();
+  // Taxonomy queries
+  if (isset($_GET['terms']) && is_array($_GET['terms'])) {
+    foreach ($_GET['terms'] as $term) {
+      $terms[] = (integer)$term;
+    }
+  }
+  $term_sql = (!empty($terms)) ? ' AND t.tid IN (' . implode(',', $terms) . ')' : '';
+
+  // Initialize search query if a search string is given
+  // Searches titles by an input string
+  $search_query = '';
+  if (isset($_GET['search_string'])) {
+    $search = check_plain($_GET['search_string']);
+    $search_query = 'AND n.title LIKE \'%' . $search . '%\'';
+  }
+  $search_sql = $search_query;
+
+  // Change sort field
+  if (isset($_GET['sort'])) {
+    $sort = check_plain($_GET['sort']);
+  }
+  else {
+    // Default sort field
+    $sort = variable_get('contentapi_sort_field', 'created');
+  }
+
+  $sort_order = (isset($_GET['sort_order'])) ? check_plain($_GET['sort_order']) : variable_get('contentapi_sort_order', 'DESC');
+  $sort_sql = 'n.' . $sort . ' ' . $sort_order;
+
+  // Number of items to return, default is 10
+  $limit = (isset($_GET['limit'])) ? (integer)$_GET['limit'] : 10;
+
+  // Check limit cap, users must use pagination to get more results if cap is exceeded
+  $limit_cap = variable_get('contentapi_limit', 10);
+  if ($limit > $limit_cap) $limit = $limit_cap;
+
+  // Page to return, default is 0
+  $page = (isset($_GET['page'])) ? (integer)$_GET['page'] : 0;
+
+  // Query for node ids
+  $sql = "SELECT DISTINCT n.nid FROM {node} n LEFT JOIN {taxonomy_index} t ON n.nid = t.nid
+  WHERE $cond $type_sql $type_access_sql $field_nids $term_sql $search_sql
+  ORDER BY $sort_sql";
+
+  // Put together array of matching nodes to return.
+  $results = array();
+  $result = db_query_range($sql, $page * $limit, $limit, $args);
+  $fields = (isset($_GET['fields']) && $_GET['fields'] == 'all');
+
+  $show_count = variable_get('contentapi_show_count', TRUE);
+
+  if ($show_count) {
+    // Calculate the number of matching results for pagination
+    $count_sql = 'SELECT count(nid) AS count FROM(' . $sql . ') AS nodes';
+    $count_result = db_query($count_sql, $args);
+    $count = $count_result->fetchObject()->count;
+    $count_array = array('count' => $count);
+    $count_array['pages'] = (integer) ceil($count / $limit);
+    if ($count_array['pages'] == -1) $count_array['pages'] = 0;
+    $count_array['itemsPerPage'] = $limit;
+    $count_array['currentPage'] = $page;
+
+    $results[] = $count_array;
+  }
+
+  foreach ($result as $node) {
+    $results[] = _contentapi_retrieve($node->nid, $fields);
+  }
+
+  return $results;
+}
+
+/**
+ * @param $param - array of key->value pairs, where key is cck field and value is the query value for that field
+ * @return array of nids, or FALSE if nothing meets conditions
+ */
+function _contentapi_fields_query($param = NULL) {
+  if (!is_array($param)) {
+    return FALSE;
+  }
+
+  $args = array(); // Arguments for db_query
+  $nids = array();  // Store node id's that match query
+  $field_cond = array(); // Conditions to match against in db_query
+  $field_joins = ''; // sql join statement for field tables
+
+  foreach ($param as $key => $value) {
+    $table = 'field_data_' . db_escape_table($key);
+    $column = $key . '_value';
+    if (db_table_exists($table) && db_field_exists($table, $column)) {
+      $args[$table] = $value;
+      $field_cond[] = "$table.$column = :$table";
+      $field_joins .= ' INNER JOIN {' . $table . '} ON ' . $table . '.entity_id = n.nid';
+    }
+  }
+
+  if (!empty($args)) {
+    $conditions = implode(' AND ', $field_cond);
+    $sql = 'SELECT n.nid FROM {node} n ' . $field_joins . ' WHERE ' . $conditions;
+    $results = db_query($sql, $args);
+    foreach ($results as $result) {
+      $nids[] = $result->nid;
+    }
+  }
+
+  // Return nids array, or FALSE if none exist matching the conditions
+  return (empty($nids)) ? FALSE : $nids;
+}

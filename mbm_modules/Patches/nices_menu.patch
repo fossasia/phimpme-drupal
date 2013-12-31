@@ -1,0 +1,28 @@
+--- nice_menus.module
++++ nice_menus.module
+@@ -381,7 +381,6 @@
+
+   $output['content'] = '';
+   $output['subject'] = $title;
+-
+   if ($menu) {
+     // Set the total menu depth counting from this parent if we need it.
+     $depth =  ($depth > 0) ? ($parent_depth + $depth) : $depth;
+@@ -455,7 +454,7 @@
+         $parent_class = ($children && ($menu_item['link']['depth'] <= $depth || $depth == -1)) ? 'menuparent ' : '';
+          $element = array(
+           '#below' => $children,
+-          '#title' => $menu_item['link']['link_title'],
++          '#title' => $menu_item['link']['title'],
+           '#href' =>  $menu_item['link']['href'],
+           '#localized_options' => $menu_item['link']['localized_options'],
+           '#attributes' => array(
+@@ -470,7 +469,7 @@
+
+         $element = array(
+           '#below' => '',
+-          '#title' => $menu_item['link']['link_title'],
++          '#title' => $menu_item['link']['title'],
+           '#href' =>  $menu_item['link']['href'],
+           '#localized_options' => $menu_item['link']['localized_options'],
+           '#attributes' => array(

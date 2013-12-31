@@ -1,0 +1,1318 @@
+<?php
+
+/**
+ * @file
+ * Entity CRUD API tests.
+ */
+
+/**
+ * Test basic API.
+ */
+class EntityAPITestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Entity CRUD',
+      'description' => 'Tests basic CRUD API functionality.',
+      'group' => 'Entity API',
+    );
+  }
+
+  function setUp() {
+    parent::setUp('entity', 'entity_test');
+  }
+
+  /**
+   * Tests CRUD.
+   */
+  function testCRUD() {
+    module_enable(array('entity_feature'));
+
+    $user1 = $this->drupalCreateUser();
+    // Create test entities for the user1 and unrelated to a user.
+    $entity = entity_create('entity_test', array('name' => 'test', 'uid' => $user1->uid));
+    $entity->save();
+    $entity = entity_create('entity_test', array('name' => 'test2', 'uid' => $user1->uid));
+    $entity->save();
+    $entity = entity_create('entity_test', array('name' => 'test', 'uid' => NULL));
+    $entity->save();
+
+    $entities = array_values(entity_test_load_multiple(FALSE, array('name' => 'test')));
+
+    $this->assertEqual($entities[0]->name, 'test', 'Created and loaded entity.');
+    $this->assertEqual($entities[1]->name, 'test', 'Created and loaded entity.');
+
+    $results = entity_test_load_multiple(array($entity->pid));
+    $loaded = array_pop($results);
+    $this->assertEqual($loaded->pid, $entity->pid, 'Loaded the entity unrelated to a user.');
+
+    $entities = array_values(entity_test_load_multiple(FALSE, array('name' => 'test2')));
+    $entities[0]->delete();
+    $entities = array_values(entity_test_load_multiple(FALSE, array('name' => 'test2')));
+    $this->assertEqual($entities, array(), 'Entity successfully deleted.');
+
+    $entity->save();
+    $this->assertEqual($entity->pid, $loaded->pid, 'Entity successfully updated.');
+
+    // Try deleting multiple test entities by deleting all.
+    $pids = array_keys(entity_test_load_multiple(FALSE));
+    entity_test_delete_multiple($pids);
+  }
+
+  /**
+   * Tests CRUD API functions: entity_(create|delete|save)
+   */
+  function testCRUDAPIfunctions() {
+    module_enable(array('entity_feature'));
+
+    $user1 = $this->drupalCreateUser();
+    // Create test entities for the user1 and unrelated to a user.
+    $entity = entity_create('entity_test', array('name' => 'test', 'uid' => $user1->uid));
+    entity_save('entity_test', $entity);
+    $entity = entity_create('entity_test', array('name' => 'test2', 'uid' => $user1->uid));
+    entity_save('entity_test', $entity);
+    $entity = entity_create('entity_test', array('name' => 'test', 'uid' => NULL));
+    entity_save('entity_test', $entity);
+
+    $entities = array_values(entity_test_load_multiple(FALSE, array('name' => 'test')));
+    $this->assertEqual($entities[0]->name, 'test', 'Created and loaded entity.');
+    $this->assertEqual($entities[1]->name, 'test', 'Created and loaded entity.');
+
+    // Test getting the entity label, which is the used test-type's label.
+    $label = entity_label('entity_test', $entities[0]);
+    $this->assertEqual($label, 'label', 'Default label returned.');
+
+    $results = entity_test_load_multiple(array($entity->pid));
+    $loaded = array_pop($results);
+    $this->assertEqual($loaded->pid, $entity->pid, 'Loaded the entity unrelated to a user.');
+
+    $entities = array_values(entity_test_load_multiple(FALSE, array('name' => 'test2')));
+
+    entity_delete('entity_test', $entities[0]->pid);
+    $entities = array_values(entity_test_load_multiple(FALSE, array('name' => 'test2')));
+    $this->assertEqual($entities, array(), 'Entity successfully deleted.');
+
+    entity_save('entity_test', $entity);
+    $this->assertEqual($entity->pid, $loaded->pid, 'Entity successfully updated.');
+
+    // Try deleting multiple test entities by deleting all.
+    $pids = array_keys(entity_test_load_multiple(FALSE));
+    entity_delete_multiple('entity_test', $pids);
+  }
+
+  /**
+   * Test loading entities defined in code.
+   */
+  function testExportables() {
+    module_enable(array('entity_feature'));
+
+    $types = entity_load_multiple_by_name('entity_test_type', array('test2', 'test'));
+
+    $this->assertEqual(array_keys($types), array('test2', 'test'), 'Entities have been loaded in the order as specified.');
+    $this->assertEqual($types['test']->label, 'label', 'Default type loaded.');
+    $this->assertTrue($types['test']->status & ENTITY_IN_CODE && !($types['test']->status & ENTITY_CUSTOM), 'Default type status is correct.');
+
+    // Test using a condition, which has to be applied on the defaults.
+    $types = entity_load_multiple_by_name('entity_test_type', FALSE, array('label' => 'label'));
+    $this->assertEqual($types['test']->label, 'label', 'Condition to default type applied.');
+
+    $types['test']->label = 'modified';
+    $types['test']->save();
+
+    // Ensure loading the changed entity works.
+    $types = entity_load_multiple_by_name('entity_test_type', FALSE, array('label' => 'modified'));
+    $this->assertEqual($types['test']->label, 'modified', 'Modified type loaded.');
+
+    // Clear the cache to simulate a new page load.
+    entity_get_controller('entity_test_type')->resetCache();
+
+    // Test loading using a condition again, now they default may not appear any
+    // more as it's overridden by an entity with another label.
+    $types = entity_load_multiple_by_name('entity_test_type', FALSE, array('label' => 'label'));
+    $this->assertTrue(empty($types), 'Conditions are applied to the overridden entity only.');
+
+    // But the overridden entity has to appear with another condition.
+    $types = entity_load_multiple_by_name('entity_test_type', FALSE, array('label' => 'modified'));
+    $this->assertEqual($types['test']->label, 'modified', 'Modified default type loaded by condition.');
+
+    $types = entity_load_multiple_by_name('entity_test_type', array('test', 'test2'));
+    $this->assertEqual($types['test']->label, 'modified', 'Modified default type loaded by id.');
+    $this->assertTrue(entity_has_status('entity_test_type', $types['test'], ENTITY_OVERRIDDEN), 'Status of overridden type is correct.');
+
+    // Test rebuilding the defaults and make sure overridden entities stay.
+    entity_defaults_rebuild();
+    $types = entity_load_multiple_by_name('entity_test_type', array('test', 'test2'));
+    $this->assertEqual($types['test']->label, 'modified', 'Overridden entity is still overridden.');
+    $this->assertTrue(entity_has_status('entity_test_type', $types['test'], ENTITY_OVERRIDDEN), 'Status of overridden type is correct.');
+
+    // Test reverting.
+    $types['test']->delete();
+    $types = entity_load_multiple_by_name('entity_test_type', array('test', 'test2'));
+    $this->assertEqual($types['test']->label, 'label', 'Entity has been reverted.');
+
+    // Test loading an exportable by its numeric id.
+    $result = entity_load_multiple_by_name('entity_test_type', array($types['test']->id));
+    $this->assertTrue(isset($result['test']), 'Exportable entity loaded by the numeric id.');
+
+    // Test exporting an entity to JSON.
+    $serialized_string = $types['test']->export();
+    $data = drupal_json_decode($serialized_string);
+    $this->assertNotNull($data, 'Exported entity is valid JSON.');
+    $import = entity_import('entity_test_type', $serialized_string);
+    $this->assertTrue(get_class($import) == get_class($types['test']) && $types['test']->label == $import->label, 'Successfully exported entity to code.');
+    $this->assertTrue(!isset($import->status), 'Exportable status has not been exported to code.');
+  }
+
+  /**
+   * Make sure insert() and update() hooks for exportables are invoked.
+   */
+  function testExportableHooks() {
+    $_SESSION['entity_hook_test'] = array();
+    // Enabling the module should invoke the enabled hook for the other
+    // entities provided in code.
+    module_enable(array('entity_feature'));
+
+    $insert = array('main', 'test', 'test2');
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_insert'] == $insert, 'Hook entity_insert has been invoked.');
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_test_type_insert'] == $insert, 'Hook entity_test_type_insert has been invoked.');
+
+    // Load a default entity and make sure the rebuilt logic only ran once.
+    entity_load_single('entity_test_type', 'test');
+    $this->assertTrue(!isset($_SESSION['entity_hook_test']['entity_test_type_update']), '"Entity-test-type" defaults have been rebuilt only once.');
+
+    // Add a new test entity in DB and make sure the hook is invoked too.
+    $test3 = entity_create('entity_test_type', array(
+      'name' => 'test3',
+      'label' => 'label',
+      'weight' => 0,
+    ));
+    $test3->save();
+
+    $insert[] = 'test3';
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_insert'] == $insert, 'Hook entity_insert has been invoked.');
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_test_type_insert'] == $insert, 'Hook entity_test_type_insert has been invoked.');
+
+    // Now override the 'test' entity and make sure it invokes the update hook.
+    $result = entity_load_multiple_by_name('entity_test_type', array('test'));
+    $result['test']->label = 'modified';
+    $result['test']->save();
+
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_update'] == array('test'), 'Hook entity_update has been invoked.');
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_test_type_update'] == array('test'), 'Hook entity_test_type_update has been invoked.');
+
+    // 'test' has to remain enabled, as it has been overridden.
+    $delete = array('main', 'test2');
+    module_disable(array('entity_feature'));
+
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_delete'] == $delete, 'Hook entity_deleted has been invoked.');
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_test_type_delete'] == $delete, 'Hook entity_test_type_deleted has been invoked.');
+
+    // Now make sure 'test' is not overridden any more, but custom.
+    $result = entity_load_multiple_by_name('entity_test_type', array('test'));
+    $this->assertTrue(!$result['test']->hasStatus(ENTITY_OVERRIDDEN), 'Entity is not marked as overridden any more.');
+    $this->assertTrue(entity_has_status('entity_test_type', $result['test'], ENTITY_CUSTOM), 'Entity is marked as custom.');
+
+    // Test deleting the remaining entities from DB.
+    entity_delete_multiple('entity_test_type', array('test', 'test3'));
+    $delete[] = 'test';
+    $delete[] = 'test3';
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_delete'] == $delete, 'Hook entity_deleted has been invoked.');
+    $this->assertTrue($_SESSION['entity_hook_test']['entity_test_type_delete'] == $delete, 'Hook entity_test_type_deleted has been invoked.');
+  }
+
+  /**
+   * Tests determining changes.
+   */
+  function testChanges() {
+    module_enable(array('entity_feature'));
+    $types = entity_load_multiple_by_name('entity_test_type');
+
+    // Override the default entity, such it gets saved in the DB.
+    $types['test']->label ='test_changes';
+    $types['test']->save();
+
+    // Now test an update without applying any changes.
+    $types['test']->save();
+    $this->assertEqual($types['test']->label, 'test_changes', 'No changes have been determined.');
+
+    // Apply changes.
+    $types['test']->label = 'updated';
+    $types['test']->save();
+
+    // The hook implementations entity_test_entity_test_type_presave() and
+    // entity_test_entity_test_type_update() determine changes and change the
+    // label.
+    $this->assertEqual($types['test']->label, 'updated_presave_update', 'Changes have been determined.');
+
+    // Test the static load cache to be cleared.
+    $types = entity_load_multiple_by_name('entity_test_type');
+    $this->assertEqual($types['test']->label, 'updated_presave', 'Static cache has been cleared.');
+  }
+
+
+  /**
+   * Tests viewing entites.
+   */
+  function testRendering() {
+    module_enable(array('entity_feature'));
+
+    $user1 = $this->drupalCreateUser();
+    // Create test entities for the user1 and unrelated to a user.
+    $entity = entity_create('entity_test', array('name' => 'test', 'uid' => $user1->uid));
+
+    $render = $entity->view();
+    $output = drupal_render($render);
+    // The entity class adds the user name to the output. Verify it is there.
+    $this->assertTrue(strpos($output, format_username($user1)) !== FALSE, 'Entity has been rendered');
+  }
+
+  /**
+   * Test uninstall of the entity_test module.
+   */
+  function testUninstall() {
+    // Add a test type and add a field instance, uninstall, then re-install and
+    // make sure the field instance can be re-created.
+    $test_type = entity_create('entity_test_type', array(
+      'name' => 'test',
+      'label' => 'label',
+      'weight' => 0,
+    ));
+    $test_type->save();
+
+    $field = array(
+      'field_name' => 'field_test_fullname',
+      'type' => 'text',
+      'cardinality' => 1,
+      'translatable' => FALSE,
+    );
+    field_create_field($field);
+
+    $instance = array(
+      'entity_type' => 'entity_test',
+      'field_name' => 'field_test_fullname',
+      'bundle' => 'test',
+      'label' => 'Full name',
+      'description' => 'Specify your first and last name.',
+      'widget' => array(
+        'type' => 'text_textfield',
+        'weight' => 0,
+      ),
+    );
+    field_create_instance($instance);
+
+    // Uninstallation has to remove all bundles, thus also field instances.
+    module_disable(array('entity_test'));
+    require_once DRUPAL_ROOT . '/includes/install.inc';
+    drupal_uninstall_modules(array('entity_test'));
+
+    // Make sure the instance has been deleted.
+    $instance_read = field_read_instance('entity_test', 'field_test_fullname', 'test', array('include_inactive' => 1));
+    $this->assertFalse((bool) $instance_read, 'Field instance has been deleted.');
+
+    // Ensure re-creating the same instance now works.
+    module_enable(array('entity_test'));
+    $test_type = entity_create('entity_test_type', array(
+      'name' => 'test',
+      'label' => 'label',
+      'weight' => 0,
+    ));
+    $test_type->save();
+    field_create_field($field);
+    field_create_instance($instance);
+
+    $instance_read = field_info_instance('entity_test', 'field_test_fullname', 'test');
+    $this->assertTrue((bool) $instance_read, 'Field instance has been re-created.');
+  }
+}
+
+/**
+ * Test the generated Rules integration.
+ */
+class EntityAPIRulesIntegrationTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Entity CRUD Rules integration',
+      'description' => 'Tests the Rules integration provided by the Entity CRUD API.',
+      'group' => 'Entity API',
+      'dependencies' => array('rules'),
+    );
+  }
+
+  function setUp() {
+    parent::setUp('entity', 'entity_test', 'rules');
+    // Make sure the logger is enabled so the debug log is saved.
+    variable_set('rules_debug_log', 1);
+  }
+
+  /**
+   * Test the events.
+   */
+  function testEvents() {
+    $rule = rules_reaction_rule();
+    $rule->event('entity_test_presave');
+    $rule->event('entity_test_insert');
+    $rule->event('entity_test_update');
+    $rule->event('entity_test_delete');
+    $rule->action('drupal_message', array('message' => 'hello!'));
+    $rule->save();
+    rules_clear_cache(TRUE);
+
+    // Let the events occur.
+    $user1 = $this->drupalCreateUser();
+    RulesLog::logger()->clear();
+
+    $entity = entity_create('entity_test', array('name' => 'test', 'uid' => $user1->uid));
+    $entity->save();
+    $entity->name = 'update';
+    $entity->save();
+    $entity->delete();
+
+    // Now there should have been 5 events, 2 times presave and once insert,
+    // update and delete.
+    $count = substr_count(RulesLog::logger()->render(), '0 ms Reacting on event');
+    $this->assertTrue($count == 5, 'Events have been properly invoked.');
+    RulesLog::logger()->checkLog();
+  }
+}
+
+
+/**
+ * Tests metadata wrappers.
+ */
+class EntityMetadataTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Metadata Wrapper',
+      'description' => 'Makes sure metadata wrapper are working right.',
+      'group' => 'Entity API',
+    );
+  }
+
+  function setUp() {
+    parent::setUp('entity', 'entity_test', 'locale');
+    // Create a field having 4 values for testing multiple value support.
+    $this->field_name = drupal_strtolower($this->randomName() . '_field_name');
+    $this->field = array('field_name' => $this->field_name, 'type' => 'text', 'cardinality' => 4);
+    $this->field = field_create_field($this->field);
+    $this->field_id = $this->field['id'];
+    $this->instance = array(
+      'field_name' => $this->field_name,
+      'entity_type' => 'node',
+      'bundle' => 'page',
+      'label' => $this->randomName() . '_label',
+      'description' => $this->randomName() . '_description',
+      'weight' => mt_rand(0, 127),
+      'settings' => array(
+        'text_processing' => FALSE,
+      ),
+      'widget' => array(
+        'type' => 'text_textfield',
+        'label' => 'Test Field',
+        'settings' => array(
+          'size' => 64,
+        )
+      )
+    );
+    field_create_instance($this->instance);
+  }
+
+  /**
+   * Creates a user and a node, then tests getting the properties.
+   */
+  function testEntityMetadataWrapper() {
+    $account = $this->drupalCreateUser();
+    // For testing sanitizing give the user a malicious user name
+    $account = user_save($account, array('name' => '<b>BadName</b>'));
+    $title = '<b>Is it bold?<b>';
+    $body[LANGUAGE_NONE][0] = array('value' => '<b>The body & nothing.</b>', 'summary' => '<b>The body.</b>');
+    $node = $this->drupalCreateNode(array('uid' => $account->uid, 'name' => $account->name, 'body' => $body, 'title' => $title, 'summary' => '', 'type' => 'page'));
+
+    // First test without sanitizing.
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $this->assertEqual('<b>Is it bold?<b>', $wrapper->title->value(), 'Getting a field value.');
+    $this->assertEqual($node->title, $wrapper->title->raw(), 'Getting a raw property value.');
+
+    // Test chaining.
+    $this->assertEqual($account->mail, $wrapper->author->mail->value(), 'Testing chained usage.');
+    $this->assertEqual($account->name, $wrapper->author->name->value(), 'Testing chained usage with callback and sanitizing.');
+
+    // Test sanitized output.
+    $options = array('sanitize' => TRUE);
+    $this->assertEqual(check_plain('<b>Is it bold?<b>'), $wrapper->title->value($options), 'Getting sanitized field.');
+    $this->assertEqual(filter_xss($node->name), $wrapper->author->name->value($options), 'Getting sanitized property with getter callback.');
+
+    // Test getting an not existing property.
+    try {
+      echo $wrapper->dummy;
+      $this->fail('Getting an not existing property.');
+    }
+    catch (EntityMetadataWrapperException $e) {
+      $this->pass('Getting an not existing property.');
+    }
+
+    // Test setting.
+    $wrapper->author = 0;
+    $this->assertEqual(0, $wrapper->author->uid->value(), 'Setting a property.');
+    try {
+      $wrapper->url = 'dummy';
+      $this->fail('Setting an unsupported property.');
+    }
+    catch (EntityMetadataWrapperException $e) {
+      $this->pass('Setting an unsupported property.');
+    }
+
+    // Test value validation.
+    $this->assertFalse($wrapper->author->name->validate(array(3)), 'Validation correctly checks for valid data types.');
+    try {
+      $wrapper->author->mail = 'foo';
+      $this->fail('An invalid mail address has been set.');
+    }
+    catch (EntityMetadataWrapperException $e) {
+      $this->pass('Setting an invalid mail address throws exception.');
+    }
+    // Test unsetting a required property.
+    try {
+      $wrapper->author = NULL;
+      $this->fail('The required node author has been unset.');
+    }
+    catch (EntityMetadataWrapperException $e) {
+      $this->pass('Unsetting the required node author throws an exception.');
+    }
+
+    // Test setting a referenced entity by id.
+    $wrapper->author->set($GLOBALS['user']->uid);
+    $this->assertEqual($wrapper->author->getIdentifier(), $GLOBALS['user']->uid, 'Get the identifier of a referenced entity.');
+    $this->assertEqual($wrapper->author->uid->value(), $GLOBALS['user']->uid, 'Successfully set referenced entity using the identifier.');
+    // Set by object.
+    $wrapper->author->set($GLOBALS['user']);
+    $this->assertEqual($wrapper->author->uid->value(), $GLOBALS['user']->uid, 'Successfully set referenced entity using the entity.');
+
+
+    // Test getting by the field API processed values like the node body.
+    $body_value = $wrapper->body->value;
+    $this->assertEqual("<p>The body &amp; nothing.</p>\n", $body_value->value(), "Getting processed value.");
+    $this->assertEqual("The body & nothing.\n", $body_value->value(array('decode' => TRUE)), "Decoded value.");
+    $this->assertEqual("<b>The body & nothing.</b>", $body_value->raw(), "Raw body returned.");
+
+    // Test getting the summary.
+    $this->assertEqual("<p>The body.</p>\n", $wrapper->body->summary->value(), "Getting body summary.");
+
+    $wrapper->body->set(array('value' => "<b>The second body.</b>"));
+    $this->assertEqual("<p>The second body.</p>\n", $wrapper->body->value->value(), "Setting a processed field value and reading it again.");
+    $this->assertEqual($node->body[LANGUAGE_NONE][0]['value'], "<b>The second body.</b>", 'Update appears in the wrapped entity.');
+    $this->assert(isset($node->body[LANGUAGE_NONE][0]['safe_value']), 'Formatted text has been processed.');
+
+    // Test translating the body.
+    locale_add_language('de');
+    $wrapper->language('de');
+
+    $languages = language_list();
+    $this->assertEqual($wrapper->getPropertyLanguage(), $languages['de'], 'Wrapper language has been set to German');
+    $this->assertEqual($wrapper->body->value->value(), "<p>The second body.</p>\n", 'Language fallback on neutral language.');
+
+    // Set a German text using the wrapper.
+    $wrapper->body->set(array('value' => "<b>Der zweite Text.</b>"));
+
+    $this->assertEqual($wrapper->body->value->value(), "<p>Der zweite Text.</p>\n", 'German body set and retrieved.');
+    $wrapper->language(NULL);
+    $this->assertEqual($wrapper->body->value->value(), "<p>The second body.</p>\n", 'Language neutral text is still there.');
+
+    // Test iterator.
+    $type_info = entity_get_property_info('node');
+    $this->assertFalse(array_diff_key($type_info['properties'], iterator_to_array($wrapper->getIterator())), 'Iterator is working.');
+    foreach ($wrapper as $property) {
+      $this->assertTrue($property instanceof EntityMetadataWrapper, 'Iterate over wrapper properties.');
+    }
+
+    // Test setting a new node.
+    $node->title = 'foo';
+    $wrapper->set($node);
+    $this->assertEqual($wrapper->title->value(), 'foo', 'Changed the wrapped node.');
+
+    // Test getting options lists.
+    $this->assertEqual($wrapper->type->optionsList(), node_type_get_names(), 'Options list returned.');
+
+    // Test making use of a generic 'entity' reference property the
+    // 'entity_test' module provides. The property defaults to the node author.
+    $this->assertEqual($wrapper->reference->uid->value(), $wrapper->author->getIdentifier(), 'Used generic entity reference property.');
+    // For testing, just point the reference to the node itself now.
+    $wrapper->reference->set($wrapper);
+    $this->assertEqual($wrapper->reference->nid->value(), $wrapper->getIdentifier(), 'Correctly updated the generic entity referenced property.');
+
+    // Test saving and deleting.
+    $wrapper->save();
+    $wrapper->delete();
+    $return = node_load($wrapper->getIdentifier());
+    $this->assertFalse($return, "Node has been successfully deleted.");
+
+    // Ensure changing the bundle changes available wrapper properties.
+    $wrapper->type->set('article');
+    $this->assertTrue(isset($wrapper->field_tags), 'Changing bundle changes available wrapper properties.');
+
+    // Test labels.
+    $user = $this->drupalCreateUser();
+    user_save($user, array('roles' => array()));
+    $wrapper->author = $user->uid;
+    $this->assertEqual($wrapper->label(), $node->title, 'Entity label returned.');
+    $this->assertEqual($wrapper->author->roles[0]->label(), t('authenticated user'), 'Label from options list returned');
+    $this->assertEqual($wrapper->author->roles->label(), t('authenticated user'), 'Label for a list from options list returned');
+  }
+
+  /**
+   * Test supporting multi-valued fields.
+   */
+  function testListMetadataWrappers() {
+    $property = $this->field_name;
+    $values = array();
+    $values[LANGUAGE_NONE][0] = array('value' => '<b>2009-09-05</b>');
+    $values[LANGUAGE_NONE][1] = array('value' => '2009-09-05');
+    $values[LANGUAGE_NONE][2] = array('value' => '2009-08-05');
+
+    $node = $this->drupalCreateNode(array('type' => 'page', $property => $values));
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $this->assertEqual('<b>2009-09-05</b>', $wrapper->{$property}[0]->value(), 'Getting array entry.');
+    $this->assertEqual('2009-09-05', $wrapper->{$property}->get(1)->value(), 'Getting array entry.');
+    $this->assertEqual(3, count($wrapper->{$property}->value()), 'Getting the whole array.');
+
+    // Test sanitizing
+    $this->assertEqual(check_plain('<b>2009-09-05</b>'), $wrapper->{$property}[0]->value(array('sanitize' => TRUE)), 'Getting array entry.');
+
+    // Test iterator
+    $this->assertEqual(array_keys(iterator_to_array($wrapper->$property->getIterator())), array_keys($wrapper->$property->value()), 'Iterator is working.');
+    foreach ($wrapper->$property as $p) {
+      $this->assertTrue($p instanceof EntityMetadataWrapper, 'Iterate over list wrapper properties.');
+    }
+
+    // Make sure changing the array changes the actual entity property.
+    $wrapper->{$property}[0] = '2009-10-05';
+    unset($wrapper->{$property}[1], $wrapper->{$property}[2]);
+    $this->assertEqual($wrapper->{$property}->value(), array('2009-10-05'), 'Setting multiple property values.');
+
+    // Test setting an arbitrary list item.
+    $list = array(0 => REQUEST_TIME);
+    $wrapper = entity_metadata_wrapper('list<date>', $list);
+    $wrapper[1] = strtotime('2009-09-05');
+    $this->assertEqual($wrapper->value(), array(REQUEST_TIME, strtotime('2009-09-05')), 'Setting a list item.');
+    $this->assertEqual($wrapper->count(), 2, 'List count is correct.');
+
+    // Test using a list wrapper without data.
+    $wrapper = entity_metadata_wrapper('list<date>');
+    $info = array();
+    foreach ($wrapper as $item) {
+      $info[] = $item->info();
+    }
+    $this->assertTrue($info[0]['type'] == 'date', 'Iterated over empty list wrapper.');
+
+    // Test using a list of entities with a list of term objects.
+    $list = array();
+    $list[] = entity_property_values_create_entity('taxonomy_term', array(
+      'name' => 'term 1',
+      'vocabulary' => 1,
+    ))->save()->value();
+    $list[] = entity_property_values_create_entity('taxonomy_term', array(
+      'name' => 'term 2',
+      'vocabulary' => 1,
+    ))->save()->value();
+    $wrapper = entity_metadata_wrapper('list<taxonomy_term>', $list);
+    $this->assertTrue($wrapper[0]->name->value() == 'term 1', 'Used a list of entities.');
+    // Test getting a list of identifiers.
+    $ids = $wrapper->value(array('identifier' => TRUE));
+    $this->assertTrue(!is_object($ids[0]), 'Get a list of entity ids.');
+
+    $wrapper = entity_metadata_wrapper('list<taxonomy_term>', $ids);
+    $this->assertTrue($wrapper[0]->name->value() == 'term 1', 'Created a list of entities with ids.');
+
+    // Test with a list of generic entities. The list is expected to be a list
+    // of entity wrappers, otherwise the entity type is unknown.
+    $node = $this->drupalCreateNode(array('title' => 'node 1'));
+    $list = array();
+    $list[] = entity_metadata_wrapper('node', $node);
+    $wrapper = entity_metadata_wrapper('list<entity>', $list);
+    $this->assertEqual($wrapper[0]->title->value(), 'node 1', 'Wrapped node was found in generic list of entities.');
+  }
+
+  /**
+   * Tests using the wrapper without any data.
+   */
+  function testWithoutData() {
+    $wrapper = entity_metadata_wrapper('node', NULL, array('bundle' => 'page'));
+    $this->assertTrue(isset($wrapper->title), 'Bundle properties have been added.');
+    $info = $wrapper->author->mail->info();
+    $this->assertTrue(!empty($info) && is_array($info) && isset($info['label']), 'Property info returned.');
+  }
+
+  /**
+   * Test using access() method.
+   */
+  function testAccess() {
+    // Test without data.
+    $account = $this->drupalCreateUser(array('bypass node access'));
+    $this->assertTrue(entity_access('view', 'node', NULL, $account), 'Access without data checked.');
+
+    // Test with actual data.
+    $values[LANGUAGE_NONE][0] = array('value' => '<b>2009-09-05</b>');
+    $values[LANGUAGE_NONE][1] = array('value' => '2009-09-05');
+    $node = $this->drupalCreateNode(array('type' => 'page', $this->field_name => $values));
+    $this->assertTrue(entity_access('delete', 'node', $node, $account), 'Access with data checked.');
+
+    // Test per property access without data.
+    $account2 = $this->drupalCreateUser(array('bypass node access', 'administer nodes'));
+    $wrapper = entity_metadata_wrapper('node', NULL, array('bundle' => 'page'));
+    $this->assertTrue($wrapper->access('edit', $account), 'Access to node granted.');
+    $this->assertFalse($wrapper->status->access('edit', $account), 'Access for admin property denied.');
+    $this->assertTrue($wrapper->status->access('edit', $account2), 'Access for admin property allowed for the admin.');
+
+    // Test per property access with data.
+    $wrapper = entity_metadata_wrapper('node', $node, array('bundle' => 'page'));
+    $this->assertFalse($wrapper->status->access('edit', $account), 'Access for admin property denied.');
+    $this->assertTrue($wrapper->status->access('edit', $account2), 'Access for admin property allowed for the admin.');
+
+    // Test field level access.
+    $this->assertTrue($wrapper->{$this->field_name}->access('view'), 'Field access granted.');
+  }
+
+  /**
+   * Tests using a data structure with passed in metadata.
+   */
+  function testDataStructureWrapper() {
+    $log_entry = array(
+      'type'        => 'entity',
+      'message'     => $this->randomName(8),
+      'variables'   => array(),
+      'severity'    => WATCHDOG_NOTICE,
+      'link'        => '',
+      'user'        => $GLOBALS['user'],
+    );
+    $info['property info'] = array(
+      'type' => array('type' => 'text', 'label' => 'The category to which this message belongs.'),
+      'message' => array('type' => 'text', 'label' => 'The log message.'),
+      'user' => array('type' => 'user', 'label' => 'The user causing the log entry.'),
+    );
+    $wrapper = entity_metadata_wrapper('log_entry', $log_entry, $info);
+    $this->assertEqual($wrapper->user->name->value(), $GLOBALS['user']->name, 'Wrapped custom entity.');
+  }
+
+  /**
+   * Tests using entity_property_query().
+   */
+  function testEntityQuery() {
+    $title = '<b>Is it bold?<b>';
+    $values[LANGUAGE_NONE][0] = array('value' => 'foo');
+    $node = $this->drupalCreateNode(array($this->field_name => $values, 'title' => $title, 'uid' => $GLOBALS['user']->uid));
+
+    $results = entity_property_query('node', 'title', $title);
+    $this->assertEqual($results, array($node->nid), 'Queried nodes with a given title.');
+
+    $results = entity_property_query('node', $this->field_name, 'foo');
+    $this->assertEqual($results, array($node->nid), 'Queried nodes with a given field value.');
+
+    $results = entity_property_query('node', $this->field_name, array('foo', 'bar'));
+    $this->assertEqual($results, array($node->nid), 'Queried nodes with a list of possible values.');
+
+    $results = entity_property_query('node', 'author', $GLOBALS['user']);
+    $this->assertEqual($results, array($node->nid), 'Queried nodes with a given auhtor.');
+  }
+
+  /**
+   * Tests serializing data wrappers, in particular for EntityDrupalWrapper.
+   */
+  function testWrapperSerialization() {
+    $node = $this->drupalCreateNode();
+    $wrapper = entity_metadata_wrapper('node', $node);
+    $this->assertTrue($wrapper->value() == $node, 'Data correctly wrapped.');
+
+    // Test serializing and make sure only the node id is stored.
+    $this->assertTrue(strpos(serialize($wrapper), $node->title) === FALSE, 'Node has been correctly serialized.');
+    $this->assertEqual(unserialize(serialize($wrapper))->title->value(), $node->title, 'Serializing works right.');
+
+    $wrapper2 = unserialize(serialize($wrapper));
+    // Test serializing the unloaded wrapper.
+    $this->assertEqual(unserialize(serialize($wrapper2))->title->value(), $node->title, 'Serializing works right.');
+
+    // Test loading a not more existing node.
+    $s = serialize($wrapper2);
+    node_delete($node->nid);
+    $this->assertFalse(node_load($node->nid), 'Node deleted.');
+
+    $value = unserialize($s)->value();
+    $this->assertNull($value, 'Tried to load not existing node.');
+  }
+}
+
+/**
+ * Tests provided entity property info of the core modules.
+ */
+class EntityTokenTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Entity tokens',
+      'description' => 'Tests provided tokens for entity properties.',
+      'group' => 'Entity API',
+    );
+  }
+
+  function setUp() {
+    parent::setUp('entity_token');
+  }
+
+  /**
+   * Tests whether token support is basically working.
+   */
+  function testTokenSupport() {
+    $node = $this->drupalCreateNode(array('sticky' => TRUE, 'promote' => FALSE));
+    $text = "Sticky: [node:sticky] Promote: [node:promote] User: [site:current-user:name]";
+    $true = t('true');
+    $false = t('false');
+    $user_name = $GLOBALS['user']->name;
+    $target = "Sticky: $true Promote: $false User: $user_name";
+    $replace = token_replace($text, array('node' => $node));
+    $this->assertEqual($replace, $target, 'Provided tokens basically work.');
+  }
+}
+
+/**
+ * Tests provided entity property info of the core modules.
+ */
+class EntityMetadataIntegrationTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Property info core integration',
+      'description' => 'Tests using metadata wrapper for drupal core.',
+      'group' => 'Entity API',
+    );
+  }
+
+  function setUp() {
+    parent::setUp('entity', 'book', 'statistics');
+  }
+
+  protected function assertException($wrapper, $name, $text = NULL) {
+    $this->assertTrue(isset($wrapper->$name), 'Property wrapper ' . check_plain($name) . ' exists.');
+    $text = isset($text) ? $text : 'Getting the not existing property ' . $name . ' throws exception.';
+    try {
+      $wrapper->$name->value();
+      $this->fail($text);
+    }
+    catch (EntityMetadataWrapperException $e) {
+      $this->pass($text);
+    }
+  }
+
+  protected function assertEmpty($wrapper, $name) {
+    $this->assertTrue(isset($wrapper->$name), 'Property ' . check_plain($name) . ' exists.');
+    $this->assertTrue($wrapper->$name->value() === NULL, 'Property ' . check_plain($name) . ' is empty.');
+  }
+
+  protected function assertValue($wrapper, $key) {
+    $this->assertTrue($wrapper->$key->value() !== NULL, check_plain($key) . ' property returned.');
+    $info = $wrapper->$key->info();
+    if (!empty($info['raw getter callback'])) {
+      // Also test getting the raw value
+      $this->assertTrue($wrapper->$key->raw() !== NULL, check_plain($key) . ' raw value returned.');
+    }
+  }
+
+  /**
+   * Test book module integration.
+   */
+  function testBookModule() {
+    $title = 'Book 1';
+    $node = $this->drupalCreateNode(array('title' => $title, 'type' => 'book'));
+    $node2 = $this->drupalCreateNode(array('type' => 'book', 'book' => array('bid' => $node->nid)));
+    $node3 = $this->drupalCreateNode(array('type' => 'page'));
+
+    // Test whether the properties work.
+    $wrapper = entity_metadata_wrapper('node', $node2);
+    $this->assertEqual("Book 1", $wrapper->book->title->value(), "Book title returned.");
+    $this->assertEqual($node->nid, $wrapper->book->nid->value(), "Book id returned.");
+
+    // Try using book properties for no book nodes.
+    $wrapper = entity_metadata_wrapper('node', $node3);
+    $this->assertException($wrapper, 'book');
+  }
+
+  /**
+   * Test properties of a comment.
+   */
+  function testComments() {
+    $title = 'Node 1';
+    $node = $this->drupalCreateNode(array('title' => $title, 'type' => 'page'));
+    $account = $this->drupalCreateUser();
+    $comment = (object)array(
+      'subject' => 'topic',
+      'nid' => $node->nid,
+      'uid' => $account->uid,
+      'cid' => FALSE,
+      'pid' => 0,
+      'homepage' => '',
+      'language' => LANGUAGE_NONE,
+      'hostname' => ip_address(),
+    );
+    $comment->comment_body[LANGUAGE_NONE][0] = array('value' => 'text', 'format' => 0);
+    comment_save($comment);
+    $wrapper = entity_metadata_wrapper('comment', $comment);
+    foreach ($wrapper as $key => $value) {
+      if ($key != 'parent') {
+        $this->assertValue($wrapper, $key);
+      }
+    }
+    $this->assertEmpty($wrapper, 'parent');
+  }
+
+  /**
+   * Test all properties of a node.
+   */
+  function testNodeProperties() {
+    $title = 'Book 1';
+    $node = $this->drupalCreateNode(array('title' => $title, 'type' => 'page'));
+    $wrapper = entity_metadata_wrapper('node', $node);
+    foreach ($wrapper as $key => $value) {
+      if ($key != 'book' && $key != 'source' && $key != 'last_view') {
+        $this->assertValue($wrapper, $key);
+      }
+    }
+    $this->assertException($wrapper, 'book');
+    $this->assertEmpty($wrapper, 'source');
+    $this->assertException($wrapper->source, 'title');
+    $this->assertEmpty($wrapper, 'last_view');
+  }
+
+  /**
+   * Tests properties provided by the taxonomy module.
+   */
+  function testTaxonomyProperties() {
+    $vocab = $this->createVocab();
+    $term_parent = entity_property_values_create_entity('taxonomy_term', array(
+      'name' => $this->randomName(),
+      'vocabulary' => $vocab,
+    ))->save()->value();
+    $term_parent2 = entity_property_values_create_entity('taxonomy_term', array(
+      'name' => $this->randomName(),
+      'vocabulary' => $vocab,
+    ))->save()->value();
+    $term = entity_property_values_create_entity('taxonomy_term', array(
+      'name' => $this->randomName(),
+      'vocabulary' => $vocab,
+      'description' => $this->randomString(),
+      'weight' => mt_rand(0, 10),
+      'parent' => array($term_parent->tid),
+    ))->save()->value();
+
+    $wrapper = entity_metadata_wrapper('taxonomy_term', $term);
+    foreach ($wrapper as $key => $value) {
+      $this->assertValue($wrapper, $key);
+    }
+    // Test setting another parent using the full object.
+    $wrapper->parent[] = $term_parent2;
+    $this->assertEqual($wrapper->parent[1]->getIdentifier(), $term_parent2->tid, 'Term parent added.');
+
+    $parents = $wrapper->parent->value();
+    $tids = $term_parent->tid . ':' . $term_parent2->tid;
+    $this->assertEqual($parents[0]->tid . ':' . $parents[1]->tid, $tids, 'Parents returned.');
+    $this->assertEqual(implode(':', $wrapper->parent->value(array('identifier' => TRUE))), $tids, 'Parent ids returned.');
+
+    // Test vocabulary.
+    foreach ($wrapper->vocabulary as $key => $value) {
+      $this->assertValue($wrapper->vocabulary, $key);
+    }
+    // Test field integration.
+    $tags[LANGUAGE_NONE][0]['tid'] = $term->tid;
+    $node = $this->drupalCreateNode(array('title' => 'foo', 'type' => 'article', 'field_tags' => $tags));
+    $wrapper = entity_metadata_wrapper('node', $node);
+    $this->assertEqual($wrapper->field_tags[0]->name->value(), $term->name, 'Get an associated tag of a node with the wrapper.');
+
+    $wrapper->field_tags[1] = $term_parent;
+    $tags = $wrapper->field_tags->value();
+    $this->assertEqual($tags[1]->tid, $term_parent->tid, 'Associated a new tag with a node.');
+    $this->assertEqual($tags[0]->tid, $term->tid, 'Previsous set association kept.');
+
+    // Test getting a list of identifiers.
+    $tags = $wrapper->field_tags->value(array('identifier' => TRUE));
+    $this->assertEqual($tags, array($term->tid, $term_parent->tid), 'List of referenced term identifiers returned.');
+
+    // Test setting tags by using ids.
+    $wrapper->field_tags->set(array(2));
+    $this->assertEqual($wrapper->field_tags[0]->tid->value(), 2, 'Specified tags by a list of term ids.');
+
+    // Test unsetting all tags.
+    $wrapper->field_tags = NULL;
+    $this->assertFalse($wrapper->field_tags->value(), 'Unset all tags from a node.');
+
+    // Test setting entity references to NULL.
+    // Create a taxonomy term field for that purpose.
+    $field_name = drupal_strtolower($this->randomName() . '_field_name');
+    $field = array('field_name' => $field_name, 'type' => 'taxonomy_term_reference', 'cardinality' => 1);
+    $field = field_create_field($field);
+    $field_id = $field['id'];
+    $field_instance = array(
+      'field_name' => $field_name,
+      'entity_type' => 'node',
+      'bundle' => 'article',
+      'label' => $this->randomName() . '_label',
+      'description' => $this->randomName() . '_description',
+      'weight' => mt_rand(0, 127),
+      'widget' => array(
+        'type' => 'options_select',
+        'label' => 'Test term field',
+      )
+    );
+    field_create_instance($field_instance);
+    $term_field[LANGUAGE_NONE][0]['tid'] = $term->tid;
+    $node = $this->drupalCreateNode(array('title' => 'foo', 'type' => 'article', $field_name => $term_field));
+    $wrapper = entity_metadata_wrapper('node', $node);
+    $wrapper->$field_name->set(NULL);
+    $termref = $wrapper->$field_name->value();
+    $this->assertNull($termref, 'Unset of a term reference successful.');
+  }
+
+  /**
+   * Test all properties of a user.
+   */
+  function testUserProperties() {
+    $account = $this->drupalCreateUser();
+    $account->login = time();
+    $account->access = time();
+    $wrapper = entity_metadata_wrapper('user', $account);
+    foreach ($wrapper as $key => $value) {
+      $this->assertValue($wrapper, $key);
+    }
+  }
+
+  /**
+   * Test properties provided by system module.
+   */
+  function testSystemProperties() {
+    $wrapper = entity_metadata_site_wrapper();
+    foreach ($wrapper as $key => $value) {
+      $this->assertValue($wrapper, $key);
+    }
+    // Test page request related properties.
+    foreach ($wrapper->current_page as $key => $value) {
+      $this->assertValue($wrapper->current_page, $key);
+    }
+
+    // Test files.
+    $file = $this->createFile();
+
+    $wrapper = entity_metadata_wrapper('file', $file);
+    foreach ($wrapper as $key => $value) {
+      $this->assertValue($wrapper, $key);
+    }
+  }
+
+  /**
+   * Runs some generic tests on each entity.
+   */
+  function testCRUDfunctions() {
+    $info = entity_get_info();
+    foreach ($info as $entity_type => $entity_info) {
+      // Test using access callback.
+      entity_access('view', $entity_type);
+      entity_access('update', $entity_type);
+      entity_access('create', $entity_type);
+      entity_access('delete', $entity_type);
+
+      // Test creating the entity.
+      if (!isset($entity_info['creation callback'])) {
+        continue;
+      }
+
+      // Populate $values with all values that are setable. They will be set
+      // with an metadata wrapper, so we also test setting that way.
+      $values = array();
+      foreach (entity_metadata_wrapper($entity_type) as $name => $wrapper) {
+        $info = $wrapper->info();
+        if (!empty($info['setter callback'])) {
+          $values[$name] = $this->createValue($wrapper);
+        }
+      }
+      $entity = entity_property_values_create_entity($entity_type, $values)->value();
+      $this->assertTrue($entity, "Created $entity_type and set all setable values.");
+
+      // Save the new entity.
+      $return = entity_save($entity_type, $entity);
+      if ($return === FALSE) {
+        continue; // No support for saving.
+      }
+      $id = entity_metadata_wrapper($entity_type, $entity)->getIdentifier();
+      $this->assertTrue($id, "$entity_type has been successfully saved.");
+
+      // And delete it.
+      $return = entity_delete($entity_type, $id);
+      if ($return === FALSE) {
+        continue; // No support for deleting.
+      }
+      $return = entity_load_single($entity_type, $id);
+      $this->assertFalse($return, "$entity_type has been successfully deleted.");
+    }
+  }
+
+  /**
+   * Test making use of a text fields.
+   */
+  function testTextFields() {
+    // Create a simple text field without text processing.
+    $field = array(
+      'field_name' => 'field_text',
+      'type' => 'text',
+      'cardinality' => 2,
+    );
+    field_create_field($field);
+    $instance = array(
+      'field_name' => 'field_text',
+      'entity_type' => 'node',
+      'label' => 'test',
+      'bundle' => 'article',
+      'widget' => array(
+        'type' => 'text_textfield',
+        'weight' => -1,
+      ),
+    );
+    field_create_instance($instance);
+
+    $node = $this->drupalCreateNode(array('type' => 'article'));
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $wrapper->field_text[0] = 'the text';
+
+    // Try saving the node and make sure the information is still there after
+    // loading the node again, thus the correct data structure has been written.
+    node_save($node);
+    $node = node_load($node->nid, NULL, TRUE);
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $this->assertEqual('the text', $wrapper->field_text[0]->value(), 'Text has been specified.');
+
+    // Now activate text processing.
+    $instance['settings']['text_processing'] = 1;
+    field_update_instance($instance);
+
+    $node = $this->drupalCreateNode(array('type' => 'article'));
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $wrapper->field_text[0]->set(array('value' => "<b>The second body.</b>"));
+    $this->assertEqual("<p>The second body.</p>\n", $wrapper->field_text[0]->value->value(), "Setting a processed text field value and reading it again.");
+
+    // Assert the summary property is correctly removed.
+    $this->assertFalse(isset($wrapper->field_text[0]->summary), 'Processed text has no summary.');
+
+    // Create a text field with summary but without text processing.
+    $field = array(
+      'field_name' => 'field_text2',
+      'type' => 'text_with_summary',
+      'cardinality' => 1,
+    );
+    field_create_field($field);
+    $instance = array(
+      'field_name' => 'field_text2',
+      'entity_type' => 'node',
+      'label' => 'test',
+      'bundle' => 'article',
+      'settings' => array('text_processing' => 0),
+      'widget' => array(
+        'type' => 'text_textarea_with_summary',
+        'weight' => -1,
+      ),
+    );
+    field_create_instance($instance);
+
+    $node = $this->drupalCreateNode(array('type' => 'article'));
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $wrapper->field_text2->summary = 'the summary';
+    $wrapper->field_text2->value = 'the text';
+
+    // Try saving the node and make sure the information is still there after
+    // loading the node again, thus the correct data structure has been written.
+    node_save($node);
+    $node = node_load($node->nid, NULL, TRUE);
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $this->assertEqual('the text', $wrapper->field_text2->value->value(), 'Text has been specified.');
+    $this->assertEqual('the summary', $wrapper->field_text2->summary->value(), 'Summary has been specified.');
+  }
+
+  /**
+   * Test making use of a file field.
+   */
+  function testFileFields() {
+    $file = $this->createFile();
+
+    // Create a file field.
+    $field = array(
+      'field_name' => 'field_file',
+      'type' => 'file',
+      'cardinality' => 2,
+      'settings' => array('display_field' => TRUE),
+    );
+    field_create_field($field);
+    $instance = array(
+      'field_name' => 'field_file',
+      'entity_type' => 'node',
+      'label' => 'File',
+      'bundle' => 'article',
+      'settings' => array('description_field' => TRUE),
+      'required' => FALSE,
+      'widget' => array(
+        'type' => 'file_generic',
+        'weight' => -1,
+      ),
+    );
+    field_create_instance($instance);
+
+    $node = $this->drupalCreateNode(array('type' => 'article'));
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $wrapper->field_file[0] = array('fid' => $file->fid, 'display' => FALSE);
+    $this->assertEqual($file->filename, $wrapper->field_file[0]->file->name->value(), 'File has been specified.');
+
+    $wrapper->field_file[0]->description = 'foo';
+    $wrapper->field_file[0]->display = TRUE;
+
+    $this->assertEqual($wrapper->field_file[0]->description->value(), 'foo', 'File description has been correctly set.');
+
+    // Try saving the node and make sure the information is still there after
+    // loading the node again, thus the correct data structure has been written.
+    node_save($node);
+    $node = node_load($node->nid, NULL, TRUE);
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $this->assertEqual($wrapper->field_file[0]->description->value(), 'foo', 'File description has been correctly set.');
+    $this->assertEqual($wrapper->field_file[0]->display->value(), TRUE, 'File display value has been correctly set.');
+
+    // Test adding a new file, the display-property has to be created
+    // automatically.
+    $wrapper->field_file[1]->file = $file;
+    node_save($node);
+    $node = node_load($node->nid, NULL, TRUE);
+    $this->assertEqual($file->fid, $wrapper->field_file[1]->file->getIdentifier(), 'New file has been added.');
+
+    // Test adding an invalid file-field item, i.e. without any file.
+    try {
+      $wrapper->field_file[] = array('description' => 'test');
+      $this->fail('Exception not thrown.');
+    }
+    catch (EntityMetadataWrapperException $e) {
+      $this->pass('Not valid file-field item has thrown an exception.');
+    }
+
+    // Test remove all file-field items.
+    $wrapper->field_file = NULL;
+    $this->assertFalse($wrapper->field_file->value(), 'Removed multiple file-field items.');
+  }
+
+  /**
+   * Test making use of an image field.
+   */
+  function testImageFields() {
+    $file = $this->createFile('image');
+
+    // Just use the image field on the article node.
+    $node = $this->drupalCreateNode(array('type' => 'article'));
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $wrapper->field_image = array('fid' => $file->fid);
+    $this->assertEqual($file->filename, $wrapper->field_image->file->name->value(), 'File has been specified.');
+
+    $wrapper->field_image->alt = 'foo';
+    $this->assertEqual($wrapper->field_image->alt->value(), 'foo', 'Image alt attribute has been correctly set.');
+
+    // Try saving the node and make sure the information is still there after
+    // loading the node again, thus the correct data structure has been written.
+    node_save($node);
+    $node = node_load($node->nid, NULL, TRUE);
+    $wrapper = entity_metadata_wrapper('node', $node);
+
+    $this->assertEqual($wrapper->field_image->alt->value(), 'foo', 'File description has been correctly set.');
+
+    // Test adding a new image.
+    $wrapper->field_image->file = $file;
+    node_save($node);
+    $node = node_load($node->nid, NULL, TRUE);
+    $this->assertEqual($file->fid, $wrapper->field_image->file->getIdentifier(), 'New file has been added.');
+
+    // Test adding an invalid image-field item, i.e. without any file.
+    try {
+      $wrapper->field_image = array();
+      $this->fail('Exception not thrown.');
+    }
+    catch (EntityMetadataWrapperException $e) {
+      $this->pass('Not valid image-field item has thrown an exception.');
+    }
+  }
+
+  /**
+   * Creates a value for the given property.
+   */
+  protected function createValue($wrapper) {
+    if (!isset($this->node)) {
+      $this->node = $this->drupalCreateNode(array('type' => 'page'));
+      $this->user = $this->drupalCreateUser();
+      $this->taxonomy_vocabulary = $this->createVocab();
+    }
+
+    if ($options = $wrapper->optionsList()) {
+      $options = entity_property_options_flatten($options);
+      return $wrapper instanceof EntityListWrapper ? array(key($options)) : key($options);
+    }
+
+    // For mail addresses properly pass an mail address.
+    $info = $wrapper->info();
+    if ($info['name'] == 'mail') {
+      return 'webmaster@example.com';
+    }
+
+    switch ($wrapper->type()) {
+      case 'decimal':
+      case 'integer':
+      case 'duration':
+        return 1;
+      case 'date':
+        return time();
+      case 'boolean':
+        return TRUE;
+      case 'token':
+        return drupal_strtolower($this->randomName(8));
+      case 'text':
+        return $this->randomName(32);
+      case 'text_formatted':
+        return array('value' => $this->randomName(16));
+      case 'list<taxonomy_term>':
+        return array();
+
+      default:
+        return $this->{$wrapper->type()};
+    }
+  }
+
+  protected function createVocab() {
+    $vocab = entity_create('taxonomy_vocabulary', array(
+      'name' => $this->randomName(),
+      'machine_name' => drupal_strtolower($this->randomName()),
+      'description' => $this->randomName(),
+    ));
+    entity_save('taxonomy_vocabulary', $vocab);
+    return $vocab;
+  }
+
+  protected function createFile($file_type = 'text') {
+    // Create a managed file.
+    $file = current($this->drupalGetTestFiles($file_type));
+
+    // Set additional file properties and save it.
+    $file->filemime = file_get_mimetype($file->filename);
+    $file->uid = 1;
+    $file->timestamp = REQUEST_TIME;
+    $file->filesize = filesize($file->uri);
+    $file->status = 0;
+    file_save($file);
+    return $file;
+  }
+}
+

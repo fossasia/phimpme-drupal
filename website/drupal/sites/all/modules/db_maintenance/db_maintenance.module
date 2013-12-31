@@ -1,0 +1,245 @@
+<?php
+
+/**
+ * @file
+ * Optimizes database tables during cron runs.
+ *
+ * @author David Kent Norman
+ * @link http://deekayen.net/
+ */
+
+/**
+ * Implements hook_help().
+ *
+ * @param $section string
+ * @return string
+ */
+function db_maintenance_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#db_maintenance':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('DB Maintenance performs an optimization query on selected tables') . '</p>';
+      $output .= '<h3>' . t('Uses') . '</h3>';
+      $output .= '<dl>';
+      $output .= '<dt>' . t('MyIASM Tables') . '</dt>';
+      $output .= '<dd>' . t('OPTIMIZE TABLE repairs a table if it has deleted or split rows, sorts table indexes, and updates table statistics. For BDB and InnoDB, OPTIMIZE rebuilds the table.') . '</dd>';
+      $output .= '<dd>' . t('OPTIMIZE works best on tables with large deletions (e.g. cache or watchdog), however, MySQL will reuse old record positions, therefore in most setups, OPTIMIZE TABLE is unnecessary unless you just like defragmenting.') . '</dd>';
+      $output .= '<dd>' . t('The Overhead column in phpMyAdmin\'s database view is the most common way to determine the need of an OPTIMIZE TABLE query. It essentially shows the amount of disk space you would recover by running an optimize/defragmentation query.') . '</dd>';
+      $output .= '<dd><i><u>' . t('Note: MySQL locks tables while OPTIMIZE TABLE is running.') . '</u></i></dd>';
+      $output .= '<dt>' . t('Postgre SQL Tables') . '</dt>';
+      $output .= '<dd>' . t('VACUUM reclaims storage occupied by deleted tuples. In normal PostgreSQL operation, tuples that are deleted or obsoleted by an update are not physically removed from their table; they remain present until a VACUUM is done. It\'s therefore necessary to VACUUM periodically, especially on frequently-updated tables.') . '</dd>';
+      $output .= '</dl>';
+      return $output;
+    case 'admin/config/system/db_maintenance':
+      return t('<p>DB maintenance performs an optimization query on selected tables.</p>
+        <p>For MyISAM tables,
+        OPTIMIZE TABLE repairs a table if it has deleted or split rows, sorts table indexes,
+        and updates table statistics. For BDB and InnoDB, OPTIMIZE rebuilds the table. OPTIMIZE
+        works best on tables with large deletions (e.g. cache or watchdog), however MySQL will reuse
+        old record positions, therefore in most setups, OPTIMIZE TABLE is unnecessary unless you
+        just like defragmenting.</p><p>Note: MySQL locks tables during the time OPTIMIZE TABLE is running.</p>
+        <p>The Overhead column in phpMyAdmin\'s database view is the most common way to determine the
+        need of an OPTIMIZE TABLE query. It essentially shows the amount of disk space you would
+        recover by running an optimize/defragmentation query.</p>
+        <p>For PostgreSQL tables, VACUUM reclaims storage occupied by deleted tuples.
+        In normal PostgreSQL operation, tuples that are deleted or obsoleted by an update are not
+        physically removed from their table; they remain present until a VACUUM is done. Therefore
+        it\'s necessary to VACUUM periodically, especially on frequently-updated tables.</p>');
+  }
+}
+
+/**
+ * Implements hook_menu().
+ *
+ * @return array
+ */
+function db_maintenance_menu() {
+  $items = array();
+
+  $items['admin/config/system/db_maintenance'] = array(
+    'title' => 'DB maintenance',
+    'description' => 'Executes a cron-based query to optimize database tables.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('db_maintenance_admin_settings'),
+    'access callback' => 'user_access',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['db_maintenance/optimize'] = array(
+    'page callback' => 'db_maintenance_optimize_tables_page',
+    'access callback' => 'user_access',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Callback page for manually optimizing tables.
+ */
+function db_maintenance_optimize_tables_page() {
+  db_maintenance_optimize_tables();
+  drupal_set_message(t('Database tables optimized'));
+  drupal_goto('admin/config/system/db_maintenance');
+}
+
+/**
+ * Get a list of all the tables in a database.
+ *
+ * @param string $db The name of the database connection to query for tables.
+ * @return array representing the tables in the specified database.
+ */
+function _db_maintenance_list_tables($db) {
+  global $databases;
+
+  $table_names = array();
+
+  // Set the database to query.
+  $previous = db_set_active($db);
+  if (db_driver() == 'mysql') {
+    $result = db_query('SHOW TABLES', array(), array('fetch' => PDO::FETCH_ASSOC));
+  }
+  elseif (db_driver() == 'pgsql') {
+    $result = db_query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name", array(), array('fetch' => PDO::FETCH_ASSOC));
+  }
+
+  // Return to the previously set database.
+  db_set_active($previous);
+  foreach ($result as $table_name) {
+    $table_name = current($table_name);
+    $table_names[$table_name] = $table_name;
+  }
+  return $table_names;
+}
+
+/**
+ * Implements hook_cron().
+ */
+function db_maintenance_cron() {
+  $last_run = variable_get('db_maintenance_cron_last', 0);
+  $interval = REQUEST_TIME - variable_get('db_maintenance_cron_frequency', 86400);
+  // Only run cron if enough time has elapsed.
+  if ($interval > $last_run) {
+    db_maintenance_optimize_tables();
+  }
+}
+
+/**
+ * Perform the maintenance.
+ */
+function db_maintenance_optimize_tables() {
+  global $databases;
+
+  foreach($databases as $db=>$connection) {
+    $db_name = $connection['default']['database'];
+    $config_tables = variable_get('db_maintenance_table_list_' . $db_name, NULL);
+
+    // Only proceed if tables are selected for this database.
+    if (is_array($config_tables) && sizeof($config_tables) > 0) {
+
+      while (list(, $table_name) = each($config_tables)) {
+        // Set the database to query.
+        $previous = db_set_active($db);
+
+        if (db_table_exists($table_name)) {
+          // PDO doesn't replace table names with ? or :
+          // db_table_exists and db_escape_table is redundant, but just doing both
+          if (db_driver() == 'mysql') {
+            try {
+              db_query("OPTIMIZE TABLE {$table_name}")->execute();
+            }
+            catch (Exception $e) {
+              watchdog_exception('type', $e);
+            }
+          }
+
+          elseif (db_driver() == 'pgsql') {
+            try {
+              db_query("VACUUM ANALYZE {$table_name}")->execute();
+            }
+            catch (Exception $e) {
+              watchdog_exception('type', $e);
+            }
+          }
+
+        }
+        else {
+          watchdog('db_maintenance', '@table table in @db database was configured to be optimized but does not exist.', array('@db' => $db_name, '@table' => $table_name), WATCHDOG_NOTICE);
+        }
+
+        // Return to the previously set database.
+        db_set_active($previous);
+        watchdog('db_maintenance', 'Optimized @table table in @db database.', array('@db' => $db_name, '@table' => $table_name), WATCHDOG_DEBUG);
+      }
+
+      if (variable_get('db_maintenance_log', 0)) {
+        $tables = implode(', ', $config_tables);
+        watchdog('db_maintenance', 'Optimized tables in @db database: @tables', array('@db' => $db_name, '@tables' => $tables), WATCHDOG_INFO);
+      }
+    }
+  }
+  variable_set('db_maintenance_cron_last', REQUEST_TIME);
+}
+
+/**
+ * Administration settings
+ *
+ * options: log each optimization
+ *          multi-select list of tables to optimize
+ *
+ * @return array
+ */
+function db_maintenance_admin_settings() {
+  global $databases;
+
+  drupal_add_css(drupal_get_path('module', 'db_maintenance') .'/db_maintenance.css');
+
+
+  $form = array();
+  $form['db_maintenance_log'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Log OPTIMIZE queries',
+    '#default_value' => variable_get('db_maintenance_log', 0),
+    '#description' => t('If enabled, a watchdog entry will be made each time tables are optimized, containing information which tables were involved.'),
+  );
+  $options = array(
+    0 => t('Run during every cron'),
+    3600 => t('Hourly'),
+    7200 => t('Bi-Hourly'),
+    86400 => t('Daily'),
+    172800 => t('Bi-Daily'),
+    604800 => t('Weekly'),
+    1209600 => t('Bi-Weekly'),
+    2592000 => t('Monthly'),
+    5184000 => t('Bi-Monthly'),
+  );
+  $form['db_maintenance_cron_frequency'] = array(
+    '#type' => 'select',
+    '#title' => t('Optimize tables'),
+    '#options' => $options,
+    '#default_value' => variable_get('db_maintenance_cron_frequency', 86400),
+    '#description' => t('Select how often database tables should be optimized.') . ' ' . l(t('Optimize now.'), 'db_maintenance/optimize'),
+  );
+  // Set the databases array if not already set in $db_url.
+  $options = array();
+
+  // Loop through each database and list the possible tables to optimize.
+  foreach ($databases as $db => $connection) {
+    $options = _db_maintenance_list_tables($db);
+
+    $form['db_maintenance_table_list_' . $connection['default']['database']] = array(
+      '#type' => 'select',
+      '#title' => t('Tables in the !db database', array('!db' => $connection['default']['database'] == 'default' ? 'Drupal' : $connection['default']['database'])),
+      '#options' => $options,
+      '#default_value' => variable_get('db_maintenance_table_list_' . $connection['default']['database'], ''),
+      '#description' => t('Selected tables will be optimized during cron runs.'),
+      '#multiple' => TRUE,
+      '#attributes' => array('size' => 17),
+    );
+  }
+
+  return system_settings_form($form);
+}

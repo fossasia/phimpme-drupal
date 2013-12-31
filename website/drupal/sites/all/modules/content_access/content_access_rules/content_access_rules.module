@@ -1,0 +1,51 @@
+<?php
+
+/**
+ * @file
+ * Hooks and callback functions for rules.module integration.
+ */
+
+/**
+ * Implements hook_content_type_access().
+ */
+function content_access_rules_content_type_access($settings) {
+  rules_invoke_event('content_access_content_type');
+}
+
+/**
+ * Implements hook_user_acl().
+ */
+function content_access_rules_user_acl($settings) {
+  rules_invoke_event('content_access_user_acl');
+}
+
+/**
+ * Implements hook_per_node().
+ */
+function content_access_rules_per_node($settings) {
+  rules_invoke_event('content_access_per_node');
+}
+
+/**
+ * Manipulate and pass the special checkboxes to
+ * content_access_disable_checkboxes()
+ *
+ * @todo Find a way to include the file in Rules' form
+ */
+function content_access_rules_disable_checkboxes($element) {
+  $roles = array_map('filter_xss_admin', user_roles());
+  $roles = array_flip($roles);
+
+  foreach ($element['#options'] as $select_key => $role_name) {
+    $rid = $roles[$role_name];
+    $option = array($rid => array('#title' => $role_name));
+    $option = content_access_disable_checkboxes($option);
+
+    if (isset($option[$rid]['#disabled'])) {
+      $element[$select_key] += $option[$rid];
+      $element[$select_key]['#default_value'] = $select_key;
+    }
+  }
+
+  return $element;
+}

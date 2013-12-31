@@ -1,0 +1,26 @@
+I. Automatically create a gallery once the user account is activated:
+1. Install Rules module (this module depends on Entity module)
+2. Create a new rule (Admin > Configuration) as:
+	{ "rules_create_gallery" : {
+		"LABEL" : "Create gallery",
+		"PLUGIN" : "reaction rule",
+		"REQUIRES" : [ "rules" ],
+		"ON" : [ "user_insert" ],
+		"DO" : [
+		  { "entity_create" : {
+		      "USING" : {
+		        "type" : "node",
+		        "param_type" : "media_gallery",
+		        "param_title" : "[account:name]\u0027s photos",
+		        "param_author" : [ "account" ]
+		      },
+		      "PROVIDE" : { "entity_created" : { "entity_created" : "Created entity" } }
+		    }
+		  }
+		]
+	  }
+	}
+
+II. Make only 1 gallery per user
+Set permission for authenticated user:
+Gallery: Create new content: NO

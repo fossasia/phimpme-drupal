@@ -1,0 +1,92 @@
+<?php
+
+/**
+ * @file
+ *   Installs comments for Statuses.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function fbss_comments_schema() {
+  $schema = array();
+  $schema['fbss_comments'] = array(
+    'description' => 'Comments on statuses.',
+    'fields' => array(
+      'cid' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'unsigned' => TRUE,
+        'description' => 'The Comment ID.',
+      ),
+      'sid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The Status ID.',
+      ),
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The User ID of the poster of the comment.',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The time the comment was submitted.',
+      ),
+      'comment' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'description' => 'The comment text.',
+      ),
+    ),
+    'indexes' => array(
+      'sid' => array('sid'),
+      'uid' => array('uid'),
+      'created' => array('created'),
+    ),
+    'primary key' => array('cid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function fbss_comments_install() {
+  if (module_exists('fbssc')) {
+    module_disable(array('fbssc'));
+  }
+  // TODO The drupal_(un)install_schema functions are called automatically in D7.
+  // drupal_install_schema('fbss_comments')
+  if (db_table_exists('fbssc')) {
+    db_query("
+      INSERT INTO {fbss_comments} (cid, sid, uid, created, comment)
+      SELECT old.cid, old.sid, old.uid, old.comment_time, old.comment
+      FROM {fbssc} as old
+      ORDER BY old.cid ASC
+    ");
+    drupal_uninstall_modules(array('fbssc'));
+    drupal_set_message(st('The Statuses Comments module has been upgraded.') . ' ' .
+      st('You should remove the "fbssc" folder from your modules directory to ensure you do not confuse it with the new version, which is part of the main Statuses package.')
+    );
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function fbss_comments_uninstall() {
+  // TODO The drupal_(un)install_schema functions are called automatically in D7.
+  // drupal_uninstall_schema('fbss_comments')
+  variable_del('fbss_comments_user_pictures');
+  variable_del('fbss_comments_hide_small');
+  variable_del('fbss_comments_show_all');
+  variable_del('statuses_ahah');
+  variable_del('fbss_comments_enter');
+}

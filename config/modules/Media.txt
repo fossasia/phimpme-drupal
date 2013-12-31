@@ -1,0 +1,2 @@
+The Media module should have an additional permission: Edit own media.
+This is achieved by the patch in ../../mbm_modules folder.

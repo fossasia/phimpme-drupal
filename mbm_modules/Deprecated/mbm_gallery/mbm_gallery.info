@@ -1,0 +1,5 @@
+name = mbm_gallery
+description = module nay se su dung ket hop voi mbmgallery theme.
+core = 7.x
+package = User interface
+stylesheets[all][] = css/font-page.css

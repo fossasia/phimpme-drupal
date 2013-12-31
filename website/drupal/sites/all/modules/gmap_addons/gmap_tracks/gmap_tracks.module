@@ -1,0 +1,80 @@
+<?php
+
+/**
+ * @file
+ * Track overlays for GMap.
+ */
+
+/**
+ * Implementation of hook_gmap().
+ */
+function gmap_tracks_gmap($op, &$map = NULL) {
+  switch ($op) {
+    case 'macro_multiple':
+      return array('track');
+    case 'parse_macro':
+      if (isset($map['track']) && is_array($map['track'])) {
+        foreach ($map['track'] as $track) {
+          $t = array();
+          $cp = strpos($track, ':');
+          if ($cp != false) {
+            $stylestr = substr($track, 0, $cp);
+            $t['style'] = _gmap_parse_style($stylestr);
+            $t['filename'] = substr($track, $cp+1);
+            $map['tracks'][] = $t;
+          }
+        }
+      }
+      unset ($map['track']);
+      break;
+
+    case 'pre_theme_map':
+      if (!empty($map['tracks'])) {
+        // Ensure the shapeloader is loaded.
+        drupal_add_js(drupal_get_path('module', 'gmap') .'/js/shapeloader_static.js');
+        drupal_add_js(drupal_get_path('module', 'gmap') .'/js/gmap_shapes.js');
+
+        // Convert tracks to shapes.
+        foreach ($map['tracks'] as $track) {
+          $s = array('type' => 'line');
+          $s['style'] = $track['style'];
+          $s['points'] = _gmap_tracks_parse($track['filename']);
+          $map['shapes'][] = $s;
+        }
+        unset ($map['tracks']);
+      }
+      break;
+  }
+}
+
+/**
+ * Parse a plt file into coordinates.
+ */
+function _gmap_tracks_parse($track) {
+  $points = array();
+  $file = file_create_path($track);
+  if ($file === FALSE) {
+    drupal_set_message(t('Invalid path to track file!'));
+  }
+  else if (!file_exists($file)) {
+    drupal_set_message(t('Track file not found!'));
+  }
+  else {
+    // @@@ Oversimplified OziExplorer PLT parser.
+    // @@@ This needs improvement for various file types.
+    if ($handle = fopen($file, 'r')) {
+      while (!feof($handle)) {
+        $line = fgets($handle, 4096);
+        $line = explode(',', $line);
+        if (count($line) == 7) {
+          $points[] = array(
+            (float)trim($line[0]), // latitude
+            (float)trim($line[1]), // longitude
+          );
+        }
+      }
+      fclose($handle);
+    }
+  }
+  return $points;
+}

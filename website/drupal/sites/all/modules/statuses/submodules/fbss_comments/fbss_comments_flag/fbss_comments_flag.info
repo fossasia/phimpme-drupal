@@ -1,0 +1,16 @@
+name = Statuses Comments Flag Integration
+description = "Integrates Flag with Statuses Comments."
+package = Statuses
+dependencies[] = fbss_comments
+dependencies[] = flag
+core = 7.x
+files[] = fbss_comments_flag.flag.inc
+files[] = fbss_comments_flag.install
+files[] = fbss_comments_flag.module
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

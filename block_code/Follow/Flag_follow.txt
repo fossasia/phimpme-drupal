@@ -1,0 +1,33 @@
+$flags = array();
+// Exported flag: "Follow".
+$flags['follow'] = array (
+  'content_type' => 'user',
+  'title' => 'Follow',
+  'global' => '0',
+  'types' => 
+  array (
+  ),
+  'flag_short' => 'Follow',
+  'flag_long' => 'Follow this user',
+  'flag_message' => 'Followed',
+  'unflag_short' => 'Unfollow',
+  'unflag_long' => 'Not follow this user any more',
+  'unflag_message' => 'Unfollowed',
+  'unflag_denied_text' => 'You will not able to undo this',
+  'link_type' => 'toggle',
+  'roles' => 
+  array (
+    'flag' => 
+    array (
+      0 => '2',
+    ),
+    'unflag' => 
+    array (
+      0 => '2',
+    ),
+  ),
+  'show_on_profile' => 0,
+  'access_uid' => 'others',
+  'api_version' => 2,
+);
+return $flags;

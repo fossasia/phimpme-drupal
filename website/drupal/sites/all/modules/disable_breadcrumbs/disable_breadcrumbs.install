@@ -1,0 +1,38 @@
+<?php
+/**
+ * @file
+ * Install file for the disable breadcrumbs module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function disable_breadcrumbs_schema() {
+  $schema['disable_breadcrumbs'] = array(
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node ID.',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'disable_breadcrumb' => array(
+        'description' => 'Disable breadcrumb status.',
+        'type' => 'int',
+        'size' => 'small',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function disable_breadcrumbs_uninstall() {
+  variable_del('disable_breadcrumbs_node_types');
+  variable_del('disable_breadcrumbs_node_types_all');
+  variable_del('disable_breadcrumbs_node_paths');
+}

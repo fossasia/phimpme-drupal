@@ -1,0 +1,18 @@
+<?php
+include_once drupal_get_path('module', 'exif') .'/exif_functionaltests.php';
+
+class TestsWithDefaultEnvironmentTestCase extends ExifFunctionalTestCase {
+  public function initModules() {
+    return array('exif','date');
+  }
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Exif Interface Test with default environmment (Locale module is desactivated).',
+      'description' => 'create node with exif metadata and ensure metadata is correctly calculated and displayed',
+      'group' => 'Exif',
+    );
+  }
+
+}
+?>

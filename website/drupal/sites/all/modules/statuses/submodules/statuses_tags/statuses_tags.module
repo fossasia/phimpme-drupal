@@ -1,0 +1,824 @@
+<?php
+
+/**
+ * @file
+ *   Converts @usernames to themed usernames and #hashtags to themed taxonomy
+ *   terms on Statuses.
+ */
+
+/**
+ * In this file:
+ * - "Tag" means a reference, like @username or #hashtag.
+ * - "Term" means a taxonomy term.
+ */
+
+//===============
+// DRUPAL HOOKS.
+//===============
+
+/**
+ * Implements hook_help().
+ */
+function statuses_tags_help($path, $arg) {
+  if ($path == 'admin/help#statuses_tags') {
+    return t('Modifies Statuses on display to replace @mentions with the themed username and #hashtags with taxonomy terms.') . ' ' .
+      t('Please see the <a href="http://drupal.org/project/statuses" rel="nofollow">Statuses project page</a> for more information.');
+  }
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function statuses_tags_menu() {
+  $items = array();
+  $items['admin/config/statuses/tags'] = array(
+    'title' => 'Tags',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('statuses_tags_admin'),
+    'access arguments' => array('administer Statuses settings'),
+    'description' => 'Allows administrators to adjust settings for Statuses Tags.',
+    'file' => 'statuses_tags.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function statuses_tags_block_info() {
+  if (TRUE) {
+    $block['statuses_popular_tags']['info'] = t('Statuses Popular Tags');
+    return $block;
+  }
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function statuses_tags_block_view($delta) {
+  if (TRUE && $delta == 'statuses_popular_tags') {
+    $block['subject'] = t('Popular tags');
+    $block['content'] = theme('statuses_popular_tags');
+    return $block;
+  }
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function statuses_tags_block_configure($delta) {
+  if ($delta == 'statuses_popular_tags') {
+    $form['statuses'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Statuses Settings'),
+      '#collapsible' => TRUE,
+      '#weight' => -4,
+      '#tree' => TRUE,
+    );
+    $form['statuses']['statuses_tags_count'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Number of items to display'),
+      '#default_value' => variable_get('statuses_tags_count', 5),
+      '#element_validate' => array('statuses_tags_block_validate'),
+      '#size' => 3,
+      '#maxlength' => 3,
+    );
+    $options = drupal_map_assoc(array('day', 'week', 'month', 'year', 'all'));
+    $form['statuses']['statuses_tags_time'] = array(
+      '#type' => 'select',
+      '#title' => t('Length of time'),
+      '#description' => t('Only consider statuses submitted within this time period while looking for popular tags.'),
+      '#default_value' => variable_get('statuses_tags_time', 'all'),
+      '#options' => $options,
+    );
+    return $form;
+  }
+}
+
+/**
+ * Implements hook_block_save().
+ */
+function statuses_tags_block_save($delta, $edit) {
+  if ($delta == 'statuses_popular_tags') {
+    variable_set('statuses_tags_count', $edit['statuses']['statuses_tags_count']);
+    variable_set('statuses_tags_time', $edit['statuses']['statuses_tags_time']);
+  }
+}
+
+/**
+ * The validate function for the settings on the block form.
+ */
+function statuses_tags_block_validate($form, &$form_state) {
+  $count = $form_state['values']['statuses']['statuses_tags_count'];
+  if (!is_numeric($count) || $count != round($count) || $count < 1) {
+    form_set_error('statuses][statuses_tags_count', t('The number of items to display must be a positive integer.'));
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function statuses_tags_theme($existing, $type, $theme, $path) {
+  return array(
+    'statuses_popular_tags' => array(
+      'variables' => array(
+        'count' => NULL,
+        'time' => NULL,
+      ),
+    ),
+  );
+}
+
+/**
+ * Themes a list of popular statuses.
+ *
+ * @param $count
+ *   The number of tags to show.
+ * @param $time
+ *   Statuses within this amount of time will be considered when searching for
+ *   popular tags. Can be one of 'day,' 'week,' 'month,' 'year,' 'all.'
+ * @return
+ *   An HTML representation of a list of tags.
+ */
+function theme_statuses_popular_tags($variables) {
+  $count = $variables['count'];
+  $time = $variables['time'];
+  if (!$count) {
+    $count = variable_get('statuses_tags_count', 5);
+  }
+  if (!$time) {
+    $time = variable_get('statuses_tags_time', 'all');
+  }
+  $terms = statuses_tags_popular_terms($count, $time);
+  $items = array();
+  foreach ($terms as $term) {
+    $term_link = l($term->name, _statuses_tags_resolve($term));
+    $items[] = t('!term (@count)', array('!term' => $term_link, '@count' => $term->popularity));
+  }
+  if (!empty($items)) {
+    return theme('item_list', array('items' => $items));
+  }
+}
+
+//======
+// API.
+//======
+
+/**
+ * Gets statuses that have a given tag by tag name.
+ *
+ * @param $tag
+ *   The taxonomy term or username which retrieved statuses must contain, or the
+ *   ID of that term or user. If an ID is passed, it must be an integer (not a
+ *   string numeral).
+ * @param $type
+ *   The type of tag: 'user' or 'term.'
+ * @param $count
+ *   The number of statuses to retrieve, starting with the most recent one. If
+ *   zero, all relevant statuses are returned.
+ * @param $sender
+ *   If null, has no effect. If a positive integer, restricts results to status
+ *   messages created by the user with that UID. If an array of positive
+ *   integers, restricts results to status messages created by users with a UID
+ *   in the array.
+ * @return
+ *   An array of status objects.
+ */
+function statuses_tags_get_statuses($tag, $type = 'term', $count = 1, $sender = NULL) {
+  $query = db_select('statuses_tags', 'st')
+    ->condition(is_int($tag) ? 'st.rid' : 'st.name', $tag)
+    ->condition('st.type', $type);
+  $alias = $query->innerJoin('statuses', 's', 'st.sid = s.sid');
+  $query->fields($alias);
+  if (!empty($sender)) {
+    if (is_numeric($sender)) {
+      $query->condition($alias . '.sender', $sender);
+    }
+    elseif(is_array($sender)) {
+      $query->condition($alias . '.sender', $sender, 'IN');
+    }
+  }
+  if ($count) {
+    $query->range(0, $count);
+  }
+  $result = $query->execute();
+  return $result->fetchAll();
+}
+
+/**
+ * Determines whether a given status has tags (optionally of a given type).
+ *
+ * @param $sid
+ *   The Status ID of the relevant status.
+ * @param $type
+ *   The type of tag to consider, or an array of tag types.
+ * @return
+ *   The number of tags of the given type the relevant status has.
+ */
+function statuses_tags_has_tags($sid, $type = NULL) {
+  $query = db_select('statuses_tags');
+  $query->addExpression('COUNT(rid)', 'count');
+  $query->condition('sid', $sid);
+  if (!empty($type)) {
+    if (is_string($type)) {
+      $query->condition('type', $type);
+    }
+    elseif (is_array($type)) {
+      $query->condition('type', $type, 'IN');
+    }
+  }
+  return $query->execute()->fetchField();
+}
+
+/**
+ * Determines whether a given status has a specific tag by ID.
+ *
+ * @param $sid
+ *   The Status ID of the status being tested.
+ * @param $rid
+ *   The Term ID or User ID of the reference being tested.
+ * @param $type
+ *   The type of reference: 'user' or 'term.'
+ * @return
+ *   1 if the status has the reference or 0 if it does not.
+ */
+function statuses_tags_status_has_tag($sid, $rid, $type = 'term') {
+  return db_query("SELECT COUNT(*) FROM {statuses_tags} WHERE sid = :sid AND rid = :rid AND type = :type", array(':sid' => $sid, ':rid' => $rid, ':type' => $type))->fetchField();
+}
+
+/**
+ * Determines whether a given status has a specific tag by name.
+ *
+ * @param $sid
+ *   The Status ID of the status being tested.
+ * @param $tag
+ *   The name of the tag being tested.
+ * @param $type
+ *   The type of reference: 'user' or 'term.'
+ * @return
+ *   1 if the status has the reference or 0 if it does not.
+ */
+function statuses_tags_status_has_tag_by_name($sid, $tag, $type = 'term') {
+  return db_query("SELECT COUNT(*) FROM {statuses_tags} WHERE sid = :sid AND name = :name AND type = :type", array(':sid' => $sid, ':name' => $tag, ':type' => $type))->fetchField();
+}
+
+/**
+ * Gets the tags that a given status has.
+ *
+ * @param $sid
+ *   The Status ID of the status for which to retrieve a tag.
+ * @param $type
+ *   The type of reference: 'user' or 'term.'
+ * @return
+ *   An array of term objects or user objects.
+ */
+function statuses_tags_get_status_tags($sid, $type = 'term') {
+  $result = db_query("SELECT rid FROM {statuses_tags} WHERE sid = :sid AND type = :type", array(':sid' => $sid, ':type' => $type));
+  $rids = array();
+  while ($rid = db_fetch_object($result)) {
+    if ($type == 'term') {
+      $rids[] = taxonomy_term_load($rid->rid);
+    }
+    elseif ($type == 'user') {
+      $rids[] = user_load($rid->rid);
+    }
+  }
+  return $rids;
+}
+
+/**
+ * Get terms by popularity.
+ *
+ * @see statuses_tags_popular()
+ */
+function statuses_tags_popular_terms($count = 5, $time = 'all', $options = array()) {
+  return statuses_tags_popular('term', $count, $time, $options);
+}
+
+/**
+ * Get usernames by popularity.
+ *
+ * @see statuses_tags_popular()
+ */
+function statuses_tags_popular_users($count = 5, $time = 'all', $options = array()) {
+  return statuses_tags_popular('user', $count, $time, $options);
+}
+
+
+/**
+ * Get tags by reference popularity.
+ *
+ * @param $type
+ *   The type of tag to return ('term' or 'user').
+ * @param $count
+ *   The number of tags to return.
+ * @param $time
+ *   The time period in which to test for term popularity. The value can be
+ *   "day," "week," "month," "year," or "all," in which case statuses from the
+ *   past day, week, month, year, or epoch (respectively) will be considered;
+ *   or it can be a UNIX timestamp, in which case statuses posted after that
+ *   date will be considered; or it can be a negative integer N, in which case
+ *   statuses posted within the last N seconds will be considered.
+ * @param $options
+ *   An associative array. Keys are the options, values are booleans:
+ *   - include self updates: Results should include status updates posted to
+ *     the relevant user's own profile. Default is TRUE.
+ *   - include messages to others: Results should include status messages
+ *     from one user to other entities. Default is TRUE.
+ *   - current user only: Results should only include statuses posted by the
+ *     current user to any recipient. Default is FALSE for terms and TRUE for
+ *     users.
+ * @return
+ *   An array of user or taxonomy term objects, ordered by popularity (most
+ *   popular first) and with the property "popularity" added to each object.
+ */
+function statuses_tags_popular($type = 'term', $count = 5, $time = 'all', $options = array()) {
+  $now = REQUEST_TIME;
+  if (is_numeric($time)) {
+    if ($time < 0) {
+      $time = $now + $time;
+    }
+  }
+  else {
+    $times = array(
+      'day' => 86400,
+      'week' => 604800,
+      'month' => 2592000,
+      'year' => 31449600,
+      'all' => 0,
+    );
+    $time = $now - $times[$time];
+  }
+  $options += array(
+    'include self updates' => TRUE,
+    'include messages to others' => TRUE,
+  );
+  if ($type == 'user') {
+    $options += array(
+      'current user only' => TRUE,
+    );
+  }
+  else {
+    $options += array(
+      'current user only' => FALSE,
+    );
+  }
+  $query = db_select('statuses_tags', 't');
+  $alias = $query->innerJoin('statuses', 's', 't.sid = s.sid');
+  $count_alias = $query->addExpression('COUNT(t.sid)', 'count');
+  $query->addField('t', 'rid');
+  if (!$options['include messages to others']) {
+    $query->where("$alias.sender = $alias.recipient AND $alias.type = 'user'");
+  }
+  if (!$options['include self updates']) {
+    $query->where("($alias.sender <> $alias.recipient OR $alias.type <> 'user')");
+  }
+  if ($options['current user only']) {
+    $query->condition("$alias.sender", $GLOBALS['user']->uid);
+  }
+  $query->condition('t.type', $type);
+  $query->condition("$alias.created", $time, '>');
+  $query->groupBy('t.rid');
+  $query->orderBy($count_alias, 'DESC');
+  $query->orderBy('t.sid', 'DESC');
+  $query->range(0, $count);
+  $result = $query->execute();
+  $tags = array();
+  foreach ($result as $tag) {
+    $c = $tag->count;
+    if ($type == 'term') {
+      $tag = taxonomy_term_load($tag->rid);
+    }
+    elseif ($type == 'user') {
+      $tag = user_load($tag->rid);
+    }
+    $tag->popularity = $c;
+    $tags[] = $tag;
+  }
+  return $tags;
+}
+
+/**
+ * Convert tags in message to links.
+ *
+ * @param $message
+ *   The message to process.
+ * @return
+ *   The message text with @mentions and #hashtags replaced.
+ */
+function statuses_tags_process_message($message) {
+  // $status_text comes in pre-encoded. Temporarily replace the single-quote
+  // character encoding so it doesn't get unintentionally linkified.
+  $message = str_replace("'", '&#039;', _statuses_tags_filter(str_replace('&#039;', "'", $message)));
+  return $message;
+}
+
+//===================
+// HELPER FUNCTIONS.
+//===================
+
+/**
+ * Replaces tags with a themed version.
+ *
+ * Tags can be in the following formats:
+ *   - #hashtag
+ *   - @userreference
+ *   - [#tag with word-break characters]
+ *
+ * @param $subject
+ *   The text in which to replace tags.
+ * @param $new
+ *   If TRUE, this function just finds tags. Otherwise, it finds and replaces
+ *   them.
+ * @return
+ *   If $new is FALSE, returns the filtered text. If $new is TRUE, returns a
+ *   nested array of tags. The outer array is keyed by type ('@' and '#').
+ */
+function _statuses_tags_filter($subject, $new = FALSE) {
+  $pattern = '%((?:\A|(?<=\s))(?:#|@)(\w|(\p{L}\p{M}?))+\b)|(\[(#|@)[^\]]+\])%u';
+  if (variable_get('statuses_tags_alt_pattern', FALSE)) {
+    $pattern = '%((?:\A|(?<=\s))(?:#|@)\w+\b)|(\[(#|@)[^\]]+\])%u';
+  }
+
+  preg_match_all($pattern, $subject, $matches);
+  $words = $matches[0];
+  // Order the results by descending length so that "#the #therapy" matches
+  // "#the" and "#therapy" instead of "#the" twice and "#therapy" never.
+  uasort($words, '_statuses_tags_sort');
+  $search = array();
+  $replace = array();
+  $items = array(
+    '@' => array(),
+    '#' => array(),
+  );
+  foreach ($words as $word) {
+    $sb = FALSE;
+    if (strpos($word, '[') === 0) {
+      $word = drupal_substr($word, 1, -1);
+      $sb = TRUE;
+    }
+    $op = drupal_substr($word, 0, 1);
+    $match = trim(drupal_substr($word, 1));
+    if (($op == '@' || $op == '#') && $match) {
+      $link = '';
+      if ($op == '@') {
+        $account = user_load_by_name($match);
+        if ($account->uid) {
+          $link = $op . theme('username', array('account' => $account));
+          $items['@'][] = $account;
+        }
+      }
+      elseif (variable_get('statuses_tags_vid', -1) != -1 && !is_numeric($match)) {
+        $term = _statuses_tags_get_term($match);
+        // If the term does not exist, create it.
+        if (empty($term)) {
+          $term = (object) array(
+            'vid' => variable_get('statuses_tags_vid', -1),
+            'name' => $match,
+          );
+          taxonomy_term_save($term);
+        }
+        $dest = _statuses_tags_resolve($term);
+        $link = $op . l($term->name, $dest);
+        $items['#'][] = $term;
+      }
+      if ($link) {
+        if ($sb) {
+          $word = '[' . $word . ']';
+        }
+        $search[] = $word;
+        $replace[] = $link;
+      }
+    }
+  }
+  if (!$new) {
+    return str_replace($search, $replace, $subject);
+  }
+  return $items;
+}
+
+/**
+ * Provides a utility for sorting tags.
+ *
+ * @param $a1
+ *   The first tag to compare.
+ * @param $a2
+ *   The second tag to compare.
+ * @return
+ *   Zero if the tags are the same length, one if the first is longer, or
+ *   negative-one if the second is longer. The result is that longer strings
+ *   float up and shorter strings sink.
+ */
+function _statuses_tags_sort($a1, $a2) {
+  $len1 = drupal_strlen($a1);
+  $len2 = drupal_strlen($a2);
+  if ($len1 == $len2) {
+    return 0;
+  }
+  return ($len1 > $len2) ? -1 : 1;
+}
+
+/**
+ * Resolves the URL to which to redirect a taxonomy term.
+ *
+ * @param $term
+ *   A taxonomy term object.
+ * @return
+ *   The resolved URL.
+ */
+function _statuses_tags_resolve($term) {
+  $url = variable_get('statuses_tags_url', 'statuses/term');
+  if (strpos($url, '%') === FALSE) {
+    $url .= '/%';
+  }
+  return str_replace('%', $term->name, $url);
+}
+
+/**
+ * Gets a taxonomy term by name.
+ */
+function _statuses_tags_get_term($name) {
+  return db_query("
+    SELECT tid, name
+    FROM {taxonomy_term_data}
+    WHERE
+      LOWER(name) = LOWER(:name)
+      AND vid = :vid
+  ", array(
+    ':name' => $name,
+    ':vid' => variable_get('statuses_tags_vid', -1)
+  ))->fetchObject();
+}
+
+//===================
+// FBSS INTEGRATION.
+//===================
+
+/**
+ * Implements hook_preprocess_statuses_item().
+ */
+function statuses_tags_preprocess_statuses_item(&$vars) {
+  $message = $vars['message'];
+  // $message comes in pre-encoded. Temporarily replace the single-quote
+  // character encoding so it doesn't get unintentionally linkified.
+  $message = str_replace("'", '&#039;', _statuses_tags_filter(str_replace('&#039;', "'", $message)));
+  $vars['message'] = $message;
+}
+
+/**
+ * Implements hook_statuses_save().
+ */
+function statuses_tags_statuses_save($status, $edit = FALSE) {
+  // If the status was just edited, the tags could have changed, so we flush them.
+  if ($edit) {
+    db_delete('statuses_tags')
+      ->condition('sid', $status->sid)
+      ->execute();
+  }
+  $matches = _statuses_tags_filter($status->message, TRUE);
+  // Users.
+  $old_matches = array();
+  foreach ($matches['@'] as $account) {
+    if (!in_array($account->uid, $old_matches)) {
+      $array = array(
+        'sid' => $status->sid,
+        'rid' => $account->uid,
+        'type' => 'user',
+        'name' => $account->name,
+      );
+      drupal_write_record('statuses_tags', $array);
+      $old_matches[] = $account->uid;
+      if (module_exists('rules')) {
+        rules_invoke_event('statuses_tags_user_was_tagged', $status, $account);
+      }
+      if (module_exists('trigger')) {
+        module_invoke_all('statuses_tags', 'fbsst_user_tagged', $status, $account);
+      }
+      module_invoke_all('statuses_tags_user_was_tagged', $status, $account);
+    }
+  }
+
+  // Terms.
+  if (!module_exists('taxonomy') || variable_get('statuses_tags_vid', -1) == -1) {
+    return;
+  }
+  $old_matches = array();
+  foreach ($matches['#'] as $term) {
+    $term = (object) $term;
+    if (!in_array($term->tid, $old_matches)) {
+      $array = array(
+        'sid' => $status->sid,
+        'rid' => $term->tid,
+        'type' => 'term',
+        'name' => $term->name,
+      );
+      drupal_write_record('statuses_tags', $array);
+      $old_matches[] = $term->tid;
+    }
+  }
+}
+
+/**
+ * Implements hook_statuses_delete().
+ */
+function statuses_tags_statuses_delete($status) {
+  db_delete('statuses_tags')
+    ->condition('sid', $status->sid)
+    ->execute();
+
+  if (module_exists('activity')) {
+    $result = db_query("SELECT aid FROM {activity} WHERE type = :type AND eid = :eid", array(':type' => 'statuses_tags', ':eid' => $status->sid));
+    $records = array();
+    while ($record = db_fetch_object($result)) {
+      $records[] = $record->aid;
+    }
+    if (!empty($records)) {
+      activity_delete($records);
+    }
+  }
+}
+
+//=====================
+// OTHER INTEGRATIONS.
+//=====================
+
+/**
+ * Implements hook_views_api().
+ */
+function statuses_tags_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'statuses_tags') . '/views',
+  );
+}
+
+/**
+ * Implements hook_views_data_alter().
+ *
+ * Overrides message handler to convert tags to links.
+ */
+function statuses_tags_views_data_alter(&$data) {
+  $data['statuses']['message']['field']['handler'] = 'statuses_tags_views_handler_field_message';
+}
+
+/**
+ * Implements hook_taxonomy().
+ */
+function statuses_tags_taxonomy($op, $type, $array = NULL) {
+  if ($op != 'delete') {
+    return;
+  }
+  if ($type == 'term') {
+    db_delete('statuses_tags')
+      ->condition('rid', $array['tid'])
+      ->condition('type', 'term')
+      ->execute();
+  }
+  elseif ($type == 'taxonomy_vocabulary') {
+    if ($array['vid'] === variable_get('statuses_tags_vid', -1)) {
+      // If the vocabulary is deleted, all the tags will no longer exist, so the references are invalid.
+      db_delete('statuses_tags')
+        ->condition('type', 'term')
+        ->execute();
+      variable_set('statuses_tags_vid', -1);
+    }
+  }
+}
+
+/**
+ * Implements hook_user_cancel().
+ */
+function statuses_tags_user_cancel($edit, $account, $method) {
+  if ($method == 'user_cancel_reassign') {
+    db_delete('statuses_tags')
+      ->condition('rid', $account->uid)
+      ->condition('type', 'user')
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_user_delete().
+ */
+function statuses_tags_user_delete($account) {
+  db_delete('statuses_tags')
+    ->condition('rid', $account->uid)
+    ->condition('type', 'user')
+    ->execute();
+}
+
+/**
+ * Implements hook_trigger_info().
+ */
+function statuses_tags_trigger_info() {
+  return array(
+    'statuses_tags' => array(
+      'statuses_tags_fbsst_user_tagged' => array(
+        'label' => t('A user has been mentioned in a status message'),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_statuses().
+ * or
+ * Implements hook_trigger_name().
+ */
+function statuses_tags_statuses_tags($op, $status, $account) {
+  if ($op != 'fbsst_user_tagged') {
+    return;
+  }
+  $aids = trigger_get_assigned_actions('statuses_tags_fbsst_user_tagged');
+  $context = array(
+    'hook' => 'statuses_tags',
+    'op' => $op,
+    'statuses' => $status,
+    'account' => $account,
+  );
+  actions_do(array_keys($aids), $account, $context);
+}
+
+//=======================
+// ACTIVITY INTEGRATION.
+//=======================
+
+/**
+ * Implements hook_activity_info().
+ */
+function statuses_tags_activity_info() {
+  $info = new stdClass();
+  $info->api = 2;
+  $info->name = 'statuses_tags';
+  $info->object_type = 'statuses';
+  $info->eid_field = 'sid';
+  $info->objects = array('Mentioned user' => 'statuses');
+  $info->hooks = array('statuses_tags' => array('fbsst_user_tagged'));
+  $info->realms = array('statuses_tags_mentioned' => 'Mentioned user');
+  return $info;
+}
+
+/**
+ * Implements hook_activity_grants().
+ */
+function statuses_tags_activity_grants($activity) {
+  $realms = array();
+  if ($activity->type == 'statuses_tags') {
+    $result = db_query("SELECT rid FROM {statuses_tags} WHERE type = :type AND sid = :sid", array(':type' => 'user', ':sid' => $activity->eid));
+    foreach ($result as $account) {
+      $realms['statuses_tags_mentioned'][] = $account->rid;
+    }
+  }
+  return $realms;
+}
+
+/**
+ * Implements hook_activity_access_grants().
+ */
+function statuses_tags_activity_access_grants($account) {
+  return array(
+    'statuses_tags_mentioned' => array($account->uid),
+  );
+}
+
+/**
+ * Implements hook_list_activity_actions().
+ */
+function statuses_tags_list_activity_actions($hook, $op, $max_age) {
+  $actions = array();
+  if (!empty($max_age)) {
+    $min_time = REQUEST_TIME - $max_age;
+  }
+  else {
+    $min_time = 0;
+  }
+
+  $result = db_query("
+    SELECT f.sid as id, f.created, t.rid as actor
+    FROM {statuses_tags} t INNER JOIN {statuses} f ON t.sid = f.sid
+    WHERE t.type = :type AND created > :created
+  ", array(':type' => 'user', ':created' => $min_time));
+  foreach ($result as $row) {
+    $actions[] = (array) $row;
+  }
+
+  return $actions;
+}
+
+/**
+ * Implements hook_load_activity_context().
+ */
+function statuses_tags_load_activity_context($hook, $op, $id) {
+  $staus = statuses_load($id);
+  $activity_context = array();
+
+  if (!empty($status)) {
+    $activity_context = array(
+      'hook' => 'statuses_tags',
+      'op' => $op,
+      'statuses' => $status,
+    );
+  }
+
+  return $activity_context;
+}

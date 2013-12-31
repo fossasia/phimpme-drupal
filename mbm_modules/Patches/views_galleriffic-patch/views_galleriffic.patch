@@ -1,0 +1,383 @@
+diff --git a/css/views_galleriffic_default.css b/css/views_galleriffic_default.css
+index 947ef1b..e0cf1f6 100644
+--- a/css/views_galleriffic_default.css
++++ b/css/views_galleriffic_default.css
+@@ -67,7 +67,7 @@
+   margin: 0;
+   padding: 0;
+ }
+-#galleriffic ul.thumbs li {
++#galleriffic ul.thumbs li {
+   float: left;
+   padding: 0;
+   margin: 5px 10px 5px 0;
+@@ -165,9 +165,9 @@
+ #galleriffic span.image-wrapper {
+   top: 0;
+   width: 100%;
+-  position: absolute;
++  position: relative;
+ }
+-
++
+ #galleriffic span.image-caption {
+   top: 0;
+   left: 0;
+diff --git a/js/views_galleriffic.js b/js/views_galleriffic.js
+index f2e9943..2738ec5 100644
+--- a/js/views_galleriffic.js
++++ b/js/views_galleriffic.js
+@@ -1,15 +1,14 @@
+ (function ($) {
+
+-Drupal.behaviors.ViewsGalleriffic = {
++Drupal.behaviors.ViewsGalleriffic = {
+   attach: function(context) {
+     var settings = Drupal.settings.views_galleriffic;
+-
++
+
+     // Initialize Advanced Galleriffic Gallery
+-    var gallery = $('#thumbs:not(.galleriffic-processed)',context).addClass("galleriffic-processed").galleriffic({
++    var gallery = $('#thumbs:not(.galleriffic-processed)',context).addClass("galleriffic-processed").galleriffic({
+       delay:                  settings.delay,
+       numThumbs:              settings.numbthumbs,
+-      preloadAhead:           settings.numbthumbs,
+       enableTopPager:         settings.enableTopPager,
+       enableBottomPager:      settings.enableBottomPager,
+       imageContainerSel:      '#slideshow',
+@@ -46,13 +45,13 @@ Drupal.behaviors.ViewsGalleriffic = {
+         // Show appropriate next / prev page links
+         if (this.displayedPage > 0)
+           prevPageLink.css('visibility', 'visible');
+-
++
+         var lastPage = this.getNumPages() - 1;
+         if (this.displayedPage < lastPage)
+           nextPageLink.css('visibility', 'visible');
+
+         this.fadeTo('fast', 1.0);
+-      }
++      }
+     });
+
+     // Initially set opacity on thumbs and add
+@@ -74,8 +73,8 @@ Drupal.behaviors.ViewsGalleriffic = {
+       gallery.nextPage();
+       e.preventDefault();
+     });
+-
+-    if (settings.enableHistory == 'true') {
++
++    if (settings.enableHistory == 'true') {
+       /**** Functions to support integration of galleriffic with the jquery.history plugin ****/
+
+       function pageload(hash) {
+@@ -89,7 +88,7 @@ Drupal.behaviors.ViewsGalleriffic = {
+       }
+
+       // Initialize history plugin.
+-      // The callback is called at once by present location.hash.
++      // The callback is called at once by present location.hash.
+       $.historyInit(pageload, window.location.pathname);
+
+       // set onlick event for buttons using the jQuery 1.3 live method
+@@ -99,8 +98,8 @@ Drupal.behaviors.ViewsGalleriffic = {
+         var hash = this.href;
+         hash = hash.replace(/^.*#/, '');
+
+-        // moves to a new page.
+-        // pageload is called at once.
++        // moves to a new page.
++        // pageload is called at once.
+         // hash don't contain "#", "?"
+         $.historyLoad(hash);
+
+@@ -108,6 +107,8 @@ Drupal.behaviors.ViewsGalleriffic = {
+       });
+     }
+
++  // Expose the object to be used outside this script
++  Drupal.galleriffic = gallery;
+   }
+ }
+ })(jQuery);
+diff --git a/views-galleriffic-view-gallerifficrows.tpl.php b/views-galleriffic-view-gallerifficrows.tpl.php
+index 47a56df..62621ad 100644
+--- a/views-galleriffic-view-gallerifficrows.tpl.php
++++ b/views-galleriffic-view-gallerifficrows.tpl.php
+@@ -1,16 +1,17 @@
+-<?php
+-/**
+- * @file
+- * template for views galleriffic row
+- */
+-?>
+-<?php if ($fields['slide']->content): ?>
+-  <li>
+-    <a class="thumb" href="<?php print $fields['slide']->content; ?>" title="<?php  if($fields['title']) { print $fields['title']->stripped;} ?>" name="<?php if($fields['title']) { print $fields['title']->stripped; }?>"><img src="<?php print $fields['thumbnail']->content; ?>" alt="<?php  if($fields['title']) { print $fields['title']->stripped; } ?>" /></a>
+-    <div class="caption">
+-      <?php if($fields['title']): ?><div class="image-title"><?php print $fields['title']->content; ?></div> <?php endif;?>
+-      <?php if($fields['desc']): ?><div class="image-desc"><?php print $fields['desc']->content; ?></div><?php endif;?>
+-
+-    </div>
+-  </li>
+-<?php endif; ?>
++<?php
++/**
++ * @file
++ * template for views galleriffic row
++ */
++?>
++<?php if (isset($fields['slide']) && $fields['slide']->content): ?>
++  <li>
++    <a class="thumb" href="<?php print $fields['slide']->content; ?>" title="<?php  if($fields['title']) { print $fields['title']->stripped;} ?>" name="<?php if($fields['title']) { print $fields['title']->stripped; }?>"><img src="<?php print $fields['thumbnail']->content; ?>" alt="<?php  if($fields['title']) { print $fields['title']->stripped; } ?>" /></a>
++    <div class="caption">
++      <?php if($fields['title']): ?><div class="image-title"><?php print $fields['title']->content ?></div> <?php endif;?>
++      <!--Add View edit field-->
++      <?php if($fields['edit']): ?><div class="image-edit"><?php print $fields['edit']->content; ?></div> <?php endif;?>
++      <?php if($fields['desc']): ?><div class="image-desc"><?php print $fields['desc']->content; ?></div><?php endif;?>
++    </div>
++  </li>
++<?php endif; ?>
+diff --git a/views_galleriffic.module b/views_galleriffic.module
+index cfd8b5d..5d331f6 100644
+--- a/views_galleriffic.module
++++ b/views_galleriffic.module
+@@ -23,13 +23,13 @@ function template_preprocess_views_galleriffic_view(&$vars) {
+   if (count($view->result) < 2) {
+     $option['autostart'] = FALSE;
+   }
+-
++
+   drupal_add_js(
+     array(
+       'views_galleriffic' => array(
+         'delay'    => (int)$option['delay'],
+         'preloadAhead'     => $option['preload'],
+-        'transition' => (int)$option['transition'],
++        'transition' => (int)$option['transition'],
+         'numbthumbs'    => (int)$option['numbthumbs'],
+         'enableTopPager'     => $option['pager_top'],
+         'enableBottomPager'      => $option['pager_bottom'],
+@@ -54,9 +54,9 @@ function template_preprocess_views_galleriffic_view(&$vars) {
+   drupal_add_js($path . '/js/jquery.galleriffic.js');
+   drupal_add_js($path . '/js/views_galleriffic.js');
+   drupal_add_js($path . '/js/jquery.opacityrollover.js');
+-  if ($view->style_plugin->options['history'] == 'true' && module_exists('libraries')) {
++  if ($view->style_plugin->options['history'] == 'true' && module_exists('libraries')) {
+     $libraries = libraries_get_libraries();
+-    // Libraries 1.x only checks if directory exits.
++    // Libraries 1.x only checks if directory exits.
+     if ($libraries && $libraries['history'] && file_exists($libraries['history'] . '/jquery.history.js')) {
+       drupal_add_js($libraries['history'] . '/jquery.history.js');
+     }
+@@ -76,10 +76,15 @@ function template_preprocess_views_galleriffic_view_gallerifficrows(&$vars) {
+   $view = $vars['view'];
+   $options = $vars['options'];
+   $vars['fields'] = array(); // ensure it's at least an empty array.
++  global $user;//get current user
++  $uid = 0;//init $uid id author
+   foreach ($view->field as $id => $field) {
+     $field_output = $view->field[$id]->theme($vars['row']);
+     $object = array();
+     $object['content'] = $field_output;
++    if ($field_output == '') {
++      //echo "$id empty\n";
++    }
+
+     // find the option (ie title, description, slide, thumbnail)  for the field
+     foreach ($options as $field_title => $field_label) {
+@@ -107,7 +112,25 @@ function template_preprocess_views_galleriffic_view_gallerifficrows(&$vars) {
+         if (preg_match('/(src=")(\S+)(")/', $vars['fields']['slide_field']->content, $slide_url)) {
+           $vars['fields']['slide']->content = $slide_url['2'];
+         }
++        /* There is a case that the content is empty, making the 'slide' undefined index.
++         * Found that the $id = media_gallery_media then.
++         * The $vars['row'] then has property
++         * [field_media_gallery_media] => Array
++         *  (
++         *  )
++         * empty */
+       }
++    // Init uid_field and edit fied
++    if ($object['option'] == 'uid_field') {
++      $uid = check_markup($vars['fields']['uid_field']->content, $format_id = 'full_html', '', $check = FALSE);
++    }
++    //get number $uid
++    $uid = str_replace("<p>", "", $uid);
++    $uid = str_replace("</p>", "", $uid);
++       if (($object['option'] == 'edit_field') && (intval($uid) == $user->uid || $user->uid == 1)) {
++         $vars['fields']['edit']->content = check_markup($vars['fields']['edit_field']->content, $format_id = 'full_html', '', $check = FALSE);
++       }
++    else $vars['fields']['edit']->content = "";
+     }
+   }
+   // Allow for empty fields that didn't already get defined.
+@@ -125,7 +148,7 @@ function template_preprocess_views_galleriffic_view_gallerifficrows(&$vars) {
+ function views_galleriffic_history() {
+   if (module_exists('libraries')) {
+     $libraries = libraries_get_libraries();
+-    // Libraries 1.x only checks if directory exits.
++    // Libraries 1.x only checks if directory exits.
+     if ($libraries && $libraries['history'] && file_exists($libraries['history'] . '/jquery.history.js')) {
+       $history = array(
+         'type' => 'select',
+diff --git a/views_galleriffic_plugin_row_gallerifficrows.inc b/views_galleriffic_plugin_row_gallerifficrows.inc
+index a2790ac..01f230b 100644
+--- a/views_galleriffic_plugin_row_gallerifficrows.inc
++++ b/views_galleriffic_plugin_row_gallerifficrows.inc
+@@ -1,68 +1,85 @@
+-<?php
+-/**
+- * @file
+- * Contains the base row style plugin.
+- */
+-
+-/**
+- * The basic 'fields' row plugin
+- *
+- * This displays fields one after another, giving options for inline
+- * or not.
+- *
+- * @ingroup views_row_plugins
+- */
+-class views_galleriffic_plugin_row_gallerifficrows extends views_plugin_row {
+-  function option_definition() {
+-    $options = parent::option_definition();
+-    $options['slide_field'] = array('default' => '');
+-    $options['thumbnail_field'] = array('default' => '');
+-    $options['title_field'] = array('default' => '');
+-    $options['description_field'] = array('default' => '');
+-    return $options;
+-  }
+-
+-  function options_form(&$form, &$form_state) {
+-    parent::options_form($form, $form_state);
+-
+-    // Pre-build all of our option lists for the dials and switches that follow.
+-    $fields = array('' => t('<none>'));
+-    foreach ($this->display->handler->get_handlers('field') as $field => $handler) {
+-      if ($label = $handler->label()) {
+-        $fields[$field] = $handler->label() .  ': ' . $handler->options['settings']['image_style'];
+-      }
+-      else {
+-        $fields[$field] = $handler->ui_name();
+-      }
+-
+-    }
+-    $form['title_field'] = array(
+-      '#type' => 'select',
+-      '#title' => t('Title field'),
+-      '#options' => $fields,
+-      '#default_value' => $this->options['title_field'],
+-      '#description' => t('Select the field that will be used as the title field. Optional.'),
+-    );
+-    $form['description_field'] = array(
+-      '#type' => 'select',
+-      '#title' => t('Description field'),
+-      '#options' => $fields,
+-      '#default_value' => $this->options['description_field'],
+-      '#description' => t('Select the field that will be used as the description. Optional.'),
+-    );
+-    $form['slide_field'] = array(
+-      '#type' => 'select',
+-      '#title' => t('Slide field'),
+-      '#options' => $fields,
+-      '#default_value' => $this->options['slide_field'],
+-      '#description' => t('Select the field that will be used as the image slide. REQUIRED.'),
+-    );
+-    $form['thumbnail_field'] = array(
+-      '#type' => 'select',
+-      '#title' => t('Thumbnail field'),
+-      '#options' => $fields,
+-      '#default_value' => $this->options['thumbnail_field'],
+-      '#description' => t('Select the field that will be used as the thumbnail field. REQUIRED.'),
+-    );
+-  }
+-}
++<?php
++/**
++ * @file
++ * Contains the base row style plugin.
++ */
++
++/**
++ * The basic 'fields' row plugin
++ *
++ * This displays fields one after another, giving options for inline
++ * or not.
++ *
++ * @ingroup views_row_plugins
++ */
++class views_galleriffic_plugin_row_gallerifficrows extends views_plugin_row {
++  function option_definition() {
++    $options = parent::option_definition();
++    $options['slide_field'] = array('default' => '');
++    $options['thumbnail_field'] = array('default' => '');
++    $options['title_field'] = array('default' => '');
++    $options['description_field'] = array('default' => '');
++    // Add fields to allow edit image
++    $options['edit_field'] = array('default'=>'');
++    $options['uid_field'] = array('default'=>'');
++    return $options;
++  }
++
++  function options_form(&$form, &$form_state) {
++    parent::options_form($form, $form_state);
++
++    // Pre-build all of our option lists for the dials and switches that follow.
++    $fields = array('' => t('<none>'));
++    foreach ($this->display->handler->get_handlers('field') as $field => $handler) {
++      if ($label = $handler->label()) {
++        $fields[$field] = $handler->label() .  ': ' . $handler->options['settings']['image_style'];
++      }
++      else {
++        $fields[$field] = $handler->ui_name();
++      }
++
++    }
++    $form['title_field'] = array(
++      '#type' => 'select',
++      '#title' => t('Title field'),
++      '#options' => $fields,
++      '#default_value' => $this->options['title_field'],
++      '#description' => t('Select the field that will be used as the title field. Optional.'),
++    );
++    $form['description_field'] = array(
++      '#type' => 'select',
++      '#title' => t('Description field'),
++      '#options' => $fields,
++      '#default_value' => $this->options['description_field'],
++      '#description' => t('Select the field that will be used as the description. Optional.'),
++    );
++    $form['slide_field'] = array(
++      '#type' => 'select',
++      '#title' => t('Slide field'),
++      '#options' => $fields,
++      '#default_value' => $this->options['slide_field'],
++      '#description' => t('Select the field that will be used as the image slide. REQUIRED.'),
++    );
++    $form['thumbnail_field'] = array(
++      '#type' => 'select',
++      '#title' => t('Thumbnail field'),
++      '#options' => $fields,
++      '#default_value' => $this->options['thumbnail_field'],
++      '#description' => t('Select the field that will be used as the thumbnail field. REQUIRED.'),
++    );
++    $form['uid_field'] = array(
++      '#type' => 'select',
++      '#title' => t('UID field'),
++      '#options' => $fields,
++      '#default_value' => $this->options['uid_field'],
++      '#description' => t('Select the Author ID field. Make sure to uncheck "Link to user profile". Optional.'),
++    );
++    $form['edit_field'] = array(
++      '#type' => 'select',
++      '#title' => t('Edit field'),
++      '#options' => $fields,
++      '#default_value' => $this->options['edit_field'],
++      '#description' => t('Select the field that contains the link to the edit page. Optional.'),
++    );
++  }
++}

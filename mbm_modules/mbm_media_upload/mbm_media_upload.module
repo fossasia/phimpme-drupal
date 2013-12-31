@@ -1,0 +1,163 @@
+<?php
+/**
+ * This module is created to allow one to reuse the upload function provided by Media Gallery module
+ * in a page other than the page of Media Gallery module.
+ * This is used in the case that you set up your gallery based on Media Gallery but don't use the
+ * page view of MG. In our case, we build the view based on Views Galleriffic with the input argument
+ * being User ID instead of Node ID. In addition, our gallery is set up so that each user own only
+ * 1 gallery node and is not allowed to create new node.
+ **/
+
+ /**
+ * Implements hook_block_info().
+ *
+ * This hook declares what blocks are provided by the module.
+ */
+function mbm_media_upload_block_info() {
+  // This hook returns an array, each component of which is an array of block
+  // information. The array keys are the 'delta' values used in other block
+  // hooks.
+
+  // The required block information is a block description, which is shown
+  // to the site administrator in the list of possible blocks. You can also
+  // provide initial settings for block weight, status, etc.
+
+  // Many options are defined in hook_block_info():
+  $blocks['mbm_upload_button'] = array(
+    // info: The name of the block.
+    'info' => t('MBM Upload button'),
+    'visibility' => BLOCK_VISIBILITY_LISTED,
+    'pages' => "user/*\nown-photos/*"
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ *
+ * This hook generates the contents of the blocks themselves.
+ */
+function mbm_media_upload_block_view($delta = '') {
+  //The $delta parameter tells us which block is being requested.
+  if ($delta != 'mbm_upload_button') {
+    return array();
+  }
+  // Is user logged in?
+  if (!user_is_logged_in()) {
+    return array();
+  }
+  global $user;
+  // Is user in his page?
+  if (!_check_inhome($user->uid)) {
+    return array();
+  }
+  // Get the first node owned by user.
+  $ownnodes = _mbm_list_own_nodes($user->uid, 'media_gallery');
+  if (count($ownnodes) == 0) {
+    return array(
+              'content' => array(
+                '#markup' => t('<i>You own no album. Please contact site admin.</i>')));
+  }
+  $ownnid = $ownnodes[0]->nid;
+  $node = node_load($ownnid);
+  // User has to have permission
+  if (!node_access('update', $node)) {
+    return array();
+  }
+
+  /* The code below is borrowed mostly from the media_gallery_view()
+   * in Media Gallery module.*/
+
+  // Add the "Add images" link, themed as a local action. Note that this
+  // element is listed in hook_field_extra_fields(), so whether or not it
+  // will *actually* be displayed in the current view mode depends on the
+  // site's configuration for the corresponding pseudo-field.
+  $block['content'] = array(
+    '#theme' => 'menu_local_action_simplified',
+    '#link' => array(
+      'title' => t('Add photo'),
+      'href' => 'media/browser',
+      'localized_options' => array(
+        'query' => array('render' => 'media-popup'),
+        'attributes' => array(
+          'class' => 'media-gallery-add launcher mbm_upload_button',
+        ),
+      ),
+    ),
+  );
+
+  // Enable the "Add media" link to launch the media browser.
+  module_load_include('inc', 'media', 'includes/media.browser');
+  media_attach_browser_js($block['content']);
+  $block['content']['#attached']['js'][] = drupal_get_path('module', 'media_gallery') . '/media_gallery.addimage.js';
+
+  // These JS settings are used by the "add media" link but some are also
+  // shared by the drag-and-drop code below.
+  $instance = field_info_instance('node', 'media_gallery_media', $node->type);
+  $token = drupal_get_token('media_gallery');
+  $gallery_js_settings = array(
+    'mediaGalleryAddImagesUrl' => url('media-gallery/add-images/' . $node->nid . '/' . $token),
+    'mediaGalleryAllowedMediaTypes' => array_filter($instance['widget']['settings']['allowed_types']),
+  );
+  // Attach the setting to the "add media" link, as per above.
+  $block['content']['#attached']['js'][] = array(
+    'type' => 'setting',
+    'data' => $gallery_js_settings,
+  );
+  return $block;
+}
+
+/* Get the list of own nodes */
+function _mbm_list_own_nodes($uid=0, $type='') {
+  $node_select = db_select('node', 'n')->fields('n', array('nid'));
+  $node_select->condition('n.uid', $uid, '=');
+  if ($type != '') {
+    $node_select->condition('n.type', $type, '=');
+  }
+  $results = $node_select->execute()->fetchAll();
+  return $results;
+}
+
+/* Check if current user is in his page */
+function _check_inhome($uid) {
+  $host_uid = arg(1);
+  if (!is_numeric($host_uid)) {
+    return FALSE;
+  }
+  if ($host_uid != $uid) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function mbm_media_upload_theme() {
+  $items = array(
+    'menu_local_action_simplified' => array(
+      'render element' => 'element',
+    ),
+  );
+  return $items;
+}
+
+/**
+ * A simplified of the built-in theme_menu_local_action(),
+ * to remove the outer <li> tags.
+ **/
+function theme_menu_local_action_simplified($variables) {
+  $link = $variables['element']['#link'];
+  $output = '';
+  if (isset($link['href'])) {
+    $output .= l($link['title'], $link['href'], isset($link['localized_options']) ? $link['localized_options'] : array());
+  }
+  elseif (!empty($link['localized_options']['html'])) {
+    $output .= $link['title'];
+  }
+  else {
+    $output .= check_plain($link['title']);
+  }
+  return $output;
+}
+?>

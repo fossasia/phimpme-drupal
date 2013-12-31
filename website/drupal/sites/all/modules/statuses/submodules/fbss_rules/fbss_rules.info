@@ -1,0 +1,17 @@
+name = Statuses Rules
+description = "Integrates Rules with Statuses."
+package = Statuses
+dependencies[] = statuses
+dependencies[] = rules
+core = 7.x
+
+files[] = fbss_rules.module
+files[] = fbss_rules.rules.inc
+files[] = fbss_rules.rules_defaults.inc
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

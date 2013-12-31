@@ -1,0 +1,76 @@
+<?php
+
+/**
+ * Implementation of hook_services_resources()
+ * @return array
+ */
+function contentapi_summary_services_resources() {
+  $resource = array(
+    'content_summary' => array(
+      'index' => array(
+        'help' => t('Get a summary of content available'),
+        'callback' => '_contentapi_summary_index',
+        'access arguments' => array('access content'),
+      )
+    )
+  );
+
+  return $resource;
+}
+
+/**
+ * Callback for the content_summary index resource
+ * @return array
+ * */
+function _contentapi_summary_index() {
+
+  $g_count = (isset($_GET['count'])) ? (bool) $_GET['count'] : FALSE;
+
+  $access_types = unserialize(variable_get('contentapi_content_types', ''));
+  $all_types = _node_types_build();
+
+  foreach ($access_types as $type_name => $enabled) {
+    if (!$enabled)
+      continue;
+
+    $type = _contentapi_get_type($type_name, $all_types);
+    if (!$type)
+      continue;
+
+    $ar = array(
+      'name' => $type->type,
+      'full name' => $type->name
+    );
+
+    if ($g_count) {
+      $count = db_query("SELECT COUNT(nid) FROM {node} WHERE type = :type", array(':type' => $type->type))->fetchField();
+      $ar['count'] = $count;
+    }
+
+    $results[] = $ar;
+  }
+
+  return $results;
+}
+
+/**
+ * Function to get content types (return sim to d6 version)
+ *
+ * @param string $type_name
+ *  The node type name to return
+ * @param string $all_types optional
+ *  An StdClass of array types from _node_type_build()
+ * @return array
+ */
+function _contentapi_get_type($type_name, $all_types=NULL) {
+  $result = FALSE;
+
+  if (!$all_types)
+    $all_types = _node_types_build();
+
+  if (isset($all_types->types[$type_name])) {
+    $result = $all_types->types[$type_name];
+  }
+
+  return $result;
+}

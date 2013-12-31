@@ -1,0 +1,211 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Userpoints with Statuses.
+ */
+
+/**
+ * Implements hook_userpoints().
+ */
+function fbss_userpoints_userpoints($op, $params = array()) {
+  if ($op == 'setting') {
+    $form['statuses'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Statuses'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    );
+    $form['statuses']['statuses_userpoints_own'] = array(
+      '#type' => 'textfield',
+      '#title' => t("Userpoints for changing one's own status"),
+      '#default_value' => variable_get('statuses_userpoints_own', 0),
+    );
+    $form['statuses']['statuses_userpoints_other'] = array(
+      '#type' => 'textfield',
+      '#title' => t("Userpoints for posting a status message to another entity"),
+      '#default_value' => variable_get('statuses_userpoints_other', 0),
+    );
+    $form['statuses']['statuses_userpoints_max'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Maximum number of Userpoints from posting statuses per day'),
+      '#description' => t('Set to zero for no limit.') . ' ' .
+        t('Note that the actual number of points awarded per day could be higher than this if this value is not a multiple of the points given above.'),
+      '#default_value' => variable_get('statuses_userpoints_max', 0),
+    );
+    $form['#validate'][] = '_fbss_userpoints_validate';
+
+    if (module_exists('fbss_comments')) {
+      $form['fbss_comments'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Statuses Comments'),
+        '#collapsible' => TRUE,
+        '#collapsed' => TRUE,
+      );
+      $form['fbss_comments']['fbss_comments_userpoints'] = array(
+        '#type' => 'textfield',
+        '#title' => t("Userpoints for commenting on a status"),
+        '#default_value' => variable_get('fbss_comments_userpoints', 0),
+      );
+      $form['fbss_comments']['fbss_comments_userpoints_max'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Maximum number of Userpoints from posting status comments per day'),
+        '#description' => t('Set to zero for no limit.') . ' ' .
+          t('Note that the actual number of points awarded per day could be higher than this if this value is not a multiple of the points given above.'),
+        '#default_value' => variable_get('fbss_comments_userpoints_max', 0),
+      );
+      $form['#validate'][] = '_fbss_comments_userpoints_validate';
+    }
+    return $form;
+  }
+}
+
+/**
+ * Validate function for the Userpoints settings.
+ */
+function _fbss_userpoints_validate($form, &$form_state) {
+  $v = $form_state['values'];
+  if (!is_numeric($v['statuses_userpoints_own']) || $v['statuses_userpoints_own'] < 0) {
+    form_set_error('statuses_userpoints_own', t("Userpoints for changing one's own status must be a non-negative integer."));
+  }
+  if (!is_numeric($v['statuses_userpoints_other']) || $v['statuses_userpoints_other'] < 0) {
+    form_set_error('statuses_userpoints_other', t("Userpoints for posting a message on another user's profile must be a non-negative integer."));
+  }
+  if (!is_numeric($v['statuses_userpoints_max']) || $v['statuses_userpoints_max'] < 0) {
+    form_set_error('statuses_userpoints_max', t('The maximum number of Userpoints from posting statuses per day must be a non-negative integer.'));
+  }
+}
+
+/**
+ * Validate function for the Userpoints settings.
+ */
+function _fbss_comments_userpoints_validate($form, &$form_state) {
+  $v = $form_state['values'];
+  if (!is_numeric($v['fbss_comments_userpoints']) || $v['fbss_comments_userpoints'] < 0) {
+    form_set_error('fbss_comments_userpoints', t("Userpoints for commenting on a status must be a non-negative integer."));
+  }
+  if (!is_numeric($v['fbss_comments_userpoints_max']) || $v['fbss_comments_userpoints_max'] < 0) {
+    form_set_error('fbss_comments_userpoints_max', t('The maximum number of Userpoints from posting status comments per day must be a non-negative integer.'));
+  }
+}
+
+/**
+ * Implements hook_statuses_save().
+ */
+function fbss_userpoints_statuses_save($status, $context, $edit, $options) {
+  // If the FBSMP module is enabled and there is an attachment on this status,
+  // FBSMP will take care of handling userpoints.
+  if (!empty($options['has attachment'])) {
+    return;
+  }
+  // Don't give points for editing.
+  if ($edit) {
+    return;
+  }
+  $sender = _statuses_user_load($status->sender);
+  $recipient = $context['handler']->load_recipient($status->recipient);
+  $points_today = db_query("SELECT SUM(points) FROM {userpoints_txn}
+    WHERE uid = :uid AND time_stamp > :time_stamp
+      AND (operation = :(operation OR operation = :operation)
+      AND expired = :expired AND status = :status", array(':uid' => $sender->uid, ':time_stamp' => REQUEST_TIME - 86400, ':(operation' => 'statuses add own', ':operation' => 'statuses add other', ':expired' => 0, ':status' => 0))->fetchField();
+  if (variable_get('statuses_userpoints_max', 0) && $points_today >= variable_get('statuses_userpoints_max', 0)) {
+    return;
+  }
+  $params = array(
+    'uid' => $sender->uid,
+    'reference' => $sid,
+    // Unknown purpose.
+    //'entity_id' => $sid,
+    //'entity_type' => 'statuses',
+  );
+  if ($status->sender == $status->recipient && $status->type == 'user') {
+    $params['description'] = t('!user posted a new status.', array('!user' => theme('username', array('account' => $sender))));
+    $params['points'] = variable_get('statuses_userpoints_own', 0);
+    $params['operation'] = 'statuses add own';
+  }
+  elseif ($status->type == 'user') {
+    $params['description'] = t('!sender wrote a message to !recipient',
+      array('!sender' => theme('username', array('account' => $sender)), '!recipient' => $context['handler']->recipient_link($recipient)));
+    $params['points'] = variable_get('statuses_userpoints_other', 0);
+    $params['operation'] = 'statuses add other';
+  }
+  else {
+    $params['description'] = t('!sender wrote a message at !recipient',
+      array('!sender' => theme('username', array('account' => $sender)), '!recipient' => $context['handler']->recipient_link($recipient)));
+    $params['points'] = variable_get('statuses_userpoints_other', 0);
+    $params['operation'] = 'statuses add other';
+  }
+  userpoints_userpointsapi($params);
+}
+
+/**
+ * Implements hook_statuses_delete().
+ */
+function fbss_userpoints_statuses_delete($status, $meta = array()) {
+  // If the FBSMP module is enabled and there is an attachment on this status,
+  // FBSMP will take care of handling userpoints.
+  if (!empty($options['has attachment'])) {
+    return;
+  }
+  $sender = _statuses_user_load($status->sender);
+  global $user;
+  $result = db_fetch_object(db_query("SELECT points FROM {userpoints_txn} WHERE operation LIKE 'statuses add%%' AND reference = :reference AND uid = :uid", array(':reference' => $status->sid, ':uid' => $sender->uid)));
+  $params = array(
+    'uid' => $sender->uid,
+    'points' => 0 - $result->points,
+    'operation' => 'statuses delete',
+  );
+  if ($user->uid == $sender->uid) {
+    $params['description'] = t('!user deleted a status message.', array('!user' => theme('username', array('account' => $user))));
+  }
+  else {
+    $params['description'] = t('!user deleted a message by !sender',
+      array('!user' => theme('username', array('account' => $user)), '!sender' => theme('username', array('account' => $sender))));
+  }
+  userpoints_userpointsapi($params);
+}
+
+/**
+ * Implements hook_fbss_comments_after_save().
+ */
+function fbss_userpoints_fbss_comments_after_save($comment, $edit) {
+  // Don't give points for editing.
+  if ($edit) {
+    return;
+  }
+  $account = _statuses_user_load($comment->uid);
+  $points_today = db_query("SELECT SUM(points) FROM {userpoints_txn}
+    WHERE uid = :uid AND time_stamp > :time_stamp
+      AND operation = :operation
+      AND expired = :expired AND status = :status", array(':uid' => $comment->uid, ':time_stamp' => REQUEST_TIME - 86400, ':operation' => 'fbss_comments add', ':expired' => 0, ':status' => 0))->fetchField();
+  if (variable_get('fbss_comments_userpoints_max', 0) && $points_today >= variable_get('fbss_comments_userpoints_max', 0)) {
+    return;
+  }
+  $params = array(
+    'uid' => $comment->uid,
+    'reference' => $comment->cid,
+    'description' => t('!user posted a new status comment.', array('!user' => theme('username', array('account' => $account)))),
+    'points' => variable_get('fbss_comments_userpoints', 0),
+    'operation' => 'fbss_comments add',
+    // Unknown purpose.
+    //'entity_id' => $cid,
+    //'entity_type' => 'fbss_comments',
+  );
+  userpoints_userpointsapi($params);
+}
+
+/**
+ * Implements hook_fbss_comments_delete().
+ */
+function fbss_userpoints_fbss_comments_delete($cid) {
+  $comment = fbss_comments_load($cid);
+  $account = _statuses_user_load($comment->uid);
+  $result = db_fetch_object(db_query("SELECT points FROM {userpoints_txn} WHERE operation = :operation AND reference = :reference AND uid = :uid", array(':operation' => 'fbss_comments add', ':reference' => $cid, ':uid' => $comment->uid)));
+  $params = array(
+    'uid' => $comment->uid,
+    'points' => 0 - $result->points,
+    'operation' => 'fbss_comments delete',
+    'description' => t('!user deleted a status comment.', array('!user' => theme('username', array('account' => $account)))),
+  );
+  userpoints_userpointsapi($params);
+}

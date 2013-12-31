@@ -1,0 +1,22 @@
+name = Exif
+description = "Display image metadata (exif and iptc)."
+package = Image
+core = 7.x
+version = "7.x-1.x-dev"
+dependencies[] = taxonomy
+dependencies[] = image
+files[]=exif.module
+files[]=exif.class.php
+files[]=exif_functionaltests.php
+files[]=exif_functionaltests_with_defaults.test
+files[]=exif_functionaltests_with_locale.test
+files[]=exif_unittests.test
+configure = admin/config/media/exif
+
+
+; Information added by drupal.org packaging script on 2011-11-14
+version = "7.x-1.2"
+core = "7.x"
+project = "exif"
+datestamp = "1321272052"
+

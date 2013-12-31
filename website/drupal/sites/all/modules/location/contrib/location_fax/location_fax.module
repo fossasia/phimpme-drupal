@@ -1,0 +1,80 @@
+<?php
+
+/**
+ * @file
+ * Add fax number fields to Location address.
+ */
+
+/**
+ * Implements hook_locationapi().
+ */
+function location_fax_locationapi(&$location, $op, $a3 = NULL, $a4 = NULL) {
+  switch ($op) {
+    case 'fields':
+      return array('fax' => t('Fax number'));
+
+    case 'defaults':
+      return array(
+        'fax' => array('default' => '', 'collect' => 0, 'weight' => 30),
+      );
+
+    case 'field_expand':
+      if ($a3 == 'fax') {
+        return array(
+          '#type' => 'textfield',
+          '#title' => t('Fax number'),
+          '#size' => 31,
+          '#maxlength' => 31,
+          '#description' => NULL,
+          '#required' => ($a4 == 2),
+          '#default_value' => $location,
+        );
+      }
+      break;
+
+    case 'save':
+      db_delete('location_fax')
+        ->condition('lid', $location['lid'])
+        ->execute();
+      if (!empty($location['fax'])) {
+        db_insert('location_fax')
+          ->fields(array(
+            'lid' => $location['lid'],
+            'fax' => $location['fax'],
+          ))
+          ->execute();
+      }
+      break;
+
+    case 'load':
+      $fields = array();
+      $fax = db_query('SELECT fax FROM {location_fax} WHERE lid = :lid', array(':lid' => $location['lid']))->fetchField();
+      $fields['fax'] = $fax ? $fax : '';
+      return $fields;
+
+    case 'delete':
+      db_delete('location_fax')
+        ->condition('lid', $location['lid'])
+        ->execute();
+      break;
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function location_fax_views_api() {
+  return array(
+    'api' => 3,
+  );
+}
+
+/**
+ * Implements hook_token_list().
+ */
+function location_fax_token_list($type = 'all') {
+  if ($type == 'node' || $type == 'user' || $type == 'all') {
+    $tokens['location']['location-fax_N'] = t('Location Fax number (If there are multiple locations per node, N is the iteration, starting with 0)');
+    return $tokens;
+  }
+}

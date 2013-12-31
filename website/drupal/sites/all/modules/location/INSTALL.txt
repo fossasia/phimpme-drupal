@@ -1,0 +1,73 @@
+
+CONTENTS OF THIS FILE
+---------------------
+
+ * Introduction
+ * Installation
+
+INTRODUCTION
+------------
+
+Current maintainer: Brandon Bergren <http://drupal.org/user/53081>
+
+Location module and its associated API allows Drupal objects, including nodes
+and users, to be associated with specific physical locations.
+
+This package consists of several modules, including:
+- Location (required): Base module that provides a standard API and storage for
+  location data.
+- Location Add Another: Quickly add additional locations directly from a node.
+- Location Fax: Add a fax number to a location.
+- Location Phone: Add a phone number to a location.
+- Location Search: A custom search page for locations.
+
+For Drupal 6, Views support has been rolled directly into the base Location module.
+
+INSTALLATION
+------------
+
+1. Copy the files to your sites/SITENAME/modules directory.
+
+2. Enable the Location module and any desired optional modules at Administer >>
+   Site building >> Modules (admin/build/modules).
+
+3. Set user permissions for Location module at Administer >> User management >>
+   Access control (admin/user/access).
+
+4. Configure Location module's settings at Administer >> Site configuration >>
+   Location (admin/settings/location). Here, you may configure settings related
+   to how Location fields are displayed, how location data is gathered, what
+   geocoding service is used to translate addresses to longitude and latitude
+   points, and which mapping service should display them.
+
+5. If you wish to collect location data about content, go to Administer >>
+   Content management >> Content types and click "edit" on the given type, such
+   as "Event". In the Locative information fieldset, expand and set your
+   options accordingly.
+
+6. (Optional) Import a postal codes database for the countries served by your
+   website, to support proximity searches and other useful features. Postal
+   code databases may be found in the "databases/" sub-directory of the
+   Location module directory. The files are in the format of zipcodes.CC.mysql,
+   where CC is a two-letter country code such as 'us' or 'de'.
+
+   Note: If your site is using table prefixes, you will need to adjust for this
+   manually, by opening the file in a text editor and replacing 'zipcodes' with
+   'prefix_zipcodes' throughout.
+
+   To import the files from the command line, enter the following:
+
+     cd sites/SITENAME/modules/location
+     mysql -u username -p database-name < database/zipcodes.us.mysql
+
+KNOWN ISSUES
+------------
+
+1. Node locations and CCK locations cannot safely be used on the same content types.
+   You can use both on one site but they must be used on different content types.
+   To turn node locations off for a particular content type edit the content type
+   and set the max number of locations to zero.
+   The problem is that node locations can interfere with the saving of cck locations
+   and you can end up losing your cck locations.
+   For more information see this issue - http://drupal.org/node/906968.
+

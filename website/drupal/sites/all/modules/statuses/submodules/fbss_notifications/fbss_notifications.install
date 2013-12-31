@@ -1,0 +1,14 @@
+<?php
+
+/**
+ * @file
+ *   (Un)installs the Statuses Notifications module.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function fbss_notifications_uninstall() {
+  variable_del('fbss_notifications_type');
+  variable_del('fbss_notifications_link');
+}

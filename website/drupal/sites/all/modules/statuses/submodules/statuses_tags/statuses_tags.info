@@ -1,0 +1,26 @@
+name = Statuses Tags
+description = "Converts @usernames to themed usernames and #hashtags to themed taxonomy terms on Statuses."
+dependencies[] = statuses
+package = Statuses
+core = 7.x
+
+files[] = statuses_tags.install
+files[] = statuses_tags.module
+files[] = statuses_tags.rules.inc
+files[] = views/statuses_tags.views.inc
+files[] = views/statuses_tags.views_default.inc
+files[] = views/statuses_tags_views_handler_argument_has_this_tag.inc
+files[] = views/statuses_tags_views_handler_argument_has_this_tag_id.inc
+files[] = views/statuses_tags_views_handler_field_all_terms.inc
+files[] = views/statuses_tags_views_handler_field_message.inc
+files[] = views/statuses_tags_views_handler_field_name.inc
+files[] = views/statuses_tags_views_handler_filter_has_tag.inc
+files[] = views/statuses_tags_views_handler_filter_has_this_tag.inc
+files[] = views/statuses_tags_views_handler_filter_string_type.inc
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

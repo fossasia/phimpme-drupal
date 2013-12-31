@@ -1,0 +1,33 @@
+Header:
+- User login
+
+Help
+- System help
+
+Content
+- Mission.
+     Only list on <front>
+     Only list for Anonymous user
+- Recent photos.
+     Only list user/*
+- View: Author.
+     Only list on own-photos/*
+- Random Photos.
+     Only list on <front>
+- Main page content.
+-View: Photo map
+     Only list on own-photos/*
+
+Sidebar second
+- View: Avatar
+     Only list on user/*
+- Status
+     Only list on user/*
+- MBM Upload button
+     Only list on user/*, own-photos/*
+- Follow tab
+     Only list on user/*
+     Roles: Authenticated user & Administrator
+- Follow button
+      Only list on user/*
+

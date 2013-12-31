@@ -1,0 +1,51 @@
+<?php
+
+/**
+ * @file
+ *   (Un)installs the Statuses Domain Access module.
+ */
+
+/**
+ * Implementation of hook_schema().
+ */
+function fbss_domain_schema() {
+  $schema = array();
+  $schema['fbss_domain'] = array(
+    'description' => 'Associates statuses with a domain.',
+    'fields' => array(
+      'sid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The Status ID.',
+      ),
+      'domain_id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The Domain ID.',
+      ),
+    ),
+    'indexes' => array(
+      'domain_id' => array('domain_id'),
+    ),
+    'primary key' => array('sid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function fbss_domain_install() {
+  drupal_install_schema('fbss_domain');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function fbss_domain_uninstall() {
+  drupal_uninstall_schema('fbss_domain');
+}

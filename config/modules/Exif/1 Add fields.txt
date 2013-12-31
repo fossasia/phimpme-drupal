@@ -1,0 +1,16 @@
+Go to admin/config/media/file-types/manage/image/fields.
+Add fields:
+(When setting the field, at "exif field data", choose which has the same name).
+(Example reference at admin/config/media/exif/)
+Camera maker    exif_make   32
+Camera model    exif_model  48
+GPS Latitude Ref    gps_gpslatituderef  1
+GPS Latitude    gps_gpslatitude 15
+GPS Longitude Ref   gps_gpslongituderef 1
+GPS Longitude   gps_gpslongitude    15
+Exposure time   exif_exposuretime   8
+ISO speed   exif_isospeedratings
+Aperture    exif_aperturevalue  16
+Shutter speed   exif_shutterspeedvalue  16
+Flash   exif_flash  48
+Focal length    exif_focallength    8

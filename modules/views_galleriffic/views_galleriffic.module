@@ -1,0 +1,142 @@
+<?php
+
+/**
+ * Implementation of hook_views_api().
+ */
+function views_galleriffic_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'views_galleriffic'),
+  );
+}
+
+/**
+ * Implementation of template preprocess for the view
+ */
+function template_preprocess_views_galleriffic_view(&$vars) {
+
+  $view   = $vars['view'];
+  $option = $view->style_plugin->options;
+  $vars['option']= $option;
+
+  // If there is only one result, set transition to 0.
+  if (count($view->result) < 2) {
+    $option['autostart'] = FALSE;
+  }
+  
+  drupal_add_js(
+    array(
+      'views_galleriffic' => array(
+        'delay'    => (int)$option['delay'],
+        'preloadAhead'     => $option['preload'],
+        'transition' => (int)$option['transition'], 
+        'numbthumbs'    => (int)$option['numbthumbs'],
+        'enableTopPager'     => $option['pager_top'],
+        'enableBottomPager'      => $option['pager_bottom'],
+        'renderSSControls'   => $option['renderss'],
+        'renderNavControls' => $option['rendernav'],
+        'playLinkText'     => t("@playtext", array('@playtext' => $option['playtext'])),
+        'pauseLinkText'     => t("@pausetext", array('@pausetext' => $option['pausetext'])),
+        'prevLinkText'     => t("@prevlink", array('@prevlink' => $option['prevlink'])),
+        'nextLinkText'     => t("@nextlink", array('@nextlink' => $option['nextlink'])),
+        'nextPageLinkText'     => t("@nextpage", array('@nextpage' => $option['nextpage'])),
+        'prevPageLinkText'     => t("@prevpage", array('@prevpage' => $option['prevpage'])),
+        'syncTransitions' => $option['sync'],
+        'enableKeyboardNavigation' => $option['keyboard'],
+        'enableHistory'     => $option['history'],
+        'autoStart'     => $option['start'],
+      ),
+    ),
+    'setting'
+  );
+
+  $path = drupal_get_path('module', 'views_galleriffic');
+  drupal_add_js($path . '/js/jquery.galleriffic.js');
+  drupal_add_js($path . '/js/views_galleriffic.js');
+  drupal_add_js($path . '/js/jquery.opacityrollover.js');
+  if ($view->style_plugin->options['history'] == 'true' && module_exists('libraries')) { 
+    $libraries = libraries_get_libraries();
+    // Libraries 1.x only checks if directory exits. 
+    if ($libraries && $libraries['history'] && file_exists($libraries['history'] . '/jquery.history.js')) {
+      drupal_add_js($libraries['history'] . '/jquery.history.js');
+    }
+    else {
+      drupal_set_message(t('History plugin not properly installed.'));
+    }
+  }
+  if ($view->style_plugin->options['css'] == 'true') {
+    drupal_add_css($path . '/css/views_galleriffic_default.css', $options = array('type' => 'file'));
+  }
+}
+
+/**
+ * Implementation of template preprocess for the view fields
+ */
+function template_preprocess_views_galleriffic_view_gallerifficrows(&$vars) {
+  $view = $vars['view'];
+  $options = $vars['options'];
+  $vars['fields'] = array(); // ensure it's at least an empty array.
+  foreach ($view->field as $id => $field) {
+    $field_output = $view->field[$id]->theme($vars['row']);
+    $object = array();
+    $object['content'] = $field_output;
+
+    // find the option (ie title, description, slide, thumbnail)  for the field
+    foreach ($options as $field_title => $field_label) {
+      if ($field_label == $id) {
+        $object['option'] = $field_title;
+      }
+    }
+    // This is to check if the field has an option. If not ignore.
+    if (count($object) > 1 ) {
+      $vars['fields'][$object['option']]->content = $object['content'];
+      if ($object['option'] == 'title_field') {
+        $vars['fields']['title']->content = check_markup($vars['fields']['title_field']->content, $format_id = 'full_html', '', $check = FALSE);
+        // Slideshow can break if there are spaces or '#' in the title.
+        $vars['fields']['title']->stripped = str_replace('#', '', str_replace(' ','', strip_tags($vars['fields']['title_field']->content)));
+      }
+      if ($object['option'] == 'description_field') {
+        $vars['fields']['desc']->content = check_markup($vars['fields']['description_field']->content, $format_id = 'full_html', '', $check = FALSE);
+      }
+      if ($object['option'] == 'thumbnail_field') {
+        if (preg_match('/(src=")(\S+)(")/', $vars['fields']['thumbnail_field']->content, $thumb_url)) {
+          $vars['fields']['thumbnail']->content = $thumb_url['2'];
+        };
+      }
+      if ($object['option'] == 'slide_field') {
+        if (preg_match('/(src=")(\S+)(")/', $vars['fields']['slide_field']->content, $slide_url)) {
+          $vars['fields']['slide']->content = $slide_url['2'];
+        }
+      }
+    }
+  }
+  // Allow for empty fields that didn't already get defined.
+  if (!array_key_exists('desc', $vars['fields'])) {
+     $vars['fields']['desc'] = NULL;
+  }
+  if (!array_key_exists('title', $vars['fields'])) {
+     $vars['fields']['title'] = NULL;
+  }
+}
+
+/**
+ * Return an array depending on whether history js is downloaded.
+ */
+function views_galleriffic_history() {
+  if (module_exists('libraries')) {
+    $libraries = libraries_get_libraries();
+    // Libraries 1.x only checks if directory exits. 
+    if ($libraries && $libraries['history'] && file_exists($libraries['history'] . '/jquery.history.js')) {
+      $history = array(
+        'type' => 'select',
+        'description' => t('Specifies whether the url\'s hash and the browser\'s history cache should update when the current slideshow image changes.'),
+      );
+      return $history;
+    }
+  }
+  $history = array(
+    'type' => 'item',
+    'description' => t('You must download the history.js and enable the Libraries API module to use this feature. See documentation for details.'),
+  );
+  return $history;
+}

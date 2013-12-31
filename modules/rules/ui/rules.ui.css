@@ -1,0 +1,190 @@
+@CHARSET "UTF-8";
+
+.rules-show-js, html.js .rules-hide-js {
+  display: none;
+}
+
+.rules-hide-js, html.js .rules-show-js {
+  display: block;
+}
+
+.rules-elements-table ul.action-links {
+  margin: 0px;
+  padding: 0;
+}
+
+.rules-elements-table ul.rules-operations li {
+  list-style: none;
+  float: left;
+}
+
+.rules-elements-table ul.rules-operations a {
+  background: none;
+  padding-left: 0px;
+}
+
+table tr.rules-elements-add {
+  background-color: #e5eff4;
+}
+
+.rules-elements-table ul.rules-operations-add a {
+  line-height: 1em;
+}
+
+
+tr.rules-elements-add td {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+ul.rules-operations-add li {
+  float: left;
+  list-style-position: inside;
+}
+
+.rules-elements-table {
+  margin-bottom: 3em;
+}
+/* We cannot set a positive margin-top for rules tables as the table drag link
+   should be positioned directly on top of the table. Thus we use a large bottom
+   margin and fix the upper most margin: */
+#rules-form-wrapper:first-child {
+  margin-top: 1.5em;
+}
+
+/* Fix table drag weights to don't take extra space */
+.rules-elements-table .tabledrag-toggle-weight-wrapper {
+  position: absolute;
+  right: 0px;
+}
+
+.rules-elements-table caption, .rules-overview-table caption {
+  font-size: 110%;
+  font-weight: bold;
+  padding-bottom: 0.5em;
+  text-align: left;
+}
+
+.rules-overview-table {
+  margin: 1em 0;
+}
+
+.rules-content-group-integrity-error {
+  color: #df0101;
+}
+
+.rules-debug-log {
+  font: 81.3% "Lucida Grande","Lucida Sans Unicode",sans-serif;
+  background-color: #eeeeee;
+  border: 1px solid #cccccc;
+  color: #333333;
+  padding: 5px;
+  margin: 1.5em 0em;
+}
+
+.rules-debug-collapsible-link {
+  position: relative;
+  cursor: pointer;
+
+  /* The span element with the icon which opens the log, has a whitepsace.
+     Since we don't want the user to mark this white space, we prevent this
+     using the this code.*/
+  -moz-user-select: -moz-none;
+  -khtml-user-select: none;
+  -webkit-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+
+.rules-debug-log-head {
+  font-weight: bold;
+}
+
+div.rules-debug-log-head {
+  margin: 0.5em 0em;
+}
+
+.rules-debug-icon-open {
+  position: relative;
+  float: left;
+}
+
+.rules-debug-open-all {
+  position: relative;
+  float: right;
+}
+
+.rules-debug-log ul {
+  padding-left: 2em;
+}
+
+.rules-debug-log .rules-debug-warn {
+  color: #df0101;
+}
+
+.rules-debug-log .rules-debug-error {
+  font-weight: bold;
+  color: #df0101;
+}
+
+#rules-filter-form {
+  margin-bottom: 1.5em;
+}
+
+.rules-parameter-label {
+  font-style: italic;
+}
+
+#rules-plugin-add-help {
+  margin-bottom: 1em;
+}
+
+.rules-element-content {
+  float: left;
+}
+
+form input.rules-switch-button {
+  -moz-border-radius: 5px 5px 5px 5px;
+  cursor: pointer;
+  font-size: 0.8em;
+  font-weight: normal;
+  margin-bottom: 1em;
+  padding: 2px;
+  text-align: center;
+}
+
+.rules-form-heading {
+  margin-top: 3em;
+}
+
+.rules-autocomplete-button {
+  top: 3px;
+  height: 22px;
+}
+
+ul.rules-autocomplete {
+  max-height: 23em;
+  overflow-y: auto;
+}
+
+ul.rules-autocomplete div {
+  padding-left: 5px;
+}
+
+ul.rules-autocomplete a.ui-corner-all {
+  padding: 0px;
+}
+
+ul.rules-autocomplete .rules-dsac-group {
+  background-color: #eee;
+}
+
+ul.rules-autocomplete .ui-corner-all {
+  -moz-border-radius: 0px;
+}
+
+
+/* IE 6 hack for max-height. */
+* html ul.rule-autocomplete{
+  height: 23em;
+}

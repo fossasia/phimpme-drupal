@@ -1,0 +1,1 @@
+To use clientsidekml, you need to grab egeoxml.js from http://econym.googlepages.com/egeoxml.htm and put it in here.

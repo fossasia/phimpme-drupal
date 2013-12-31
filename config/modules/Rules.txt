@@ -1,0 +1,32 @@
+--- Rule 1 to import:
+
+{ "rules_create_gallery" : {
+    "LABEL" : "Create gallery",
+    "PLUGIN" : "reaction rule",
+    "REQUIRES" : [ "rules" ],
+    "ON" : [ "user_insert" ],
+    "DO" : [
+      { "entity_create" : {
+          "USING" : {
+            "type" : "node",
+            "param_type" : "media_gallery",
+            "param_title" : "[account:name]\u0027s photos",
+            "param_author" : [ "account" ]
+          },
+          "PROVIDE" : { "entity_created" : { "entity_created" : "Created entity" } }
+        }
+      }
+    ]
+  }
+}
+
+---- Rule 2 to import:
+
+{ "rules_profile" : {
+    "LABEL" : "Profile",
+    "PLUGIN" : "reaction rule",
+    "REQUIRES" : [ "rules" ],
+    "ON" : [ "user_login" ],
+    "DO" : [ { "redirect" : { "url" : "user\/[account:uid]" } } ]
+  }
+}

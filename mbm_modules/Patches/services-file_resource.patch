@@ -1,0 +1,30 @@
+diff --git a/resources/file_resource.inc b/resources/file_resource.inc
+old mode 100644
+new mode 100755
+index d858279..3b853ac
+--- a/resources/file_resource.inc
++++ b/resources/file_resource.inc
+@@ -187,9 +187,6 @@ function _file_resource_create($file) {
+     return services_error(t("Could not write file to destination"), 500);
+   }
+ 
+-  // Required to be able to reference this file.
+-  file_usage_add($file, 'services', 'files', $file->fid);
+-
+   return array(
+     'fid' => $file->fid,
+     'uri' => services_resource_uri(array('file', $file->fid)),
+@@ -319,7 +316,7 @@ function _file_resource_index($page, $fields, $parameters, $page_size) {
+ function _file_resource_access($op = 'view', $args = array()) {
+   // Adds backwards compatability with regression fixed in #1083242
+   if (isset($args[0])) {
+-    $args[0] = _services_access_value($args[0], 'file'); 
++    $args[0] = _services_access_value($args[0], 'file');
+   }
+ 
+   global $user;
+@@ -364,4 +361,3 @@ function _file_resource_node_access($op = 'view', $args = array()) {
+   }
+   return FALSE;
+ }
+-

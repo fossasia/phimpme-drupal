@@ -1,0 +1,23 @@
+<?php
+
+function xcal_format_autoload_info() {
+  return array(
+    'XCalFormatView' => array(
+      'file' => 'XCalFormatView.inc',
+    ),
+  );
+}
+
+function xcal_format_rest_server_response_formatters_alter(&$formatters) {
+  $formatters['xcal'] = array(
+    'model' => 'ResourceTimeFeedModel',
+    'mime types' => array('application/xcal+xml'),
+    'view' => 'XCalFormatView',
+  );
+  $formatters['ical'] = array(
+    'model' => 'ResourceTimeFeedModel',
+    'mime types' => array('text/calendar'),
+    'view' => 'XCalFormatView',
+    'view arguments' => array('transform'=>'ical'),
+  );
+}

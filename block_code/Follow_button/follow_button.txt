@@ -1,0 +1,6 @@
+<?php
+$host_uid = arg(1);
+if (is_numeric($host_uid)) {
+    print flag_create_link('follow', $host_uid);
+}
+?>

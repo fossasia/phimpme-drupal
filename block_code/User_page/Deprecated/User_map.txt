@@ -1,0 +1,153 @@
+$view = new view;
+$view->name = 'user_map';
+$view->description = '';
+$view->tag = 'default';
+$view->base_table = 'users';
+$view->human_name = 'User map';
+$view->core = 7;
+$view->api_version = '3.0';
+$view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
+
+/* Display: Master */
+$handler = $view->new_display('default', 'Master', 'default');
+$handler->display->display_options['title'] = 'User map';
+$handler->display->display_options['access']['type'] = 'perm';
+$handler->display->display_options['access']['perm'] = 'access user profiles';
+$handler->display->display_options['cache']['type'] = 'none';
+$handler->display->display_options['query']['type'] = 'views_query';
+$handler->display->display_options['query']['options']['query_comment'] = FALSE;
+$handler->display->display_options['exposed_form']['type'] = 'basic';
+$handler->display->display_options['pager']['type'] = 'some';
+$handler->display->display_options['pager']['options']['items_per_page'] = '1';
+$handler->display->display_options['style_plugin'] = 'gmap';
+$handler->display->display_options['style_options']['grouping'] = array(
+  0 => array(
+    'field' => '',
+    'rendered' => 1,
+    'rendered_strip' => 0,
+  ),
+  1 => array(
+    'field' => '',
+    'rendered' => 1,
+    'rendered_strip' => 0,
+  ),
+);
+$handler->display->display_options['style_options']['markertype'] = 'small pink';
+$handler->display->display_options['style_options']['latfield'] = 'latitude';
+$handler->display->display_options['style_options']['lonfield'] = 'longitude';
+$handler->display->display_options['style_options']['markerfield'] = 'latitude';
+$handler->display->display_options['style_options']['enablermt'] = 0;
+$handler->display->display_options['style_options']['rmtfield'] = 'latitude';
+$handler->display->display_options['style_options']['center_on_nodearg_arg'] = 'uid';
+$handler->display->display_options['style_options']['highlight_nodearg_arg'] = 'uid';
+$handler->display->display_options['style_options']['tooltipfield'] = 'latitude';
+$handler->display->display_options['style_options']['bubbletextfield'] = 'latitude';
+$handler->display->display_options['row_plugin'] = 'fields';
+$handler->display->display_options['row_options']['hide_empty'] = 0;
+$handler->display->display_options['row_options']['default_field_elements'] = 0;
+/* Field: Location: Latitude */
+$handler->display->display_options['fields']['latitude']['id'] = 'latitude';
+$handler->display->display_options['fields']['latitude']['table'] = 'location';
+$handler->display->display_options['fields']['latitude']['field'] = 'latitude';
+$handler->display->display_options['fields']['latitude']['label'] = '';
+$handler->display->display_options['fields']['latitude']['alter']['alter_text'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['make_link'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['absolute'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['external'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['replace_spaces'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['trim_whitespace'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['nl2br'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['word_boundary'] = 1;
+$handler->display->display_options['fields']['latitude']['alter']['ellipsis'] = 1;
+$handler->display->display_options['fields']['latitude']['alter']['more_link'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['strip_tags'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['trim'] = 0;
+$handler->display->display_options['fields']['latitude']['alter']['html'] = 0;
+$handler->display->display_options['fields']['latitude']['element_label_colon'] = FALSE;
+$handler->display->display_options['fields']['latitude']['element_default_classes'] = 1;
+$handler->display->display_options['fields']['latitude']['hide_empty'] = 0;
+$handler->display->display_options['fields']['latitude']['empty_zero'] = 0;
+$handler->display->display_options['fields']['latitude']['hide_alter_empty'] = 1;
+$handler->display->display_options['fields']['latitude']['style'] = 'dd';
+/* Field: Location: Longitude */
+$handler->display->display_options['fields']['longitude']['id'] = 'longitude';
+$handler->display->display_options['fields']['longitude']['table'] = 'location';
+$handler->display->display_options['fields']['longitude']['field'] = 'longitude';
+$handler->display->display_options['fields']['longitude']['label'] = '';
+$handler->display->display_options['fields']['longitude']['alter']['alter_text'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['make_link'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['absolute'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['external'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['replace_spaces'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['trim_whitespace'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['nl2br'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['word_boundary'] = 1;
+$handler->display->display_options['fields']['longitude']['alter']['ellipsis'] = 1;
+$handler->display->display_options['fields']['longitude']['alter']['more_link'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['strip_tags'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['trim'] = 0;
+$handler->display->display_options['fields']['longitude']['alter']['html'] = 0;
+$handler->display->display_options['fields']['longitude']['element_label_colon'] = FALSE;
+$handler->display->display_options['fields']['longitude']['element_default_classes'] = 1;
+$handler->display->display_options['fields']['longitude']['hide_empty'] = 0;
+$handler->display->display_options['fields']['longitude']['empty_zero'] = 0;
+$handler->display->display_options['fields']['longitude']['hide_alter_empty'] = 1;
+$handler->display->display_options['fields']['longitude']['style'] = 'dd';
+/* Field: User: Name */
+$handler->display->display_options['fields']['name']['id'] = 'name';
+$handler->display->display_options['fields']['name']['table'] = 'users';
+$handler->display->display_options['fields']['name']['field'] = 'name';
+$handler->display->display_options['fields']['name']['label'] = '';
+$handler->display->display_options['fields']['name']['alter']['alter_text'] = 0;
+$handler->display->display_options['fields']['name']['alter']['make_link'] = 0;
+$handler->display->display_options['fields']['name']['alter']['absolute'] = 0;
+$handler->display->display_options['fields']['name']['alter']['external'] = 0;
+$handler->display->display_options['fields']['name']['alter']['replace_spaces'] = 0;
+$handler->display->display_options['fields']['name']['alter']['trim_whitespace'] = 0;
+$handler->display->display_options['fields']['name']['alter']['nl2br'] = 0;
+$handler->display->display_options['fields']['name']['alter']['word_boundary'] = 1;
+$handler->display->display_options['fields']['name']['alter']['ellipsis'] = 1;
+$handler->display->display_options['fields']['name']['alter']['more_link'] = 0;
+$handler->display->display_options['fields']['name']['alter']['strip_tags'] = 0;
+$handler->display->display_options['fields']['name']['alter']['trim'] = 0;
+$handler->display->display_options['fields']['name']['alter']['html'] = 0;
+$handler->display->display_options['fields']['name']['element_label_colon'] = FALSE;
+$handler->display->display_options['fields']['name']['element_default_classes'] = 1;
+$handler->display->display_options['fields']['name']['hide_empty'] = 0;
+$handler->display->display_options['fields']['name']['empty_zero'] = 0;
+$handler->display->display_options['fields']['name']['hide_alter_empty'] = 1;
+$handler->display->display_options['fields']['name']['link_to_user'] = 0;
+$handler->display->display_options['fields']['name']['overwrite_anonymous'] = 0;
+$handler->display->display_options['fields']['name']['format_username'] = 1;
+/* Sort criterion: User: Created date */
+$handler->display->display_options['sorts']['created']['id'] = 'created';
+$handler->display->display_options['sorts']['created']['table'] = 'users';
+$handler->display->display_options['sorts']['created']['field'] = 'created';
+$handler->display->display_options['sorts']['created']['order'] = 'DESC';
+/* Contextual filter: User: Uid */
+$handler->display->display_options['arguments']['uid']['id'] = 'uid';
+$handler->display->display_options['arguments']['uid']['table'] = 'users';
+$handler->display->display_options['arguments']['uid']['field'] = 'uid';
+$handler->display->display_options['arguments']['uid']['default_action'] = 'default';
+$handler->display->display_options['arguments']['uid']['default_argument_type'] = 'user';
+$handler->display->display_options['arguments']['uid']['default_argument_options']['user'] = FALSE;
+$handler->display->display_options['arguments']['uid']['default_argument_skip_url'] = 0;
+$handler->display->display_options['arguments']['uid']['summary']['number_of_records'] = '0';
+$handler->display->display_options['arguments']['uid']['summary']['format'] = 'default_summary';
+$handler->display->display_options['arguments']['uid']['summary_options']['items_per_page'] = '25';
+$handler->display->display_options['arguments']['uid']['specify_validation'] = 1;
+$handler->display->display_options['arguments']['uid']['validate']['type'] = 'user';
+$handler->display->display_options['arguments']['uid']['validate_options']['restrict_roles'] = 0;
+$handler->display->display_options['arguments']['uid']['break_phrase'] = 0;
+$handler->display->display_options['arguments']['uid']['not'] = 0;
+/* Filter criterion: User: Active */
+$handler->display->display_options['filters']['status']['id'] = 'status';
+$handler->display->display_options['filters']['status']['table'] = 'users';
+$handler->display->display_options['filters']['status']['field'] = 'status';
+$handler->display->display_options['filters']['status']['value'] = '1';
+$handler->display->display_options['filters']['status']['group'] = 1;
+$handler->display->display_options['filters']['status']['expose']['operator'] = FALSE;
+
+/* Display: Block */
+$handler = $view->new_display('block', 'Block', 'block');
+

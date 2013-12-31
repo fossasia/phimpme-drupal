@@ -1,0 +1,14 @@
+name = Rules UI
+description = Administrative interface for managing rules.
+package = Rules
+core = 7.x
+files[] = rules_admin.module
+files[] = rules_admin.inc
+dependencies[] = rules
+
+; Information added by drupal.org packaging script on 2011-10-11
+version = "7.x-2.0"
+core = "7.x"
+project = "rules"
+datestamp = "1318336335"
+

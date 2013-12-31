@@ -1,0 +1,41 @@
+<?php
+/**
+ * @file
+ * Variable API module - Admin UI
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function variable_admin_menu() {
+  $items['admin/config/system/variable'] = array(
+    'title' => 'Variables',
+    'description' => 'Variable settings for mixed modules.',
+    'page callback' => 'variable_admin_page_group',
+    'file' => 'variable_admin.inc',
+    'access arguments' => array('administer site configuration'),
+  );
+  $items['admin/config/system/variable/group'] = array(
+    'title' => 'Groups',
+    'description' => 'Variable groups.',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['admin/config/system/variable/module'] = array(
+    'title' => 'Modules',
+    'description' => 'Variables per module.',
+    'page callback' => 'variable_admin_page_module',
+    'file' => 'variable_admin.inc',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/system/variable/edit/%'] = array(
+    'title' => 'Edit variable',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('variable_edit_form', 5),
+    'access callback' => 'variable_access',
+    'access arguments' => array(5),
+  );
+  return $items;
+}
+
+

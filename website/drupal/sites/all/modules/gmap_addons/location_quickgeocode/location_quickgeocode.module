@@ -1,0 +1,69 @@
+<?php
+
+/**
+ * @file
+ * Short description.
+ */
+
+function location_quickgeocode_menu() {
+  $items['location_quickgeocode'] = array(
+    'page callback' => 'location_quickgeocode_callback',
+    'access arguments' => array('submit latitude/longitude'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+function location_quickgeocode_callback() {
+  $dummy = array();
+  $location = location_invoke_locationapi($dummy, 'default values');
+  // @@@ Do something that makes me squirm less.
+  foreach (array_keys(location_field_names()) as $field) {
+    if (!empty($_GET[$field])) {
+      $location[$field] = check_plain($_GET[$field]);
+    }
+  }
+  echo drupal_to_js(location_latlon_exact($location));
+  return;
+}
+
+
+/**
+ * Implementation of hook_locationapi().
+ */
+function location_quickgeocode_locationapi(&$obj, $op, $a3 = NULL, $a4 = NULL, $a5 = NULL) {
+  switch ($op) {
+    case 'fields':
+      return array('fake_dogeocodebutton' => t('QuickGeocode'));
+
+    case 'defaults':
+      return array(
+        'fake_dogeocodebutton' => array('default' => 0, 'collect' => 1),
+      );
+
+    case 'virtual fields':
+      return array('fake_dogeocodebutton' => t('QuickGeocode'));
+
+    case 'field_expand':
+      if ($a3 == 'fake_dogeocodebutton') {
+        drupal_add_js(drupal_get_path('module', 'location_quickgeocode') .'/location_quickgeocode.js');
+        $widget = array(
+          '#type'           => 'item',
+          '#title'          => t('QuickGeocode'),
+          '#value'          => '<div class="location_quickgeocode">Javascript must be enabled to use QuickGeocode.</div>',
+          '#attributes'     => NULL,
+          '#required'       => ($a4 == 2),
+        );
+        //gmap_widget_setup($element['locpick']['user_latitude'], 'locpick_latitude');
+        return $widget;
+      }
+      break;
+
+    case 'isunchanged':
+      // ALWAYS unchanged.
+      if ($a3 == 'fake_dogeocodebutton') {
+        return TRUE;
+      }
+      break;
+  }
+}

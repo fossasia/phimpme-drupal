@@ -1,0 +1,13 @@
+name = "File Entity Test"
+description = "Support module for File Entity tests."
+package = Testing
+core = 7.x
+dependencies[] = file_entity
+hidden = TRUE
+
+; Information added by drupal.org packaging script on 2012-03-23
+version = "7.x-1.0"
+core = "7.x"
+project = "media"
+datestamp = "1332537952"
+

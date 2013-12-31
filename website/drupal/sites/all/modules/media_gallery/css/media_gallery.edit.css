@@ -1,0 +1,14 @@
+/**
+ * Styles for the multiform media edit screen
+ */
+
+ .media-item-form .form-wrapper {
+   zoom: 1; /* Needed for the IE filters */
+}
+
+.disabled {
+    opacity: 0.5;
+    filter:progid:DXImageTransform.Microsoft.Alpha(opacity=50);
+    -ms-filter:progid:DXImageTransform.Microsoft.Alpha(opacity=50);
+}
+

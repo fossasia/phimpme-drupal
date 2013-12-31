@@ -1,0 +1,81 @@
+<?php
+
+/**
+ * Implementation of hook_init().
+ *
+ * Used for displaying the APC stats for debug purposes.
+ */
+function apc_init() {
+  global $user;
+
+  if (($user->uid == 0) || !variable_get('apc_show_debug', FALSE)
+      || !user_access('access apc statistics') || strstr($_SERVER['PHP_SELF'], 'update.php')
+      || strstr($_GET['q'], 'autocomplete')) {
+    return;
+  }
+
+  register_shutdown_function('apc_shutdown');
+}
+
+/**
+ * @file
+ * This integrates the drupal APC cache module.
+ */
+
+/**
+ * Implementation of hook_permission().
+ */
+function apc_permission() {
+  return array(
+    'access apc statistics' =>  array(
+      'title' => t('Access apc statistics'),
+      'description' => t('Allows access to the statistics reports of APC.'),
+    ),
+  );
+}
+
+/**
+ * See apc_init() which registers this function as a shutdown function.
+ * Displays apc stats in the footer.
+ */
+function apc_shutdown() {
+  global $apc_statistics;
+
+  // Don't call theme() during shutdown if the registry has been rebuilt (such
+  // as when enabling/disabling modules on admin/build/modules) as things break.
+  // Instead, simply exit without displaying admin statistics for this page
+  // load.  See http://drupal.org/node/616282 for discussion.
+  if (!function_exists('theme_get_registry') || !theme_get_registry()) {
+    return;
+  }
+
+  // Try not to break non-HTML pages.
+  if (function_exists('drupal_get_http_header')) {
+    $header = drupal_get_http_header('content-type');
+    if ($header) {
+      $formats = array('xml', 'javascript', 'json', 'plain', 'image', 'application', 'csv', 'x-comma-separated-values');
+      foreach ($formats as $format) {
+        if (strstr($header, $format)) {
+          return;
+        }
+      }
+    }
+  }
+
+  if (isset($apc_statistics) && is_array($apc_statistics)) {
+    print '<div id="apc-devel"><h2>' . t('APC statistics') . '</h2>';
+    $rows = array();
+
+    foreach ($apc_statistics as $row) {
+      if (is_array($row[2])) {
+        $row[2] = implode(',<br />', $row[2]);
+      }
+      $rows[] = $row;
+    }
+    print theme('table', array(
+      'header' => array(('Type'), t('Bin'), t('Cid(s)')),
+      'rows' => $rows,
+    ));
+    print '</div>';
+  }
+}

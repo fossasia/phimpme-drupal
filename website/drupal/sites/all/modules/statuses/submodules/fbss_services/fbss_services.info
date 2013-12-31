@@ -1,0 +1,18 @@
+name = Statuses Services
+description = Integrates Services with Statuses.
+package = Statuses
+dependencies[] = statuses
+dependencies[] = services
+core = 7.x
+
+files[] = fbss_services.extended.inc
+files[] = fbss_services.inc
+files[] = fbss_services.module
+files[] = fbss_services.resources.inc
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

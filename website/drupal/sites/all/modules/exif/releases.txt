@@ -1,0 +1,30 @@
+Merge from 6.x to 7.x branch.
+Merge include update for following issues (6.x branch) :
+
+CHANGES LOG
+-----------
+2010/04/27
+* UTF-8 support #783310 by silvio
+* http://drupal.org/node/783344 : XMP Support by silvio
+
+2009/12/01
+* added option to choose if the exif information should be refreshed upon update or not
+Merged.
+
+2009/11/25
+* Prevent from reading exif information from png files (http://drupal.org/node/613776) by rapsli
+
+2009/10/26
+* Multiple IPTC Keywords http://drupal.org/node/226703 by chachasikes
+* Error with exif extraction http://drupal.org/node/473140 by raintonr
+
+2009/09/24 dman
+* Cleaned up PHP E_ALL notices (undefined variables) in a few places, including exif.class
+* Typo in exif_nodeapi()
+* http://drupal.org/node/473140 : Applied fix for array-structured Geo tags 
+
+2009/09/24
+* Applied Drupal Code styles
+
+2009/09/21
+* http://drupal.org/node/588528 : Better communications for users who don't have the exif_read_data function available

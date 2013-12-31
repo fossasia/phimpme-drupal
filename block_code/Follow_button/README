@@ -1,0 +1,9 @@
+Requirement:
+- Block Class module.
+- MBM theme (for CSS).
+- PHP Filter module (Drupal Core) enabled.
+
+Config:
+Class: follow_button
+Display: user/* (only listed).
+Turn off the display of Follow flag in user page.

@@ -1,0 +1,77 @@
+diff --git a/resources/statuses.css b/resources/statuses.css
+index 6620c0d..b5e770f 100644
+--- a/resources/statuses.css
++++ b/resources/statuses.css
+@@ -82,7 +82,7 @@
+ }
+ 
+ /* @group Textareas
+- * 
++ *
+  * Make textareas fit in their boxes by bubbling borders and padding up
+  * to a wrapper element.
+  */
+@@ -94,8 +94,9 @@
+   -o-box-shadow: 1px 1px 0 rgba(0,0,0,0.4) inset, 2px 2px 2px rgba(0,0,0,0.3) inset;
+   -webkit-box-shadow: 1px 1px 0 rgba(0,0,0,0.4) inset, 2px 2px 2px rgba(0,0,0,0.3) inset;
+   box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4) inset, 2px 2px 2px rgba(0, 0, 0, 0.3) inset;
++  border-radius: 4px;
+   clear: both;
+-  margin-bottom: 0;
++  margin-bottom: 5px;
+   margin-top: 0;
+   padding: 4px 2px 2px 4px;
+ }
+@@ -105,14 +106,16 @@
+   margin-top: 0;
+ }
+ 
+-.statuses-textarea-wrapper textarea {
++div.statuses-textarea-wrapper textarea {
+   border: 0 none;
+   display: block;
+   line-height: 1.5em;
+   max-width: 100%;
+   width: 100%;
+ }
+-
++.statuses-chars {
++  font-size: 12px;
++}
+ /* @end */
+ 
+ /* @group Buttons */
+@@ -188,4 +191,33 @@
+   margin-bottom: 0;
+ }
+ 
++/* @group Stream */
++.view-statuses-stream {
++  margin-top: 50px;
++}
++.view-statuses-stream table div.user-picture {
++  display: block;
++}
++.statuses-author {
++  overflow: hidden;
++}
++.statuses-author div.user-picture {
++  float: left;
++  margin-bottom: 0;
++}
++.statuses-author div.user-picture img {
++  margin: 0;
++}
++.statuses-author span.statuses-sender {
++  display: block;
++  float: left;
++  clear: right;
++  width: 80%;
++}
++.statuses-author span.statuses-content {
++  display: block;
++  width: 80%;
++  float: left;
++}
++
+ /* @end */

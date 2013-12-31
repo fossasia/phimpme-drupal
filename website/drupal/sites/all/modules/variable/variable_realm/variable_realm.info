@@ -1,0 +1,10 @@
+name = Variable realm
+description = API to use variable realms from different modules
+dependencies[] = variable
+core = 7.x
+; Information added by drupal.org packaging script on 2011-08-11
+version = "7.x-1.1"
+core = "7.x"
+project = "variable"
+datestamp = "1313088721"
+

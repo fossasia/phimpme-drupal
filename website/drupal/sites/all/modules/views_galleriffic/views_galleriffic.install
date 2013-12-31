@@ -1,0 +1,30 @@
+<?php
+/**
+ * @file
+ * Installation file for views galleriffic.
+ * Checks if .js file is installed.
+ */
+
+/**
+ * Implementation of hook_requirements().
+ * Added to be sure that user has galleriffic.js is installed
+ *
+ */
+function views_galleriffic_requirements($phase) {
+  $requirements = array();
+  $t = get_t();
+  $file_path = drupal_get_path('module', 'views_galleriffic') . '/js/jquery.galleriffic.js';
+  switch ($phase) {
+    case 'runtime':
+      if (!file_exists($file_path)) {
+        $requirements['views_galleriffic_js'] = array(
+          'title' => $t('Views Galleriffic requirements'),
+          'value' => $t('The Views Galleriffic module requires the <a href="http://www.twospy.com/galleriffic/js/jquery.galleriffic.js">Galleriffic JS</a> file. Download and place in the \'modules/views_galleriffic/js/\' folder.'),
+          'severity' => REQUIREMENT_WARNING,
+          );
+      }
+      break;
+  }
+  return $requirements;
+}
+

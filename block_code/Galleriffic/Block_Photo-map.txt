@@ -1,0 +1,64 @@
+$view = new view;
+$view->name = 'photo_map';
+$view->description = '';
+$view->tag = 'default';
+$view->base_table = 'location';
+$view->human_name = 'Photo map';
+$view->core = 7;
+$view->api_version = '3.0';
+$view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
+
+/* Display: Master */
+$handler = $view->new_display('default', 'Master', 'default');
+$handler->display->display_options['access']['type'] = 'none';
+$handler->display->display_options['cache']['type'] = 'none';
+$handler->display->display_options['query']['type'] = 'views_query';
+$handler->display->display_options['query']['options']['query_comment'] = FALSE;
+$handler->display->display_options['exposed_form']['type'] = 'basic';
+$handler->display->display_options['pager']['type'] = 'some';
+$handler->display->display_options['pager']['options']['items_per_page'] = '1';
+$handler->display->display_options['style_plugin'] = 'gmap';
+$handler->display->display_options['style_options']['grouping'] = array(
+  0 => array(
+    'field' => '',
+    'rendered' => 1,
+    'rendered_strip' => 0,
+  ),
+  1 => array(
+    'field' => '',
+    'rendered' => 1,
+    'rendered_strip' => 0,
+  ),
+  2 => array(
+    'field' => '',
+    'rendered' => 1,
+    'rendered_strip' => 0,
+  ),
+  3 => array(
+    'field' => '',
+    'rendered' => 1,
+    'rendered_strip' => 0,
+  ),
+);
+$handler->display->display_options['style_options']['macro'] = '[gmap zoom=7| width=300px |height=200px]';
+$handler->display->display_options['style_options']['markertype'] = '';
+$handler->display->display_options['style_options']['latfield'] = 'lid';
+$handler->display->display_options['style_options']['lonfield'] = 'lid';
+$handler->display->display_options['style_options']['markerfield'] = 'lid';
+$handler->display->display_options['style_options']['enablermt'] = 0;
+$handler->display->display_options['style_options']['rmtfield'] = 'lid';
+$handler->display->display_options['style_options']['center_on_nodearg_arg'] = 'uid';
+$handler->display->display_options['style_options']['highlight_nodearg_arg'] = 'uid';
+$handler->display->display_options['style_options']['tooltipfield'] = 'lid';
+$handler->display->display_options['style_options']['bubbletextfield'] = 'lid';
+$handler->display->display_options['row_plugin'] = 'fields';
+$handler->display->display_options['row_options']['hide_empty'] = 0;
+$handler->display->display_options['row_options']['default_field_elements'] = 0;
+/* Field: Location: Lid */
+$handler->display->display_options['fields']['lid']['id'] = 'lid';
+$handler->display->display_options['fields']['lid']['table'] = 'location';
+$handler->display->display_options['fields']['lid']['field'] = 'lid';
+
+/* Display: Block */
+$handler = $view->new_display('block', 'Block', 'block');
+

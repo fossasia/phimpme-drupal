@@ -1,0 +1,10 @@
+This code is to create a page to view gallery in form of Galleriffic (1 big photo and 1 block of thumbnails).
+Require: Views Galleriffic module.
+
+Code: page_own-photos.txt
+
+Note: This configuration need the patched Views Galleriffic. Please see the patch in ../../mbm_modules folder.
+
+Image Style for big photo: Scale 500x500 (Large).
+
+The Photo Map block is to show photo's location on the map.

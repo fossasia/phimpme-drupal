@@ -1,0 +1,60 @@
+.cell,.big-cell{
+background:url('../images/wait.gif') no-repeat center center transparent;
+position:absolute;
+overflow:hidden;
+}
+
+/*cell small*/
+.cell-1, .cell-2,
+.cell-3, .cell-4,
+.cell-6, .cell-7{
+height:278px;
+width:196px;
+}
+
+/*cell normal*/
+.cell-5, .cell-8, .cell-10{
+height:278px;
+width:395.5px;
+}
+
+.big-cell{
+height: 559px;
+margin-left: 398px;
+margin-top: 562px;
+width: 395px;
+}
+
+.cell-5{
+margin-top:281px;
+}
+
+.cell-8{
+margin-top:562px;
+}
+
+.cell-10{
+margin-left:398px;
+margin-top:281px;
+}
+
+.cell-2{
+margin-left:199px;
+}
+
+.cell-3{
+margin-left:398px;
+}
+
+.cell-4{
+margin-left:597px;
+}
+
+.cell-6{
+margin-top:843px;
+}
+
+.cell-7{
+margin-left:199px;
+margin-top:843px;
+}

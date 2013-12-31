@@ -1,0 +1,44 @@
+diff --git media.module media.module
+index 5e28312..c364624 100644
+--- media.module
++++ media.module
+@@ -184,7 +184,7 @@ function media_menu() {
+     'page callback' => 'media_page_edit',
+     'page arguments'  => array(1),
+     'access callback' => 'media_access',
+-    'access arguments' => array('edit'),
++    'access arguments' => array('edit', 1),
+     'weight' => 0,
+     'type' => MENU_LOCAL_TASK,
+     'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+@@ -270,6 +270,10 @@ function media_permission() {
+       'title' => t('Edit media'),
+       'description' => t('Edit all media files.'), // @TODO better description
+     ),
++    'edit own media' => array(
++      'title' => t('Edit own media'),
++      'description' => t('Edit own media files.'), // @TODO better description
++    ),
+   );
+ }
+ 
+@@ -564,8 +568,17 @@ function media_save($media) {
+ /**
+  * Access callback for media assets.
+  */
+-function media_access($op) {
+-  return (user_access('administer media') || user_access($op . ' media'));
++function media_access($op, $media = NULL) {
++  global $user;
++
++  if (user_access('administer media') || user_access($op . ' media')) {
++    return TRUE;
++  }
++  elseif ($media && $user->uid == $media->uid && user_access($op . ' own media')) {
++    return TRUE;
++  }
++
++  return FALSE;
+ }
+ 
+ /**

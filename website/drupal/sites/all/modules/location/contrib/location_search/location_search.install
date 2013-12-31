@@ -1,0 +1,84 @@
+<?php
+
+/**
+ * @file
+ *   Install, update and uninstall functions for the location_search module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function location_search_schema() {
+  $schema['location_search_work'] = array(
+    'description' => 'List of lids to index.',
+    'fields' => array(
+      'lid' => array(
+        'description' => 'Primary Key: location ID.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('lid'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function location_search_install() {
+  // Force reindexing.
+  $insert_select = db_select('location', 'l');
+  $insert_select->addField('l', 'lid');
+
+  db_insert('location_search_work')
+    ->fields(array('lid'))
+    ->from($insert_select)
+    ->execute();
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function location_search_uninstall() {
+  variable_del('location_search_map');
+  variable_del('location_search_map_address');
+  variable_del('location_search_map_macro');
+}
+
+/**
+ * Rewritten location_search -- Uses the fulltext engine.
+ */
+function location_search_update_5300() {
+  // Create our worklist table.
+  $schema['location_search_work'] = array(
+    'description' => 'List of lids to index.',
+    'fields' => array(
+      'lid' => array(
+        'description' => 'Primary Key: location ID.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('lid'),
+  );
+  db_create_table('location_search_work', $schema['location_search_work']);
+
+  // Force reindexing.
+  $insert_select = db_select('location', 'l');
+  $insert_select->addField('l', 'lid');
+
+  db_insert('location_search_work')
+    ->fields(array('lid'))
+    ->from($insert_select)
+    ->execute();
+
+  // Remove unused variables.
+  variable_del('location_suppress_country');
+  variable_del('location_search_distance_unit');
+}

@@ -1,0 +1,11 @@
+1. User map:
+- Enable User Locations module.
+- Set relevant permission.
+- In admin/config/people/accounts > User locations > Collection settings, set the Location form weight to a high number, then pull the Coordinate Choose to top.
+Now we can change user location in "Edit" with the support of Gmap (must check Use a Google Map to set latitude and longitude in admin/config/content/location first).
+- To show the map, create a block by Views, showing based on user:
+Fields: Location
+Format: GMap
+Contextual filters: User:Uid
+
+- Set the display of the block to make it show in user/* page.

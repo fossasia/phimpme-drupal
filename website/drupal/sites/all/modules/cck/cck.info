@@ -1,0 +1,13 @@
+name = CCK
+description = Miscellaneous field functions not handled by core.
+package = CCK
+core = 7.x
+files[] = cck.module
+files[] = cck.install
+dependencies[] = field_ui
+; Information added by drupal.org packaging script on 2011-08-23
+version = "7.x-2.x-dev"
+core = "7.x"
+project = "cck"
+datestamp = "1314057963"
+

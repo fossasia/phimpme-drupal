@@ -1,0 +1,15 @@
+name = User Locations
+description = Associate locations with users.
+dependencies[] = location
+package = Location
+core = 7.x
+files[] = location_user.module
+files[] = location_user.install
+configure = admin/config/people/accounts
+
+; Information added by drupal.org packaging script on 2012-02-18
+version = "7.x-3.x-dev"
+core = "7.x"
+project = "location"
+datestamp = "1329524299"
+

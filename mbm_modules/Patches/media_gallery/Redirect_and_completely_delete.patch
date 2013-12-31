@@ -1,0 +1,157 @@
+diff --git a/additional_modules/media_gallery/media_gallery.module b/additional_modules/media_gallery/media_gallery.module
+index 70f3932..52789b7 100644
+--- a/additional_modules/media_gallery/media_gallery.module
++++ b/additional_modules/media_gallery/media_gallery.module
+@@ -1019,7 +1019,7 @@ function media_gallery_multiedit_remove_item($form, &$form_state) {
+  * @see media_gallery_form_media_edit_alter()
+  */
+ function media_gallery_media_edit_submit($form, &$form_state) {
+-  $form_state['redirect'] = 'media-gallery/detail/' .  $form_state['media_gallery']['gallery']->nid . '/' . $form_state['values']['fid'];
++  $form_state['redirect'] = 'own-photos/' .  $form_state['media_gallery']['gallery']->uid;
+ }
+ 
+ /**
+diff --git a/additional_modules/media_gallery/media_gallery.pages.inc b/additional_modules/media_gallery/media_gallery.pages.inc
+index 2d84ab7..6f0475b 100644
+--- a/additional_modules/media_gallery/media_gallery.pages.inc
++++ b/additional_modules/media_gallery/media_gallery.pages.inc
+@@ -310,7 +310,7 @@ function media_gallery_remove_item_form($form, &$form_state, $node, $file) {
+   );
+   return confirm_form($form,
+     t('Are you sure you want to remove %file from the gallery %gallery?', array('%file' => $file->filename, '%gallery' => $node->title)),
+-    "media-gallery/detail/{$node->nid}/{$file->fid}",
++    "own-photos/{$file->uid}",
+     t('The file will still be available in the media library to use elsewhere on this site.'),
+     t('Remove file')
+   );
+@@ -323,8 +323,9 @@ function media_gallery_remove_item_form_submit($form, &$form_state) {
+   $node = node_load($form_state['values']['nid']);
+   $file = file_load($form_state['values']['fid']);
+   media_gallery_remove_item_from_gallery($node, $file);
+-  drupal_set_message(t('The file %file was removed from the gallery.', array('%file' => $file->filename)));
+-  $form_state['redirect'] = "node/{$node->nid}";
++  file_delete($file,true);
++  drupal_set_message(t('The file %file was removed from the gallery.' , array('%file' => $file->filename)));
++  $form_state['redirect'] = "own-photos/{$file->uid}";
+ }
+ 
+ /**
+@@ -351,7 +352,7 @@ function media_gallery_media_page_edit($gallery, $file) {
+ 
+   // Provide context information for form building and processing functions.
+   $form_state['media_gallery']['gallery'] = $gallery;
+-
++  $form_state['redirect'] = "own-photos/{$file->uid}";
+   // Since we have a $form_state, we can't call drupal_get_form(), so pass the
+   // expected arguments to drupal_build_form().
+   $form_state['build_info']['args'] = array($file);
+diff --git a/mbm_modules/GMap/Distorted_data_structure_non_object.patch b/mbm_modules/GMap/Distorted_data_structure_non_object.patch
+index b5acde2..999618d 100644
+--- a/mbm_modules/GMap/Distorted_data_structure_non_object.patch
++++ b/mbm_modules/GMap/Distorted_data_structure_non_object.patch
+@@ -1,25 +1,25 @@
+ diff --git a/additional_modules/gmap/gmap_plugin_style_gmap.inc b/additional_modules/gmap/gmap_plugin_style_gmap.inc
+-index 4cace42..ccbf264 100644
++index 4cace42..a191990 100644
+ --- a/additional_modules/gmap/gmap_plugin_style_gmap.inc
+ +++ b/additional_modules/gmap/gmap_plugin_style_gmap.inc
+ @@ -45,10 +45,10 @@ class gmap_plugin_style_gmap extends views_plugin_style {
+- 
++
+      $options['tooltipenabled'] = array('default' => 0);
+      $options['tooltipfield'] = array('default' => '');
+--    
++-
+ +
+      $options['bubbletextenabled'] = array('default' => 0);
+      $options['bubbletextfield'] = array('default' => '');
+--    
++-
+ +
+      return $options;
+    }
+- 
++
+ @@ -107,7 +107,7 @@ class gmap_plugin_style_gmap extends views_plugin_style {
+        $tooltip_field_obj = $this->view->display_handler->get_handler('field', $this->options['tooltipfield']);
+        $tooltip_field = $tooltip_field_obj->field_alias;
+      }
+--    
++-
+ +
+      $bubbletext_field_alias = '';
+      if ($this->options['bubbletextenabled']) {
+@@ -28,56 +28,57 @@ index 4cace42..ccbf264 100644
+        $marker_field_obj = $this->view->display_handler->get_handler('field', $this->options['markerfield']);
+        $marker_field = $marker_field_obj->field_alias;
+      }
+--    
++-
+ +
+      // Determine rmt field.
+      if ($this->options['enablermt']) {
+        $rmt_field_obj = $this->view->display_handler->get_handler('field', $this->options['rmtfield']);
+ @@ -138,10 +138,10 @@ class gmap_plugin_style_gmap extends views_plugin_style {
+- 
++
+      // Group the rows according to the grouping field, if specified.
+      $sets = $this->render_grouping($this->view->result, $this->options['grouping']);
+--    
+--    // Let's make sure the individual fields are rendered 
++-
++-    // Let's make sure the individual fields are rendered
+ +
+ +    // Let's make sure the individual fields are rendered
+      $this->render_fields($this->view->result);
+--    
++-
+ +
+      // Render each group separately and concatenate.  Plugins may override this
+      // method if they wish some other way of handling grouping.
+      $output = '';
+-@@ -161,6 +161,15 @@ class gmap_plugin_style_gmap extends views_plugin_style {
++@@ -161,6 +161,16 @@ class gmap_plugin_style_gmap extends views_plugin_style {
+          $highlight_nid = $nodehandler->get_value();
+        }
+- 
++
+ +      /*** Workaround for the bug http://drupal.org/node/1497512 ***/
+-+      if (!isset($records[0])) {
+++      while (!isset($records[0])) {
+ +        $records = array_values($records);
+-+      }
+-+      if (is_array($records[0]) && isset($records[0]['rows'])) {
+-+        $records = $records[0]['rows'];
+++        if (is_array($records[0]) && isset($records[0]['rows'])) {
+++          $records = $records[0]['rows'];
+++        }
+++        else break;
+ +      }
+ +      /*** End of workaround ***/
+ +
+        foreach ($records as $row_index => $row) {
+          $this->view->row_index = $row_index;
+          $lat = (float)$row->{$lat_field};
+-@@ -210,7 +219,7 @@ class gmap_plugin_style_gmap extends views_plugin_style {
++@@ -210,7 +220,7 @@ class gmap_plugin_style_gmap extends views_plugin_style {
+            if ($this->options['tooltipenabled'] && !empty($tooltip_field) && !empty($row->{$tooltip_field})) {
+              $tooltip = $row->{$tooltip_field};
+            }
+--          
++-
+ +
+            $bubbletext = NULL;
+            if ($this->options['bubbletextenabled'] && !empty($bubbletext_field_alias) && !empty($row->{$bubbletext_field_alias})) {
+              $bubbletext = $this->rendered_fields[$row_index][$this->options['bubbletextfield']];
+-@@ -459,7 +468,7 @@ class gmap_plugin_style_gmap extends views_plugin_style {
++@@ -459,7 +469,7 @@ class gmap_plugin_style_gmap extends views_plugin_style {
+        '#process' => array('ctools_dependent_process'),
+        '#dependency' => array('edit-style-options-bubbletextenabled' => array(TRUE)),
+      );
+--    
++-
+ +
+    }
+- 
++
+    /**

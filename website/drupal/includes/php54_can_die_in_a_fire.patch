@@ -1,0 +1,24 @@
+diff --git a/core/includes/menu.inc b/core/includes/menu.inc
+index f23eb0d..c6dec04 100644
+--- a/core/includes/menu.inc
++++ b/core/includes/menu.inc
+@@ -3085,7 +3085,18 @@ function menu_link_save(&$item, $existing_item = array(), $parent_candidates = a
+   // array_intersect_assoc() with the $item as the first parameter because
+   // $item may have additional keys left over from building a router entry.
+   // The intersect removes the extra keys, allowing a meaningful comparison.
+-  if (!$existing_item || (array_intersect_assoc($item, $existing_item)) != $existing_item) {
++  $update = TRUE;
++  if ($existing_item) {
++    $compare_left = $item;
++    $compare_right = $existing_item;
++    if ($compare_left['options'] == $compare_right['options']) {
++      unset($compare_left['options'], $compare_right['options']);
++      if (array_intersect_assoc($item, $existing_item) == $existing_item) {
++        $update = FALSE;
++      }
++    }
++  }
++  if ($update) {
+     db_update('menu_links')
+       ->fields(array(
+         'menu_name' => $item['menu_name'],

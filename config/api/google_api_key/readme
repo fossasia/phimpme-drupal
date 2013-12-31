@@ -1,0 +1,3 @@
+-Get a google API key at http://code.google.com/apis/maps/signup.html configure it in admin/config/services/gmap.
+-Phimp.me using google API key:ABQIAAAAnXMKfImv6Y8LvIDbnaSSwxS4LI42Xixs8WXXkVsObv3Vhb8mART0OXMLOBcNwQQUmryJJ6MhkE8tjQ
+-To using Map for gallery we need a field location so must enable Location CCK and add field location to media_gallery content type.

@@ -1,0 +1,1680 @@
+<?php
+
+/**
+ * @file
+ * Lets users create galleries made up of media items.
+ */
+
+require_once(dirname(__FILE__) . '/media_gallery.fields.inc');
+require_once(dirname(__FILE__) . '/fields_rsi_prevention.inc');
+
+/**
+ * The pager element to use for paging through the media items in a gallery.
+ *
+ * We avoid using the default pager for now because there is too much risk of
+ * it colliding with other pagers initialized for the same page (for example,
+ * by the comment module, if the gallery node manages to get comment loading or
+ * display functions called on it).
+ */
+define('MEDIA_GALLERY_PAGER_ELEMENT', 1);
+
+/**
+ * Helper function to return the view modes used by this module for displaying files in gallery context.
+ */
+function media_gallery_file_view_modes() {
+  return array(
+    'media_gallery_thumbnail' => t('Gallery thumbnail'),
+    'media_gallery_lightbox' => t('Gallery lightbox'),
+    'media_gallery_detail' => t('Gallery detail'),
+    'media_gallery_block_thumbnail' => t('Gallery block thumbnail'),
+    'media_gallery_collection_thumbnail' => t('Gallery collection thumbnail'),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function media_gallery_menu() {
+  $items['admin/config/media/galleries'] = array(
+    'title' => 'Gallery settings',
+    'description' => 'Configure settings for the "All galleries" page.',
+    'access arguments' => array('administer media galleries'),
+    'page callback' => 'media_gallery_admin_settings',
+    'file' => 'media_gallery.admin.inc',
+  );
+  $items['media-gallery/sort/collection/%taxonomy_term/%'] = array(
+    'title' => 'Gallery sort callback',
+    'access callback' => 'media_gallery_edit_access_ajax',
+    'access arguments' => array('collection', 3, 4),
+    'page callback' => 'media_gallery_ajax_sort',
+    'page arguments' => array('collection', 3),
+    'file' => 'media_gallery.pages.inc',
+  );
+  $items['media-gallery/sort/gallery/%node/%'] = array(
+    'title' => 'Gallery sort callback',
+    'access callback' => 'media_gallery_edit_access_ajax',
+    'access arguments' => array('gallery', 3, 4),
+    'page callback' => 'media_gallery_ajax_sort',
+    'page arguments' => array('gallery', 3),
+    'file' => 'media_gallery.pages.inc',
+  );
+  $items['media-gallery/detail/%node/%file'] = array(
+    'page callback' => 'media_gallery_detail_page',
+    'page arguments' => array(2, 3),
+    'access callback' => 'node_access',
+    'access arguments' => array('view', 2),
+    'file' => 'media_gallery.pages.inc',
+  );
+  $items['media-gallery/detail/%node/%file/view'] = array(
+    'title' => 'View',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  // An in-gallery-context version of media/%file/edit.
+  $items['media-gallery/detail/%node/%file/edit'] = array(
+    'title' => 'Edit',
+    'page callback' => 'media_gallery_media_page_edit',
+    'page arguments'  => array(2, 3),
+    'access callback' => 'media_access',
+    'access arguments' => array('edit'),
+    'weight' => 0,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+    'file' => 'media_gallery.pages.inc',
+     // Use the same setting as node module
+    'theme callback' => '_node_custom_theme',
+  );
+  $items['media-gallery/detail/%node/%file/remove'] = array(
+    'title' => 'Remove',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('media_gallery_remove_item_form', 2, 3),
+    'access callback' => 'media_gallery_remove_item_access',
+    'access arguments' => array(2, 3),
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+    'file' => 'media_gallery.pages.inc',
+     // Use the same setting as node module.
+    'theme callback' => '_node_custom_theme',
+  );
+  $items['media-gallery/lightbox/%node/%file'] = array(
+    'page callback' => 'media_gallery_lightbox_page',
+    'page arguments' => array(2, 3),
+    'access callback' => 'node_access',
+    'access arguments' => array('view', 2),
+    'file' => 'media_gallery.pages.inc',
+    'delivery callback' => 'media_gallery_lightbox_page_deliver',
+  );
+  $items['media-gallery/add-images/%node/%'] = array(
+    'access callback' => 'media_gallery_edit_access_ajax',
+    'access arguments' => array('gallery', 2, 3),
+    'page callback' => 'media_gallery_add_images',
+    'page arguments' => array(2),
+    'file' => 'media_gallery.pages.inc',
+  );
+  // An in-gallery-context version of media/%media_multi/edit.
+  $items['node/%node/multiedit'] = array(
+    'title' => 'Edit media',
+    'page callback' => 'media_gallery_media_page_multiedit',
+    'page arguments' => array(1),
+    'access callback' => 'media_gallery_multiedit_access',
+    'access arguments' => array(1),
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'media_gallery.pages.inc',
+  );
+
+  // @todo Move to Media module once it is ready.
+  $items['media/%file/download'] = array(
+    'title' => 'Download',
+    'page callback' => 'media_download',
+    'page arguments'  => array(1),
+    'access callback' => 'media_access',
+    'access arguments' => array('view'),
+    'type' => MENU_CALLBACK,
+    'file' => 'media.pages.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function media_gallery_menu_alter(&$items) {
+  // Take over taxonomy term list pages by substituting our own callback.
+  // TODO: Use hook_entity_info_alter() to change the entity uri callback for
+  // gallery collections only.
+  $items['taxonomy/term/%taxonomy_term']['page callback'] = 'media_gallery_list_galleries';
+  $items['taxonomy/term/%taxonomy_term']['file'] = 'media_gallery.pages.inc';
+  $items['taxonomy/term/%taxonomy_term']['module'] = 'media_gallery';
+
+  // If you're viewing a media item in context somewhere (which we do inside
+  // media gallery nodes), that means it's being used on your site, which means
+  // you won't be allowed to delete it anyway. Therefore, do not show
+  // contextual links there.
+  // @todo Perhaps this should be changed in the media module itself?
+  $items['media/%file/delete']['context'] = MENU_CONTEXT_PAGE;
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function media_gallery_admin_paths() {
+  $paths = array(
+    'media-gallery/detail/*/*/edit' => TRUE,
+    'media-gallery/detail/*/*/remove' => TRUE,
+    'node/*/multiedit' => TRUE,
+  );
+  return $paths;
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function media_gallery_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Rename the "Edit" tab on gallery nodes to "Edit gallery".
+  if (($node = menu_get_object()) && isset($node->type) && $node->type == 'media_gallery') {
+    $tabs = &$data['tabs'][0]['output'];
+    foreach ($tabs as &$tab) {
+      if (isset($tab['#link']['path']) && $tab['#link']['path'] == 'node/%/edit') {
+        $tab['#link']['title'] = t('Edit gallery');
+      }
+    }
+  }
+
+  // Rename the "Edit" tab on the "All Galleries" taxonomy term to "Edit all
+  // galleries" and point it to our configuration page.
+  // @todo: Once we have additional gallery-related taxonomy terms and
+  //   http://drupal.org/node/678592 is committed to core (so the term edit
+  //   pages show the correct admin theme) we'll do something different here,
+  //   perhaps not even alter anything at all.
+  if (($term = menu_get_object('taxonomy_term', 2)) && isset($term->vid) && $term->vid == variable_get('media_gallery_collection_vid')) {
+    $tabs = &$data['tabs'][0]['output'];
+    foreach ($tabs as &$tab) {
+      if (isset($tab['#link']['path']) && $tab['#link']['path'] == 'taxonomy/term/%/edit') {
+        $tab['#link']['href'] = 'admin/config/media/galleries';
+        $tab['#link']['title'] = t('Edit all galleries');
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_node_load().
+ */
+function media_gallery_node_load($nodes, $types) {
+  // Store a copy of the media_gallery_media field before mucking with it in
+  // media_gallery_view(). We use hook_node_load() instead of hook_load(),
+  // because the latter runs before fields are loaded.
+  if (in_array('media_gallery', $types)) {
+    foreach ($nodes as $node) {
+      if ($node->type == 'media_gallery') {
+        $node->media_gallery_media_original = $node->media_gallery_media;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_view().
+ */
+function media_gallery_view($node, $view_mode) {
+  // Add display elements and resources for users who can edit the gallery.
+  if (node_access('update', $node)) {
+    // Add the "Add images" link, themed as a local action. Note that this
+    // element is listed in hook_field_extra_fields(), so whether or not it
+    // will *actually* be displayed in the current view mode depends on the
+    // site's configuration for the corresponding pseudo-field.
+    $node->content['add_media_link'] = array(
+      '#theme' => 'menu_local_action',
+      '#link' => array(
+        'title' => t('Add media'),
+        'href' => 'media/browser',
+        'localized_options' => array(
+          'query' => array('render' => 'media-popup'),
+          'attributes' => array(
+            'class' => 'media-gallery-add launcher',
+          ),
+        ),
+      ),
+      // @todo Drupal could really use a theme_menu_local_actions() function...
+      '#prefix' => '<ul class="field action-links">',
+      '#suffix' => '</ul>',
+    );
+
+    // Enable the "Add media" link to launch the media browser.
+    module_load_include('inc', 'media', 'includes/media.browser');
+    media_attach_browser_js($node->content['add_media_link']);
+    $node->content['add_media_link']['#attached']['js'][] = drupal_get_path('module', 'media_gallery') . '/media_gallery.addimage.js';
+
+    // These JS settings are used by the "add media" link but some are also
+    // shared by the drag-and-drop code below.
+    $instance = field_info_instance('node', 'media_gallery_media', $node->type);
+    $token = drupal_get_token('media_gallery');
+    $gallery_js_settings = array(
+      'mediaGalleryAddImagesUrl' => url('media-gallery/add-images/' . $node->nid . '/' . $token),
+      'mediaGallerySortGalleryUrl' => url('media-gallery/sort/gallery/' . $node->nid . '/' . $token),
+      'mediaGalleryAllowedMediaTypes' => array_filter($instance['widget']['settings']['allowed_types']),
+    );
+
+    // When viewing the full node, add front-end resources for drag-and-drop
+    // sorting.
+    if ($view_mode == 'full') {
+      drupal_add_css(drupal_get_path('module', 'media_gallery') . '/media_gallery.dragdrop.css');
+      drupal_add_library('system', 'ui.sortable');
+      drupal_add_library('system', 'jquery.bbq');
+      drupal_add_js(drupal_get_path('module', 'media_gallery') . '/media_gallery.dragdrop.js');
+      drupal_add_js($gallery_js_settings, array('type' => 'setting'));
+    }
+    else {
+      // Otherwise, attach the setting to the "add media" link, as per above.
+      $node->content['add_media_link']['#attached']['js'][] = array(
+        'type' => 'setting',
+        'data' => $gallery_js_settings,
+      );
+    }
+  }
+
+  // For the teaser, only the first thumbnail needs to be displayed, so remove the
+  // rest from the node's field data, so that the field formatter doesn't waste
+  // time building the render structure for items that won't be shown.
+  if ($view_mode == 'teaser') {
+    if (!empty($node->media_gallery_media[LANGUAGE_NONE])) {
+      $first_item = array_shift($node->media_gallery_media[LANGUAGE_NONE]);
+      $node->media_gallery_media[LANGUAGE_NONE] = array($first_item);
+    }
+  }
+  // For the full display, implement pagination.
+  elseif ($view_mode == 'full' || $view_mode == 'media_gallery_block') {
+    $full = $view_mode == 'full' ? TRUE : FALSE;
+    if (!empty($node->media_gallery_media)) {
+      $media = $full ? $node->media_gallery_media[LANGUAGE_NONE] : $node->media_gallery_media_original[LANGUAGE_NONE];  
+    }
+    else {
+      $media = array();
+    }
+    
+    // Only display the requested number of media items per page.
+    $columns = $full ? $node->media_gallery_columns[LANGUAGE_NONE][0]['value'] : $node->media_gallery_block_columns[LANGUAGE_NONE][0]['value'];
+    $rows = $full ? $node->media_gallery_rows[LANGUAGE_NONE][0]['value'] : $node->media_gallery_block_rows[LANGUAGE_NONE][0]['value'];
+    $number_per_page = $columns * $rows;
+    $deltas = array_keys($media);
+    $total = count($deltas);
+
+    // Initialize the pager and find out what page we are viewing.
+    $page = $full ? pager_default_initialize($total, $number_per_page, MEDIA_GALLERY_PAGER_ELEMENT) : 0;
+
+    // Deny access to all media items that aren't on this page.
+    $min_on_page = $number_per_page * $page;
+    $max_on_page = $number_per_page * ($page + 1) - 1;
+    $pre_links = array();
+    $post_links = array();
+    foreach ($deltas as $key => $delta) {
+      $item = $media[$delta];
+      $fid = _media_gallery_get_media_fid($item);
+      if ($key < $min_on_page) {
+        $pre_links[$key] = array(
+          'title' => '',
+          'href' => 'media-gallery/detail/' . $node->nid . '/' . $fid,
+          'attributes' => array('class' => array('colorbox-supplemental-link pre')),
+        );
+        unset($media[$delta]);
+      }
+      elseif ($key > $max_on_page) {
+        $post_links[$key] = array(
+          'title' => '',
+          'href' => 'media-gallery/detail/' . $node->nid . '/' . $fid,
+          'attributes' => array('class' => array('colorbox-supplemental-link post')),
+        );
+        unset($media[$delta]);
+      }
+    }
+
+    // Field rendering requires sequential deltas, so re-key.
+    // @todo Open a Drupal core issue about this.
+    
+    if ($media) {
+      $node->media_gallery_media[LANGUAGE_NONE] = array_values($media);
+    }
+    else {
+      $node->media_gallery_media[LANGUAGE_NONE] = array();  
+    }
+
+    // Create a set of dummy links to media items that don't appear on this
+    // page, so colorbox can link to them in the slideshow.
+    // @todo If the gallery contains 1000 media, then rendering each link takes
+    //   extra server-side time, extra network time to transfer the markup, and
+    //   extra client-side time to initialize the DOM. Performance can likely be
+    //   significantly improved if we only send the fids to Drupal.settings, and
+    //   add JavaScript code to make that information usable by Colorbox.
+    $node->content['colorbox_links_pre'] = array(
+      '#theme' => 'links',
+      '#links' => $pre_links,
+      '#weight' => -20,
+      '#attributes' => array('class' => array('colorbox-supplemental-links')),
+    );
+    $node->content['colorbox_links_post'] = array(
+      '#theme' => 'links',
+      '#links' => $post_links,
+      '#weight' => 20,
+      '#attributes' => array('class' => array('colorbox-supplemental-links')),
+    );
+    // Finally, display the pager, with a high weight so it appears at the
+    // bottom.
+    if ($full) {
+      $node->content['media_gallery_pager'] = array(
+        '#theme' => 'pager',
+        '#element' => MEDIA_GALLERY_PAGER_ELEMENT,
+        '#weight' => 2000,
+      );
+    }
+  }
+  return $node;
+}
+
+/**
+ * Implements hook_field_extra_fields().
+ */
+function media_gallery_field_extra_fields() {
+  // Allow the "Add media" link to be sorted with respect to the actual media
+  // gallery fields.
+  $extra['node']['media_gallery'] = array(
+    'display' => array(
+      'add_media_link' => array(
+        'label' => t('"Add media" link'),
+        'weight' => 1,
+      ),
+    ),
+  );
+
+  return $extra;
+}
+
+/**
+ * Access callback for AJAX-based gallery editing operations.
+ *
+ * @param string $type
+ *   The type of item being edited: 'gallery' for an individual gallery or
+ *   'collection' for a gallery collection.
+ * @param mixed $item
+ *   For a media gallery, the $node object for that gallery; for gallery
+ *   collections, the taxonomy term corresponding to the collection.
+ * @param string $token
+ *   A token from drupal_get_token.
+ */
+function media_gallery_edit_access_ajax($type, $item, $token) {
+  if (!drupal_valid_token($token, 'media_gallery')) {
+    return FALSE;
+  }
+  switch ($type) {
+    case 'gallery':
+      return node_access('update', $item);
+      break;
+    case 'collection':
+      return user_access('administer media galleries');
+      break;
+    default:
+      return FALSE;
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function media_gallery_theme() {
+  return array(
+    'media_gallery_collection' => array(
+      'render element' => 'element',
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_teaser' => array(
+      'render element' => 'element',
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_media_item_thumbnail' => array(
+      'render element' => 'element',
+      'file' => 'media_gallery.theme.inc',
+      'template' => 'media-gallery-media-item-thumbnail',
+    ),
+    'media_gallery_media_item_lightbox' => array(
+      'render element' => 'element',
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_media_item_detail' => array(
+      'render element' => 'element',
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_block_thumbnail' => array(
+      'render element' => 'element',
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_collection_thumbnail' => array(
+      'render element' => 'element',
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_download_link' => array(
+      'variables' => array('file' => NULL, 'text' => NULL, 'options' => array()),
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_meta' => array(
+      'variables' => array('display' => NULL, 'location' => NULL, 'title' => NULL, 'license' => NULL, 'description' => NULL),
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_item' => array(
+      'variables' => array('image' => NULL, 'link_path' => NULL, 'classes' => NULL),
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_license' => array(
+      'variables' => array('element' => NULL, 'color' => 'dark'),
+      'file' => 'media_gallery.theme.inc',
+    ),
+    'media_gallery_file_field_inline' => array(
+      'render element' => 'element',
+      'file' => 'media_gallery.theme.inc',
+    ),
+  );
+}
+
+/**
+ * Implements hook_permission().
+ */
+function media_gallery_permission() {
+  return array(
+    'administer media galleries' => array(
+      'title' => t('Administer media galleries'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_info().
+ */
+function media_gallery_node_info() {
+  return array(
+    'media_gallery' => array(
+      'name' => t('Gallery'),
+      'base' => 'media_gallery',
+      'description' => t('A flexible gallery of media.'),
+      'help' => t('Create a gallery of thumbnails including custom display settings.  Once your gallery is saved, your media can be added.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_update().
+ */
+function media_gallery_update($node) {
+  // If the media gallery node is being saved and is configured to not provide
+  // a block, remove all blocks associated with it from the database.
+  if (empty($node->media_gallery_expose_block[LANGUAGE_NONE][0]['value'])) {
+    db_delete('block')
+      ->condition('module', 'media_gallery')
+      ->condition('delta', $node->nid)
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function media_gallery_block_info() {
+  $blocks = array();
+
+  // Define a block for each media gallery node that is configured to expose
+  // one.
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', 'media_gallery');
+  $query->fieldCondition('media_gallery_expose_block', 'value', 1);
+  $result = $query->execute();
+  if (!empty($result['node'])) {
+    // There is no reason to waste going through a full node_load_multiple()
+    // when we only need the titles.
+    $nids = array_keys($result['node']);
+    $node_titles = db_query("SELECT nid, title FROM {node} WHERE nid IN (:nids)", array(':nids' => $nids))->fetchAllKeyed();
+    foreach ($node_titles as $nid => $title) {
+      // The 'info' element is escaped on display, so we pass it through
+      // unfiltered here.
+      $blocks[$nid]['info'] = t('Recent gallery items: !title', array('!title' => $title));
+      $blocks[$nid]['visibility'] = 0;
+      $blocks[$nid]['pages'] = 'node/' . $nid . "\ngalleries";
+    }
+  }
+
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function media_gallery_block_view($delta = '') {
+  $node = node_load($delta);
+  $block['subject'] = check_plain($node->title);
+  if (empty($node->media_gallery_media_original)) {
+    // Bail out now if there won't be any media items to show.
+    $block['content'] = t('No content available.');
+  }
+  else {
+    // Collect an array of file IDs associated with this gallery. For
+    // simplicity we will assume (here and below) that this is not a
+    // multilingual field. Also note that the node may have been loaded and
+    // viewed elsewhere on the page, in which case the 'media_gallery_media'
+    // field was modified and does not contain what we want, so we have to go
+    // back to the original field value set in hook_node_load() instead, and
+    // also clone the node before changing it so our modifications do not
+    // affect other places where it might be being viewed.
+    $node = clone $node;
+    $node->media_gallery_media = $node->media_gallery_media_original;
+    $files = &$node->media_gallery_media[LANGUAGE_NONE];
+    $gallery_fids = array();
+    foreach ($files as $file) {
+      $gallery_fids[] = _media_gallery_get_media_fid($file);
+    }
+    // Construct a list of file IDs that is limited to the specified number of
+    // items and ordered by most recent; these are the files that will be
+    // displayed in the block.
+    $columns = !empty($node->media_gallery_block_columns[LANGUAGE_NONE][0]['value']) ? $node->media_gallery_block_columns[LANGUAGE_NONE][0]['value'] : 1;
+    $rows = !empty($node->media_gallery_block_rows[LANGUAGE_NONE][0]['value']) ? $node->media_gallery_block_rows[LANGUAGE_NONE][0]['value'] : 1;
+    $number_to_show = $columns * $rows;
+    $block_fids = db_select('file_managed', 'f')
+      ->fields('f', array('fid'))
+      ->condition('fid', $gallery_fids, 'IN')
+      ->orderBy('timestamp', 'DESC')
+      ->range(0, $number_to_show)
+      ->execute()
+      ->fetchCol();
+    // Before sorting, remove any items that will not display in the block.
+    $fid_order = array_flip($block_fids);
+    if ($number_to_show < count($files)) {
+      foreach ($files as $key => $file) {
+        if (!isset($fid_order[_media_gallery_get_media_fid($file)])) {
+          unset($files[$key]);
+        }
+      }
+    }
+    // Prepare the sorting function with the list of file ID orders.
+    _media_gallery_sort_by_recent(NULL, NULL, $fid_order);
+    // Perform the sort.
+    usort($files, '_media_gallery_sort_by_recent');
+    // Display the block.
+    $block['content']['gallery'] = node_view($node, 'media_gallery_block');
+    // Move the node's contextual links so that they display on the block
+    // rather than the node (i.e., in the same dropdown as the "Configure
+    // block" link). This is also required in order to properly integrate with
+    // the code in media_gallery_contextual_links_view_alter().
+    if (isset($block['content']['gallery']['#contextual_links'])) {
+      $block['content']['#contextual_links'] = $block['content']['gallery']['#contextual_links'];
+      unset($block['content']['gallery']['#contextual_links']);
+    }
+    $block['content']['more_link'] = array(
+      '#theme' => 'more_link',
+      '#url' => 'node/' . $node->nid,
+      '#title' => t('Show the complete gallery'),
+      '#weight' => 1000,
+    );
+  }
+
+  return $block;
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function media_gallery_block_configure($delta = '') {
+  // Duplicate the form for configuring media gallery node fields, including
+  // our module's custom alterations. We can't use drupal_get_form() here
+  // because that will mess up the form submission, so for now we have to live
+  // without getting any other module's alterations to this part of the node
+  // form.
+  $node = node_load($delta);
+  $form = array();
+  $form_state = array();
+  field_attach_form('node', $node, $form, $form_state, $node->language);
+  media_gallery_form_media_gallery_node_form_alter($form, $form_state);
+
+  // Pull out only the parts of the node form that allow configuration of the
+  // block settings; these are the ones we want to display.
+  $block_settings = array('block' => $form['block']);
+
+  // Store a record of all node fields that we will need to save when
+  // hook_block_save() is called.
+  $block_settings['block']['media_gallery_block_fields'] = array(
+    '#type' => 'value',
+    '#value' => element_children($block_settings['block']),
+  );
+
+  // Don't allow people to destroy the block itself from the block
+  // configuration page.
+  $block_settings['block']['media_gallery_expose_block']['#access'] = FALSE;
+
+  // Customize the fieldset display.
+  $block_settings['block']['#collapsible'] = FALSE;
+  $block_settings['block']['#title'] = t('Block settings');
+  unset($block_settings['block']['#weight']);
+
+  // Add the necessary attached JS and CSS.
+  _media_gallery_attach_form_resources($block_settings['block']);
+
+  return $block_settings;
+}
+
+/**
+ * Implements hook_block_save().
+ */
+function media_gallery_block_save($delta = '', $edit = array()) {
+  // Save the block-related media gallery fields on the node.
+  $node = node_load($delta);
+  foreach ($edit['media_gallery_block_fields'] as $field) {
+    $node->{$field} = $edit[$field];
+  }
+  node_save($node);
+}
+
+/**
+ * Implements hook_library().
+ */
+function media_gallery_library() {
+  $library_path = variable_get('media_gallery_library_path', 'sites/all/libraries');
+  $stylesheet = variable_get('media_gallery_colorbox_stylesheet', 'example1');
+  $libraries['colorbox'] = array(
+    'title' => 'Colorbox',
+    'website' => 'http://colorpowered.com/colorbox/',
+    'version' => '1.3.9',
+    'js' => array(
+      $library_path . '/colorbox/colorbox/jquery.colorbox-min.js' => array(),
+    ),
+    'css' => array(
+      $library_path . '/colorbox/' . $stylesheet . '/colorbox.css' => array(
+        'type' => 'file',
+        'media' => 'screen',
+      ),
+    ),
+  );
+  return $libraries;
+}
+
+/**
+ * Helper function to sort media gallery items by an ordered list of file IDs.
+ *
+ * Call once with $set_fid_order set to an array of file orders, keyed by the
+ * file ID, before performing the actual sort.
+ */
+function _media_gallery_sort_by_recent($a, $b, $set_fid_order = NULL) {
+  $fid_order = &drupal_static(__FUNCTION__, array());
+  // Stored the ordered list if this is a preparatory call.
+  if (isset($set_fid_order)) {
+    $fid_order = $set_fid_order;
+    return;
+  }
+  // Otherwise, perform the sort.
+  $a_order = $fid_order[_media_gallery_get_media_fid($a)];
+  $b_order = $fid_order[_media_gallery_get_media_fid($b)];
+  if ($a_order < $b_order) {
+    return -1;
+  }
+  elseif ($b_order < $a_order) {
+    return 1;
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Returns the number of files of each type attached to a media gallery node.
+ */
+function media_gallery_get_media_type_count($node, $media_field = 'media_gallery_media') {
+  $fids = media_gallery_get_file_ids($node, $media_field);
+  if (empty($fids)) {
+    return array();
+  }
+  $query = db_select('file_managed', 'f');
+  $type = $query->addField('f', 'type');
+  $query->addExpression('COUNT(*)');
+  $type_count = $query->condition('f.fid', $fids, 'IN')
+    ->groupBy($type)
+    ->execute()
+    ->fetchAllKeyed();
+  return $type_count;
+}
+
+/**
+ * Returns all file IDs attached to a media gallery node.
+ */
+function media_gallery_get_file_ids($node, $media_field = 'media_gallery_media') {
+  $fids = array();
+  $enhanced_node = new FieldsRSIPreventor($node);
+  foreach ($enhanced_node->getAllItems($media_field) as $item) {
+    $fids[] = _media_gallery_get_media_fid($item);
+  }
+  return drupal_map_assoc($fids);
+}
+
+/**
+ * Determines the file ID from a media file array or object.
+ *
+ * This is ugly, but necessary since a media field attached to a node may
+ * be represented either as an array or a full object, depending on whether the
+ * node has been processed for viewing yet or not.
+ *
+ * @param $file
+ *   Either a media file object or media file array.
+ *
+ * @return
+ *   The value of the 'fid' object property or array key.
+ */
+function _media_gallery_get_media_fid($file) {
+  return is_object($file) ? $file->fid : $file['fid'];
+}
+
+/**
+ * Removes a media item from a gallery.
+ *
+ * @param $node
+ *   The gallery node object.
+ * @param $file
+ *   The file to remove from the gallery.
+ *
+ * @return
+ *   The updated gallery node object.
+ */
+function media_gallery_remove_item_from_gallery($node, $file) {
+  $items = &$node->media_gallery_media[LANGUAGE_NONE];
+  foreach ($items as $key => $item) {
+    if ($file->fid == _media_gallery_get_media_fid($item)) {
+      unset($items[$key]);
+    }
+  }
+  node_save($node);
+  return $node;
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function media_gallery_entity_info_alter(&$entity_info) {
+  // Add view modes for displaying files in gallery contexts.
+  foreach (media_gallery_file_view_modes() as $view_mode => $label) {
+    $entity_info['file']['view modes'][$view_mode] = array('label' => $label, 'custom settings' => FALSE);
+  }
+
+  // Add a view mode for media_gallery_block_view() to use for displaying a
+  // media gallery node in a block. Drupal does not support restricting view
+  // modes to specific bundles.
+  $entity_info['node']['view modes']['media_gallery_block'] = array('label' => t('Media gallery block'), 'custom settings' => FALSE);
+}
+
+/**
+ * Implements hook_form().
+ */
+function media_gallery_form($node, $form_state) {
+  $form = node_content_form($node, $form_state);
+  return $form;
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function media_gallery_form_alter(&$form, &$form_state, $form_id) {
+  if (strpos($form_id, 'media_edit') === 0) {
+    // Act on both the regular and multiform versions of the edit form.
+    if ($form_id === 'media_edit' || preg_match('/^media_edit_[0-9]+$/', $form_id)) {
+      // Prepopulate the media_edit form with our best guess at the image title.
+      if (!empty($form['media_title']) && empty($form['media_title'][LANGUAGE_NONE][0]['value']['#default_value'])) {
+        $fid = $form['fid']['#value'];
+        $file = file_load($fid);
+        if ($file->type === 'image') {
+          $form['media_title'][LANGUAGE_NONE][0]['value']['#default_value'] = _media_gallery_get_media_title($file);
+        }
+      }
+      // Prepopulate the license field with the correct default.
+      if ($form['field_license'][LANGUAGE_NONE]['#default_value'] == '_none') {
+        $form['field_license'][LANGUAGE_NONE]['#default_value'] = 'none';
+      }
+      unset($form['field_license'][LANGUAGE_NONE]['#options']['_none']);
+    }
+    // Attach JavaScript and CSS needed to alter elements in the form.
+    _media_gallery_attach_edit_resources($form);
+  }
+}
+
+/*
+ * Implements hook_form_FORM_ID_alter().
+ */
+function media_gallery_form_media_gallery_node_form_alter(&$form, &$form_state) {
+  _media_gallery_attach_form_resources($form);
+
+  // The UI for the multi value media field and the node weight is elsewhere.
+  $form['media_gallery_media']['#access'] = FALSE;
+  $form['media_gallery_weight']['#access'] = FALSE;
+
+  // Hiding this field because we only support a single collection at the moment.
+  $form['media_gallery_collection']['#access'] = FALSE;
+
+  // Wrap a fieldset around the gallery settings.
+  $form['settings_wrapper'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Gallery settings'),
+    '#weight' => 10,
+  );
+
+  unset($form['media_gallery_lightbox_extras'][LANGUAGE_NONE]['#description']);
+  $form['media_gallery_lightbox_extras'][LANGUAGE_NONE]['#label'] = 'Show title and description';
+
+  // These are the items that need to be added to the fieldset. The array
+  // values represent a subgroup within the fieldset array that the items are
+  // further grouped by.
+  $fieldset = array(
+    'media_gallery_columns' => 'gallery',
+    'media_gallery_rows' => 'gallery',
+    'media_gallery_image_info_where' => 'gallery',
+    'media_gallery_allow_download' => 'presentation',
+    'media_gallery_format' => 'presentation',
+    'media_gallery_lightbox_extras' => 'presentation',
+  );
+
+  // Move the items to the fieldset.
+  foreach($fieldset as $id => $subgroup) {
+    $form['settings_wrapper'][$subgroup][$id] = $form[$id];
+    // locale_field_node_form_submit() looks for field language information in
+    // a hard-coded part of $form.
+    // @todo Other modules may as well, so would be best to move form elements
+    //   within #pre_render rather than in hook_form_alter().
+    $form[$id] = array('#language' => $form[$id]['#language']);
+  }
+
+  // Add a vertical tab menu for blocks
+  $form['block'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Blocks',
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+    '#group' => 'additional_settings',
+    '#attached' => array(),
+    '#weight' => -100,
+  );
+
+  $fieldset = array(
+    'media_gallery_expose_block' => 'block',
+    'media_gallery_block_columns' => 'block',
+    'media_gallery_block_rows' => 'block',
+  );
+
+  // Move the items to the fieldset.
+  foreach($fieldset as $id => $subgroup) {
+    $form[$subgroup][$id] = $form[$id];
+    // locale_field_node_form_submit() looks for field language information in
+    // a hard-coded part of $form.
+    // @todo Other modules may as well, so would be best to move form elements
+    //   within #pre_render rather than in hook_form_alter().
+    $form[$id] = array('#language' => $form[$id]['#language']);
+  }
+
+  // Add a class to the fieldset to target it in the js
+  $form['block']['#attributes']['class'] = array('block-form');
+
+  // Add classes where necessary for JS enhancement.
+  $form['settings_wrapper']['gallery']['media_gallery_image_info_where']['#attributes']['class'][] = 'form-inline label';
+  $form['settings_wrapper']['gallery']['media_gallery_image_info']['#attributes']['class'][] = 'form-inline';
+
+  // Use #prefix and #suffix to group the fields.
+  $form['settings_wrapper']['presentation']['media_gallery_format']['#attributes']['class'][] = 'media-gallery-show no-group-label';
+  $form['settings_wrapper']['gallery']['#prefix'] = '<div class="gallery-settings settings-group hidden clearfix"><div class="setting-icon"></div><div class="no-overflow">';
+  $form['settings_wrapper']['gallery']['#suffix'] = '</div></div>';
+
+  $form['settings_wrapper']['presentation']['#prefix'] = '<div class="presentation-settings settings-group hidden clearfix"><div class="group-label">' . t('Presentation settings') . '</div><div class="setting-icon"></div><div class="no-overflow">';
+  $form['settings_wrapper']['presentation']['#suffix'] = '</div></div>';
+
+  // Enhance the "number of rows" textfields by adding a dropdown element.
+  $form['settings_wrapper']['gallery']['media_gallery_rows']['#process'][] = 'media_gallery_process_dropdown';
+  $form['settings_wrapper']['gallery']['media_gallery_rows']['#media_gallery_dropdown_options'] = array('1', '3', '5', '10', 'other');
+  $form['block']['media_gallery_block_rows']['#process'][] = 'media_gallery_process_dropdown';
+  $form['block']['media_gallery_block_rows']['#media_gallery_dropdown_options'] = array('1', '2', '3', '4', 'other');
+
+  // Adjust the weight of the fields in the presentation wrapper
+  $form['settings_wrapper']['presentation']['media_gallery_allow_download']['#weight'] = 0;
+
+  // @todo At some point, it would be nice to have a functional preview display
+  //   of gallery nodes, but until happens, remove the Preview button.
+  $form['actions']['preview']['#access'] = FALSE;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function media_gallery_form_media_edit_alter(&$form, &$form_state) {
+  // Adjust the media edit form when it is shown within a gallery context.
+  if (isset($form_state['media_gallery']['gallery'])) {
+    // Remove the Delete button, since media entities can't be deleted when they
+    // are in use.
+    $form['actions']['delete']['#access'] = FALSE;
+
+    // Instead, provide a "Remove" checkbox to let users remove the item from
+    // the gallery.
+    _media_gallery_add_remove_checkbox($form, $form_state, $form_state['media_gallery']['gallery']);
+
+    // Add a submit handler to alter $form_state['redirect'] to the
+    // in-gallery-context View page. It's annoying to have to add a submit
+    // handler for this, but see http://drupal.org/node/579366#comment-2099836.
+    // Make sure to add this for the form-level submit handlers and also for the
+    // button-level submit handlers of the "Save" button, in case those are
+    // being used.
+    $form['#submit'][] = 'media_gallery_media_edit_submit';
+    if (isset($form['actions']['submit']['#submit'])) {
+      $form['actions']['submit']['#submit'][] = 'media_gallery_media_edit_submit';
+    }
+  }
+  // On the media gallery multiedit page, add a "Remove" checkbox to each item.
+  elseif (($node = menu_get_object()) && arg(2) === 'multiedit' && $node->type === 'media_gallery') {
+    _media_gallery_add_remove_checkbox($form, $form_state, $node);
+  }
+}
+
+/**
+ * Add a "remove" checkbox to the media edit form.
+ */
+function _media_gallery_add_remove_checkbox(&$form, &$form_state, $node) {
+  // Keep a reference to the gallery this media item belongs to, so we know
+  // what to remove it from.
+  $form['#gallery'] = $node;
+
+  // Put the remove checkbox inside the "preview" section, so it shows up
+  // underneath the thumbnail.
+  $form['preview']['remove'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Remove from gallery'),
+    '#description' => t('The original file remains in your <a href="@library">media library</a>.', array('@library' => url('admin/content/media'))),
+  );
+
+  // Add our own submit handler. We need to add it to both the form and the
+  // submit button to make sure it gets fired.
+  // Also note that this requires one call to node_save() per media item
+  // removed. A better approach, if it were possible, would be to add a submit
+  // handler to the entire multiform (see http://drupal.org/node/1033258).
+  $form['#submit'][] = 'media_gallery_multiedit_remove_item';
+  if (isset($form['actions']['submit']['#submit'])) {
+    $form['actions']['submit']['#submit'][] = 'media_gallery_multiedit_remove_item';
+  }
+}
+
+/**
+ * Form submit handler to remove a media item from a gallery.
+ */
+function media_gallery_multiedit_remove_item($form, &$form_state) {
+  if (isset($form['#gallery'])) {
+    $gallery = $form['#gallery'];
+    if (!empty($form_state['values']['remove'])) {
+      // Remove the item from the gallery.
+      $file = file_load($form_state['values']['fid']);
+      media_gallery_remove_item_from_gallery($gallery, $file);
+    }
+    // Redirect to the gallery page.
+    $uri = entity_uri('node', $gallery);
+    $form_state['redirect'] = $uri;
+  }
+}
+
+/**
+ * Form submit handler for media entity edit form in gallery context.
+ *
+ * @see media_gallery_form_media_edit_alter()
+ */
+function media_gallery_media_edit_submit($form, &$form_state) {
+  $form_state['redirect'] = 'media-gallery/detail/' .  $form_state['media_gallery']['gallery']->nid . '/' . $form_state['values']['fid'];
+}
+
+/**
+ * Implements hook_field_attach_form().
+ */
+function media_gallery_field_attach_form($entity_type, $entity, &$form, &$form_state, $langcode) {
+  // Remove the ability for a user to select a license for externally hosted
+  // media.
+  if ($entity_type == 'file') {
+    $scheme = file_uri_scheme($entity->uri);
+    // @todo Implement a more generic determination for when it makes sense for
+    //   a user to select a license and when it doesn't.
+    if ($scheme == 'youtube') {
+      $form['field_license']['#access'] = FALSE;
+    }
+  }
+}
+
+/**
+ * Helper function to attach JS/CSS for media galleries to a form element.
+ */
+function _media_gallery_attach_form_resources(&$element) {
+  $element['#attached']['js'][] = drupal_get_path('module', 'media_gallery') . '/media_gallery.form.js';
+  _media_gallery_attach_css_resources($element);
+}
+
+/**
+ * Helper function to attach CSS for media galleries to a render element.
+ */
+function _media_gallery_attach_css_resources(&$element) {
+  $path = drupal_get_path('module', 'media_gallery');
+  $element['#attached']['css'][] = $path . '/media_gallery.css';
+  $element['#attached']['css'][] = array(
+    'data' => $path . '/media_gallery.ie7.css',
+    'browsers' => array('IE' => 'lt IE 8', '!IE' => FALSE),
+  );
+}
+
+/**
+ * Helper function to attach JS for media galleries to 
+ */
+function _media_gallery_attach_edit_resources(&$element) {
+  $path = drupal_get_path('module', 'media_gallery');
+  $element['#attached']['js'][] = $path . '/js/media_gallery.edit.js';
+  $element['#attached']['css'][] = $path . '/css/media_gallery.edit.css';
+}
+
+/**
+ * Implements hook_node_view_alter().
+ */
+function media_gallery_node_view_alter(&$build) {
+  // This is for the Galleries plural page
+  if ($build['#bundle'] == 'media_gallery' && $build['#view_mode'] == 'teaser') {
+    // Hide node links.
+    $build['links']['#access'] = FALSE;
+    unset($build['#contextual_links']);
+    _media_gallery_attach_css_resources($build);
+  }
+  // This is for when a gallery is being shown in a block
+  elseif ($build['#view_mode'] == 'media_gallery_block') {
+    // Hide node links.
+    $build['links']['#access'] = FALSE;
+    _media_gallery_attach_css_resources($build);
+  }
+  // This is for when a gallery is being shown on its own, single gallery page.
+  elseif ($build['#bundle'] == 'media_gallery' && $build['#view_mode'] == 'full') {
+    if (!empty($build['media_gallery_media'])) {
+      foreach (element_children($build['media_gallery_media']) as $delta) {
+        // For each media item, add contextual links to the in-gallery-context
+        // tasks that can be performed on a media item.
+        $fid = $build['media_gallery_media'][$delta]['#file']->fid;
+        $build['media_gallery_media'][$delta]['#contextual_links']['media_gallery'] = array('media-gallery/detail', array($build['#node']->nid, $fid));
+      }
+    }
+    _media_gallery_attach_css_resources($build);
+  }
+}
+
+/**
+ * Implements MODULE_preprocess_node().
+ */
+function media_gallery_preprocess_node(&$variables) {
+  // Do not show the title when a node is being displayed in a media gallery
+  // block.
+  if ($variables['view_mode'] == 'media_gallery_block') {
+    $variables['title'] = '';
+  }
+
+  // Gallery teasers (for example, the ones that appear on the Galleries page)
+  // require special theming of their content. We set that up here instead of as
+  // part of hook_node_view_alter() or similar, because we want the node itself
+  // to have #theme='node' as normal, and only want to add special theming for
+  // the node content, but the content element isn't created until
+  // template_preprocess_node().
+  if ($variables['node']->type == 'media_gallery' && $variables['view_mode'] == 'teaser') {
+    $variables['content']['#theme'] = 'media_gallery_teaser';
+    $variables['content']['#node'] = $variables['node'];
+  }
+}
+
+/**
+ * Implements MODULE_preprocess_menu_local_task().
+ */
+function media_gallery_preprocess_menu_local_task(&$variables) {
+  // Persist the "page" URL query parameter from the "view" tab to the
+  // "multiedit" tab for gallery nodes. In the future, we may want to expand
+  // this to cover more than just the "multiedit" tab. Since this code runs for
+  // every local task of every page, we try to determine no-op conditions as
+  // quickly as possible.
+  if (isset($_GET['page']) && !isset($variables['element']['#link']['localized_options']['query']['page']) && strpos($variables['element']['#link']['href'], 'node/') == 0) {
+    $nid = arg(1, $variables['element']['#link']['href']);
+    if (is_numeric($nid) && arg(2, $variables['element']['#link']['href']) == 'multiedit') {
+      $node = node_load($nid);
+      if ($node->type == 'media_gallery') {
+        $page = pager_find_page(MEDIA_GALLERY_PAGER_ELEMENT);
+        if (is_int($page)) {
+          $variables['element']['#link']['localized_options']['query']['page'] = "$page";
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_contextual_links_view_alter().
+ */
+function media_gallery_contextual_links_view_alter(&$element, $items) {
+  // Modify the contextual links on gallery blocks; we only want to allow
+  // editing the gallery and configuring the block, and we want a more
+  // descriptive title for the edit link.
+  if (isset($element['#element']['#block']->module) && $element['#element']['#block']->module == 'media_gallery' && !empty($element['#links'])) {
+    $links = &$element['#links'];
+    foreach ($links as $key => &$link) {
+      if ($key != 'node-edit' && $key != 'block-configure') {
+        unset($links[$key]);
+      }
+      elseif ($key == 'node-edit') {
+        $link['title'] = t('Edit gallery');
+      }
+    }
+  }
+}
+
+/**
+ * Preprocess function for theme_field().
+ */
+function media_gallery_preprocess_field(&$variables, $hook) {
+  if ($variables['element']['#field_name'] === 'media_gallery_media') {
+    $columns = 1;
+    switch($variables['element']['#view_mode']) {
+      case 'media_gallery_block':
+        $columns = $variables['element']['#object']->media_gallery_block_columns['und'][0]['value'];
+        break;
+      case 'full':
+        $columns = $variables['element']['#object']->media_gallery_columns['und'][0]['value'];
+        break;
+    }
+    // Don't add the columning classes if the field is being displayed in a teaser
+    $variables['classes_array'][] = ($variables['element']['#view_mode'] != 'teaser') ? 'clearfix media-gallery-media mg-col mg-col-' . $columns : 'clearfix media-gallery-media';
+    foreach ($variables['items'] as $delta => $item) {
+      $variables['item_attributes_array'][$delta] = array('id' => 'media-gallery-media-' . $delta);
+
+    }
+  }
+}
+
+/**
+ * Media gallery equivalent to taxonomy_select_nodes().
+ */
+function media_gallery_select_galleries($tid, $pager = TRUE, $limit = FALSE) {
+  if (!variable_get('taxonomy_maintain_index_table', TRUE)) {
+    return array();
+  }
+  $query = db_select('taxonomy_index', 't');
+  $query->leftJoin('media_gallery_weight', 'mgw', 'mgw.nid = t.nid AND mgw.tid = :tid', array(':tid' => $tid));
+  $query->addTag('node_access');
+  $query->condition('t.tid', $tid);
+  if ($pager) {
+    $count_query = clone $query;
+    $count_query->addExpression('COUNT(t.nid)');
+
+    $query = $query->extend('PagerDefault');
+    if ($limit !== FALSE) {
+      $query = $query->limit($limit);
+    }
+    $query->setCountQuery($count_query);
+  }
+  else {
+    if ($limit !== FALSE) {
+      $query->range(0, $limit);
+    }
+  }
+  $query->addField('t', 'nid');
+  $query->addField('t', 'tid');
+  $query->addField('mgw', 'weight');
+  $query->orderBy('mgw.weight', 'ASC');
+  $query->orderBy('t.nid', 'ASC');
+  $result = $query->execute();
+  return $result->fetchCol();
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Used to modify the taxonomy term edit screen for gallery collection settings.
+ */
+function media_gallery_form_taxonomy_form_term_alter(&$form, &$form_state) {
+  // Don't do anything unless this is a gallery collection edit form.
+  if (isset($form_state['confirm_delete']) || !isset($form['#vocabulary']) || $form['#vocabulary']->vid != variable_get('media_gallery_collection_vid')) {
+    return;
+  }
+
+  $form['introduction'] = array(
+    '#weight' => -10,
+    '#markup' => check_plain(t('The following settings affect the "All galleries" page, which shows a thumbnail of every gallery created.')),
+  );
+  $form['#attributes']['class'][] = 'form-media-gallery-collection';
+  $form['name']['#title'] = t('Title');
+  $form['path']['alias']['#title'] = check_plain(t('"All galleries" URL'));
+  $form['path']['alias']['#weight'] =  -1;
+  $form['path']['alias']['#field_prefix'] = url(NULL, array('absolute' => TRUE)) . (variable_get('clean_url', 0) ? '' : '?q=');
+  unset($form['path']['alias']['#description']);
+  _media_gallery_attach_form_resources($form);
+
+  // These are the items that need to be added to the fieldset. The array
+  // values represent a subgroup within the fieldset array that the items are
+  // further grouped by.
+  $fieldset = array(
+    'media_gallery_columns' => 'gallery',
+    'media_gallery_rows' => 'gallery',
+    'media_gallery_image_info_where' => 'gallery',
+  );
+
+  // Move the items to the fieldset.
+  foreach($fieldset as $id => $subgroup) {
+    $form['settings_wrapper'][$subgroup][$id] = $form[$id];
+    unset($form[$id]);
+  }
+
+  $form['settings_wrapper']['gallery']['media_gallery_image_info_where']['#attributes']['class'][] = 'form-inline label';
+  // Use #prefix and #suffix to group the fields.
+  $form['settings_wrapper']['gallery']['#prefix'] = '<div class="galleries-settings settings-group hidden"><div class="group-label">' . check_plain(t('"All galleries" layout settings')) . '</div><div class="setting-icon"></div><div class="no-overflow">';
+  $form['settings_wrapper']['gallery']['#suffix'] = '</div></div>';
+
+  // Enhance the "number of rows" textfield by adding a dropdown element.
+  $form['settings_wrapper']['gallery']['media_gallery_rows']['#process'][] = 'media_gallery_process_dropdown';
+  $form['settings_wrapper']['gallery']['media_gallery_rows']['#media_gallery_dropdown_options'] = array('1', '3', '5', '10', 'other');
+
+  $form['relations']['#access'] = FALSE;
+  $form['actions']['delete']['#access'] = FALSE;
+  $form['field_license']['#access'] = FALSE;
+
+  // Add a submit handler to change the "Updated term" message on submit.
+  $form['#submit'][] = 'media_gallery_taxonomy_form_term_submit';
+}
+
+/**
+ * Submit handler for the taxonomy_form_term form.
+ */
+function media_gallery_taxonomy_form_term_submit($form, &$form_state) {
+  // Change the "Updated term Galleries" message into something that makes
+  // sense in this context.
+  $term_name = $form_state['values']['name'];
+  $messages = $_SESSION['messages']['status'];
+  $updated_message = t('Updated term %term.', array('%term' => $term_name));
+  foreach ($messages as $key => $message) {
+    if ($message === $updated_message) {
+      $_SESSION['messages']['status'][$key] = t('The gallery settings have been saved.');
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Used to hide the gallery_collections taxonomy admin screens.
+ */
+function media_gallery_form_taxonomy_overview_vocabularies_alter(&$form, &$form_state) {
+  $gallery_collection_vid = variable_get('media_gallery_collection_vid');
+  unset($form[$gallery_collection_vid]);
+}
+
+/**
+ * Implements hook_module_implements_alter().
+ */
+function media_gallery_module_implements_alter(&$implementations, $hook) {
+  switch ($hook) {
+    // TODO: All we really need to control here is
+    // form_taxonomy_form_term_alter; if D7 gets fixed to allow that level of
+    // control, this can be changed.
+    //case 'form_taxonomy_form_term_alter':
+    case 'form_alter':
+      if (!isset($implementations['media_gallery'])){
+        break;
+      }
+      $group = $implementations['media_gallery'];
+      unset($implementations['media_gallery']);
+      $implementations['media_gallery'] = $group;
+      break;
+    // We need to ensure that these hooks run before the corresponding Pathauto
+    // implementations. Given what they do, it's harmless to put them at the
+    // very front of the list, so we do that because it's easiest.
+    case 'taxonomy_term_insert':
+    case 'taxonomy_term_update':
+      if (isset($implementations['media_gallery'])) {
+        $implementations = array('media_gallery' => $implementations['media_gallery']) + $implementations;
+      }
+      break;
+  }
+}
+
+/**
+ * Gets the first term in the media_gallery_collection vocabulary
+ */
+function media_gallery_get_default_gallery_collection() {
+  $gallery_collection_vid = variable_get('media_gallery_collection_vid');
+  $tid = db_select('taxonomy_term_data', 'ttd')
+    ->fields('ttd', array('tid'))
+    ->condition('vid', $gallery_collection_vid)
+    ->range(0,1)
+    ->execute()
+    ->fetchField();
+
+  return taxonomy_term_load($tid);
+}
+
+/**
+ * Access callback for editing parts of a node that are only relevant for media
+ * galleries.
+ */
+function media_gallery_edit_access($node) {
+  if (!node_access('update', $node)) {
+    return FALSE;
+  }
+  if ($node->type == 'media_gallery') {
+    return TRUE;
+  }
+}
+
+/**
+ * Access callback for editing parts of a node that are only relevant for media
+ * galleries.
+ */
+function media_gallery_multiedit_access($node) {
+  if (media_gallery_edit_access($node)) {
+    $node = new FieldsRSIPreventor($node);
+    if (count($node->getAllItems('media_gallery_media')) > 0 ) {
+      return TRUE;
+    }
+  }
+}
+
+/**
+ * Access callback for removing a media item from a gallery.
+ *
+ * @param $node
+ *   The gallery node object.
+ * @param $file
+ *   The file to remove from the gallery.
+ *
+ * @return
+ *   TRUE if access is granted; FALSE otherwise.
+ */
+function media_gallery_remove_item_access($node, $file) {
+  // Only grant access if the user can edit the gallery and the provided media
+  // item is attached to the gallery.
+  return media_gallery_edit_access($node) && in_array($file->fid, media_gallery_get_file_ids($node));
+}
+
+/**
+ * Implements hook_image_default_styles().
+ */
+function media_gallery_image_default_styles() {
+  $styles = array();
+  $styles['media_gallery_thumbnail'] = array(
+    'effects' => array(
+      array(
+        // @todo We want to not upscale if the user uploads a smaller image, but
+        //   image_scale_and_crop doesn't support that option. Try to get
+        //   http://drupal.org/node/872206 into core, or solve it in contrib.
+        'name' => 'image_scale_and_crop',
+        'data' => array('width' => 450, 'height' => 450, 'upscale' => FALSE),
+        'weight' => 0,
+      ),
+    )
+  );
+  $styles['media_gallery_large'] = array(
+    'effects' => array(
+      array(
+        'name' => 'image_scale',
+        'data' => array('width' => 900, 'height' => 900, 'upscale' => FALSE),
+        'weight' => 0,
+      ),
+    )
+  );
+  return $styles;
+}
+
+/**
+ * Implements hook_styles_default_styles().
+ */
+function media_gallery_styles_default_styles() {
+  return array(
+    'file' => array(
+      'styles' => array(
+        'media_gallery_thumbnail' => array(
+          'label' => 'Media gallery thumbnail',
+          'description' => 'A square thumbnail for display within a Media Gallery.',
+        ),
+        'media_gallery_large' => array(
+          'label' => 'Media gallery large',
+          'description' => 'A large format for display within a Media Gallery.',
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_styles_default_presets_alter().
+ */
+function media_gallery_styles_default_presets_alter(&$styles) {
+  foreach (array_keys(media_gallery_image_default_styles()) as $image_style) {
+    foreach (array('image', 'media_youtube') as $container) {
+      $styles['file']['containers'][$container]['styles'][$image_style]['default preset'] = $image_style;
+      $styles['file']['containers'][$container]['presets'][$image_style] = array(
+        array(
+          // @todo Styles 2.0-alpha6 and later uses 'imageStyle', while earlier
+          //   versions use 'image_style'. Change to simply using 'imageStyle'
+          //   when it's okay to drop compatibility with the earlier versions.
+          'name' => (class_exists('FileStyles') && method_exists('FileStyles', 'imageStyle')) ? 'imageStyle' : 'image_style',
+          'settings' => array(
+            'image_style' => $image_style,
+          ),
+        ),
+        array(
+          'name' => 'thumbnail',
+          'settings' => array(),
+        ),
+      );
+    }
+  }
+
+  $styles['file']['containers']['media_youtube']['styles']['media_gallery_large']['default preset'] = 'video';
+}
+
+/**
+ * Implements hook_styles_presets().
+ *
+ * This function is for Styles 1.x only. For Styles 2.x,
+ * media_gallery_styles_default_presets_alter() is used instead.
+ */
+function media_gallery_styles_presets() {
+  $presets = array(
+    'file' => array(
+      'media_gallery_thumbnail' => array(
+        'media_youtube' => array(
+          'youtube_thumbnail_media_gallery_thumbnail',
+        ),
+      ),
+      'media_gallery_large' => array(
+        'media_youtube' => array(
+          'youtube_full',
+        ),
+      ),
+    ),
+  );
+  return $presets;
+}
+
+/**
+ * Implements hook_media_wysiwyg_allowed_view_modes_alter().
+ *
+ * Removes view modes intended for gallery context only from the formatting
+ * options of media added to wysiwyg.
+ */
+function media_gallery_media_wysiwyg_allowed_view_modes_alter(&$view_modes) {
+  $view_modes = array_diff_key($view_modes, media_gallery_file_view_modes());
+}
+
+/**
+ * Form #process function for attaching dropdown-related classes and settings.
+ */
+function media_gallery_process_dropdown($element, &$form_state) {
+  $element['#attributes']['class'][] = 'media-gallery-dropdown';
+  $element['#attached']['js'][] = array(
+    'type' => 'setting',
+    'data' => array(
+      'media_gallery_dropdown_options' => array(
+        $element['#id'] => $element['#media_gallery_dropdown_options'],
+      ),
+    ),
+  );
+
+  return $element;
+}
+
+/**
+ * Implements hook_taxonomy_term_insert().
+ */
+function media_gallery_taxonomy_term_insert($term) {
+  // Note that in hook_module_implements_alter() we guarantee that this code
+  // will always run before Pathauto's implementation.
+  _media_gallery_prevent_unwanted_pathauto_aliases($term);
+}
+
+/**
+ * Implements hook_taxonomy_term_update().
+ */
+function media_gallery_taxonomy_term_update($term) {
+  // Note that in hook_module_implements_alter() we guarantee that this code
+  // will always run before Pathauto's implementation.
+  _media_gallery_prevent_unwanted_pathauto_aliases($term);
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function media_gallery_entity_insert($entity, $type) {
+  // This hook is used because it always runs after Pathauto's
+  // hook_taxonomy_term_insert() implementation.
+  if ($type == 'taxonomy_term') {
+    _media_gallery_allow_all_pathauto_aliases();
+  }
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function media_gallery_entity_update($entity, $type) {
+  // This hook is used because it always runs after Pathauto's
+  // hook_taxonomy_term_update() implementation.
+  if ($type == 'taxonomy_term') {
+    _media_gallery_allow_all_pathauto_aliases();
+  }
+}
+
+/**
+ * Hack to prevent Pathauto from generating unwanted taxonomy aliases.
+ *
+ * This function can be called before allowing the Pathauto module to act on a
+ * saved term for the taxonomy vocabulary used for media galleries. It prevents
+ * Pathauto from generating an alias for the term based on the generic Pathauto
+ * taxonomy alias settings (i.e., an alias will only be generated if the site
+ * is specifically configured to have aliases generated for the vocabulary, not
+ * for taxonomy terms in general).
+ *
+ * The reason we want to do this is so that the URL alias people save on the
+ * media gallery settings page will actually work.
+ *
+ * If a $term object is not provided, then this function will always act; if
+ * one is provided, then it will only act if the term corresponds to the media
+ * gallery default collection.
+ *
+ * Call _media_gallery_allow_all_pathauto_aliases() after the term is saved to
+ * resume normal Pathauto behavior for the rest of the page request.
+ */
+function _media_gallery_prevent_unwanted_pathauto_aliases($term = NULL) {
+  if (!isset($term) || $term->tid == variable_get('media_gallery_default_collection_tid')) {
+    if (isset($GLOBALS['conf']['pathauto_taxonomy_pattern'])) {
+      $GLOBALS['conf']['media_gallery_original_pathauto_taxonomy_pattern'] = $GLOBALS['conf']['pathauto_taxonomy_pattern'];
+    }
+    $GLOBALS['conf']['pathauto_taxonomy_pattern'] = '';
+  }
+}
+
+/**
+ * Restores Pathauto behavior after we are done hacking with it.
+ *
+ * @see _media_gallery_prevent_unwanted_pathauto_aliases()
+ */
+function _media_gallery_allow_all_pathauto_aliases() {
+  if (isset($GLOBALS['conf']['media_gallery_original_pathauto_taxonomy_pattern'])) {
+    $GLOBALS['conf']['pathauto_taxonomy_pattern'] = $GLOBALS['conf']['media_gallery_original_pathauto_taxonomy_pattern'];
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ *
+ * Lets CTools know which plugin APIs are implemented by this module.
+ */
+function media_gallery_ctools_plugin_api($owner, $api) {
+  static $api_versions = array(
+    'file_entity' => array(
+      'file_default_displays' => 1,
+    ),
+  );
+  if (isset($api_versions[$owner][$api])) {
+    return array('version' => $api_versions[$owner][$api]);
+  }
+}
+
+/**
+ * Implements hook_file_default_displays().
+ *
+ * Provides default display configurations for files displayed in gallery view
+ * modes.
+ *
+ * @see file_entity_schema()
+ */
+function media_gallery_file_default_displays() {
+  $default_displays = array();
+
+  $default_image_styles = array(
+    'media_gallery_thumbnail' => 'media_gallery_thumbnail',
+    'media_gallery_lightbox' => 'media_gallery_large',
+    'media_gallery_detail' => 'media_gallery_large',
+    'media_gallery_block_thumbnail' => 'media_gallery_thumbnail',
+    'media_gallery_collection_thumbnail' => 'media_gallery_thumbnail',
+  );
+
+  // People updating from older versions of Media module will have Styles module
+  // formatters enabled at weight 0. By default, we want the following taking
+  // precedence, but we do not want to disable the Styles module ones since
+  // those might be capable of rendering files not covered by these. Therefore,
+  // set these at a lower weight.
+  $default_weight = -1;
+
+  foreach ($default_image_styles as $view_mode => $image_style) {
+    // Images.
+    $display_name = 'image__' . $view_mode . '__file_image';
+    $default_displays[$display_name] = (object) array(
+      'api_version' => 1,
+      'name' => $display_name,
+      'status' => 1,
+      'settings' => array('image_style' => $image_style),
+      'weight' => $default_weight,
+    );
+
+    // YouTube.
+    if (module_exists('media_youtube')) {
+      if (in_array($view_mode, array('media_gallery_lightbox', 'media_gallery_detail'))) {
+        // Video. Omit settings to use media_youtube_video defaults.
+        $display_name = 'video__' . $view_mode . '__media_youtube_video';
+        $default_displays[$display_name] = (object) array(
+          'api_version' => 1,
+          'name' => $display_name,
+          'status' => 1,
+          'weight' => $default_weight,
+        );
+      }
+      else {
+        // Thumbnail.
+        $display_name = 'video__' . $view_mode . '__media_youtube_image';
+        $default_displays[$display_name] = (object) array(
+          'api_version' => 1,
+          'name' => $display_name,
+          'status' => 1,
+          'settings' => array('image_style' => $image_style),
+          'weight' => $default_weight,
+        );
+      }
+    }
+  }
+
+  return $default_displays;
+}

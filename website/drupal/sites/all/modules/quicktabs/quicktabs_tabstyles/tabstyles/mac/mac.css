@@ -1,0 +1,50 @@
+
+.quicktabs_main.quicktabs-style-mac{
+  clear:both;
+}
+ul.quicktabs-tabs.quicktabs-style-mac{
+  margin:0 0 10px 0;
+  font-size:11px;
+  list-style: none;
+  padding:3px 0 23px 0;
+}
+ul.quicktabs-tabs.quicktabs-style-mac li{
+  float: left;
+  height:24px;
+  margin:0 5px;
+  padding: 0 0 0 15px;
+  background:transparent url(images/mac.png) no-repeat 0 0px;
+}
+ul.quicktabs-tabs.quicktabs-style-mac li a{
+  font:bold 12px/170% Verdana;
+  margin: 0;
+  display:block;
+  padding:0px 15px 5px 0px;
+  font-weight:bold;
+  text-decoration:none;
+  color: #fff;
+  background:transparent url(images/mac.png) no-repeat right -25px ;
+}
+ul.quicktabs-tabs.quicktabs-style-mac li:hover a{
+  background-position: right -75px ;
+}
+ul.quicktabs-tabs.quicktabs-style-mac li:hover{
+  background-position: 0 -50px;
+}
+ul.quicktabs-tabs.quicktabs-style-mac li.active a,
+ul.quicktabs-tabs.quicktabs-style-mac li.active a:hover{
+  background-position:right -125px;
+}
+ul.quicktabs-tabs.quicktabs-style-mac li.active{
+  background-position: 0 -100px;
+}
+
+/* IE6 Gif (no PNGs) */
+
+*html ul.quicktabs-tabs.quicktabs-style-mac li a{
+  color:#fff!important;
+  background:transparent url(images/mac.gif) no-repeat right -25px ;
+}
+*html ul.quicktabs-tabs.quicktabs-style-mac li{  /* image for IE6  */
+  background:transparent url(images/mac.gif) no-repeat 0 0px;
+}

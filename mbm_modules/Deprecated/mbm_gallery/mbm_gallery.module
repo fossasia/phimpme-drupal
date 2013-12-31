@@ -1,0 +1,1072 @@
+<?php
+/*
+ * Implements hook_init
+ * */
+function mbm_gallery_init(){
+	drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/font-page.css');
+	//add Jcarousel library
+	drupal_add_js(drupal_get_path('module','mbm_gallery').'/js/jquery.jcarousel.min.js');
+	//add Jcarousel skin stylesheet
+	drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/jsor-jcarousel/skins/tango/skin.css');
+
+	// Add Jquery Galleriffic
+	drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/galleriffic.css');
+	drupal_add_js(drupal_get_path('module','mbm_gallery').'/js/jquery.galleriffic.js');
+}
+
+/*
+ * Implements hook_menu
+ * */
+function mbm_gallery_menu() {
+	$menu['front-page'] = array(
+		'title'				=> 'front page',
+		'description'		=> 'front page',
+		'page callback'		=> 'display_front_page',
+		'access arguments'	=> array('access content')
+	);
+
+	$menu['cat/%'] = array(
+		'title'				=> '',
+		'description'		=> '',
+		'page callback'		=> 'display_images',
+		'page arguments'	=> array(1),
+		'access arguments'	=> array('access content')
+	);
+
+	$menu['list/%'] = array(
+		'title'				=> '',
+		'description'		=> '',
+		'page callback'		=> 'list_images',
+		'page arguments'	=> array(1),
+		'access arguments'	=> array('access content')
+	);
+
+	return $menu;
+}
+
+
+/*
+ * Implements hook_form_alter
+ * */
+function mbm_gallery_form_alter(&$form, $form_state, $form_id){
+	if (drupal_is_front_page()) {
+		$js = "
+		(function($){
+			$(document).ready(function(){
+
+			});
+		})(jQuery);";
+		drupal_add_js($js, "inline");
+	}
+}
+
+/*
+ * author: Nam Pham
+ * */
+function display_front_page() {
+	$js = "
+		function _show(id) {
+			document.getElementById(id+'-carousel_title').style.opacity = 1;
+		}
+
+		function _hide(id) {
+			document.getElementById(id+'-carousel_title').style.opacity = 0;
+		}
+	";
+	drupal_add_js($js, "inline");
+
+	$str = "<div id='box-profile'>
+				<div id='box-header' style='width:800px'>
+					<hgroup id='carousel-header'>
+						<div id='carousel-header-content' style='padding:20px'>
+							<div id='carousel-postcard'>
+								<a hrf='#'><img alt='Start your photo journal' src='".drupal_get_path('module','mbm_gallery').'/images/postcards.gif'."'></a>
+							</div>
+							<h2>Start your photo journal.</h2>
+							<h6>Keep all your moment in your personal photo journal, and selectively share them with friends,
+							family or the MBM Gallery community.</h6>
+							<div>
+								<a class='create-button shiny-button' href='?q=user/register'><span class='title'>Create my gallery</span></a>
+								<a class='create-button shiny-button muted' href='#'>
+									<img alt='Available on Android market' src='".drupal_get_path('module','mbm_gallery').'/images/android_button.png'."'>
+								</a>
+							</div>
+						</div>
+					</hgroup>
+				</div>
+				<div id='content-carousel' style='width:794px;height:1122px'>";
+	/*
+	 * tao so images se duoc hien thi
+	 * */
+	$img_num = rand(9,14);
+
+	//kiem tra co 9 hay 10 images se hien thi
+	if ($img_num == 9 || $img_num == 10)
+	{
+		$big_cell = rand(0, 1);
+		//kiem tra co big_cell hay k
+		if ($big_cell)
+		{
+			$str .= skeleton($img_num, $big_cell);
+		}
+		else
+		{
+			$str .= skeleton($img_num);
+		}
+	}
+	else
+	{
+		$str .= skeleton($img_num);
+	}
+
+	$str .= "</div></div>";
+	return $str;
+}
+
+/*
+ * author: Nam Pham (nampham@mbm.vn)
+ * desc  : tao khung de hien thi hinh anh
+ * imgs : so luong hinh anh
+ * */
+function skeleton($imgs, $big_cell=null){
+	$html_div = "";
+	$h_img = array();
+	$v_img = array();
+	$s_h_img = array();
+	$i = 0;
+	if ($big_cell) { //truong hop $big_cell = 1
+		if ($imgs == 9) {
+			//select random nid trong db
+			$query = "SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+			$rs_nids = db_query($query)->fetchAll();
+			foreach($rs_nids as $nid) {
+				$node = node_load($nid->nid);
+				$usr = user_load($node->uid);
+
+				//lay tam anh dau tien
+				$fid = $node->media_gallery_media['und'][0]['fid'];
+				$query = "SELECT * FROM file_managed WHERE fid=$fid";
+				$rs_thumb = db_query($query)->fetchAll();
+				$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+				if($img_size[0]>$img_size[1]){
+					if(count($h_img)<4){
+						array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+					}
+				}else{
+					if(count($v_img)<4){
+						array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+					}
+
+					if(count($v_img)<5){
+						if($img_size[1]>=559){
+							array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+						}
+					}
+				}
+				$i++;
+			}
+
+
+
+			for($i = 0;$i<count($v_img);$i++){
+				if($i==(count($v_img)-1)){
+					$tmp = explode("|",$v_img[$i]);
+					$html_div.="<div class='big-cell' id='big-cell' onmouseover='_show(\"big-cell\")' onmouseout='_hide(\"big-cell\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='big-cell-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}else{
+					$tmp = explode("|",$v_img[$i]);
+					$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+			}
+
+			for($i = 0;$i<count($h_img);$i++){
+				if($i==(count($h_img)-1)){
+					$tmp = explode("|",$h_img[$i]);
+					$html_div.="<div class='cell cell-9' id='cell-9' onmouseover='_show(\"cell-9\")' onmouseout='_hide(\"cell-9\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-9-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}else{
+					$tmp = explode("|",$h_img[$i]);
+					$html_div.="<div class='cell cell-".($i+5)."' id='cell-".($i+5)."' onmouseover='_show(\"cell-".($i+5)."\")' onmouseout='_hide(\"cell-".($i+5)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+5)."-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+			}
+			//css cho truong hop co 9 anh, trong do co 1 tam anh to
+			drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_9-style-1.css');
+		}else{ //if $imgs khong bang 9
+			//select random nid trong db
+			$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+			$rs_nids = db_query($query)->fetchAll();
+			foreach($rs_nids as $nid){
+				$node = node_load($nid->nid);
+				$usr = user_load($node->uid);
+				//lay tam anh dau tien
+				$fid=$node->media_gallery_media['und'][0]['fid'];
+				$query="SELECT * FROM file_managed WHERE fid=$fid";
+				$rs_thumb = db_query($query)->fetchAll();
+				$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+				if($img_size[0]>$img_size[1]){
+					if(count($h_img)<3){
+						array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+					}
+				}else{
+					if(count($v_img)<6){
+						array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+					}
+
+					if(count($v_img)<7){
+						if($img_size[1]>=559){
+							array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+						}
+					}
+				}
+				$i++;
+			}
+
+			for($i = 0;$i<count($v_img);$i++){
+				if($i==(count($v_img)-1)){
+					$tmp = explode("|",$v_img[$i]);
+					$html_div.="<div class='big-cell' id='big-cell' onmouseover='_show(\"big-cell\")' onmouseout='_hide(\"big-cell\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='big-cell-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}else{
+					$tmp = explode("|",$v_img[$i]);
+					$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+			}
+
+			for($i = 0;$i<count($h_img);$i++){
+				if($i==(count($h_img)-1)){
+					$tmp = explode("|",$h_img[$i]);
+					$html_div.="<div class='cell cell-10' id='cell-10' onmouseover='_show(\"cell-10\")' onmouseout='_hide(\"cell-10\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-10-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}else{
+					$tmp = explode("|",$h_img[$i]);
+					$html_div.="<div class='cell cell-".($i+7)."' id='cell-".($i+7)."' onmouseover='_show(\"cell-".($i+7)."\")' onmouseout='_hide(\"cell-".($i+7)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+7)."-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+			}
+			//css cho truong hop co 10 anh, trong do co 1 tam anh to
+			drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_10-style-a-'.rand(1,3).'.css');
+		}
+	}else{ //if $big_cell = 0
+		switch($imgs){
+			case 9:
+				//select random nid trong db
+				$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+				$rs_nids = db_query($query)->fetchAll();
+				foreach($rs_nids as $nid){
+					$node = node_load($nid->nid);
+					$usr = user_load($node->uid);
+
+					//lay tam anh dau tien
+					$fid=$node->media_gallery_media['und'][0]['fid'];
+					$query="SELECT * FROM file_managed WHERE fid=$fid";
+					$rs_thumb = db_query($query)->fetchAll();
+					$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+					if($img_size[0]>$img_size[1]){
+						if(count($h_img)<7){
+							array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+						}
+					}else{
+						if(count($v_img)<2){
+							array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+						}
+					}
+					$i++;
+				}
+
+				for($i = 0;$i<count($v_img);$i++){
+					$tmp = explode("|",$v_img[$i]);
+					$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+
+				for($i = 0;$i<count($h_img);$i++){
+					$tmp = explode("|",$h_img[$i]);
+					$html_div.="<div class='cell cell-".($i+3)."' id='cell-".($i+3)."' onmouseover='_show(\"cell-".($i+3)."\")' onmouseout='_hide(\"cell-".($i+3)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+3)."-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+
+				//css cho truong hop co 9 anh, trong do k co tam anh to
+				drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_9-style-2.css');
+			break;
+			case 10:
+				//select random nid trong db
+				$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+				$rs_nids = db_query($query)->fetchAll();
+				foreach($rs_nids as $nid){
+					$node = node_load($nid->nid);
+					$usr = user_load($node->uid);
+
+					//lay tam anh dau tien
+					$fid=$node->media_gallery_media['und'][0]['fid'];
+					$query="SELECT * FROM file_managed WHERE fid=$fid";
+					$rs_thumb = db_query($query)->fetchAll();
+					$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+					if($img_size[0]>$img_size[1]){
+						if(count($h_img)<6){
+							array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+						}
+					}else{
+						if(count($v_img)<4){
+							array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+						}
+					}
+					$i++;
+				}
+
+				for($i = 0;$i<count($v_img);$i++){
+					$tmp = explode("|",$v_img[$i]);
+					$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+
+				for($i = 0;$i<count($h_img);$i++){
+					$tmp = explode("|",$h_img[$i]);
+					$html_div.="<div class='cell cell-".($i+5)."' id='cell-".($i+5)."' onmouseover='_show(\"cell-".($i+5)."\")' onmouseout='_hide(\"cell-".($i+5)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+5)."-carousel_title'>
+											<span class='padder'>
+												Photo by
+												<span style='font-weight:bold'>".$usr->name."</span>
+											</span>
+										</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+
+				//css cho truong hop co 10 anh, trong do k co tam anh to
+				drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_10-style-b-'.rand(1,3).'.css');
+			break;
+			case 11:
+				$have_small_cell = rand(0,1);
+				if($have_small_cell){
+					//select random nid trong db
+					$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+					$rs_nids = db_query($query)->fetchAll();
+					foreach($rs_nids as $nid){
+						$node = node_load($nid->nid);
+						$usr = user_load($node->uid);
+
+						//lay tam anh dau tien
+						$fid=$node->media_gallery_media['und'][0]['fid'];
+						$query="SELECT * FROM file_managed WHERE fid=$fid";
+						$rs_thumb = db_query($query)->fetchAll();
+						$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+						if($img_size[0]>$img_size[1]){
+							if(count($h_img)<5){
+								array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}else{
+							if(count($v_img)<6){
+								array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}
+						$i++;
+					}
+
+					for($i = 0;$i<count($v_img);$i++){
+						$tmp = explode("|",$v_img[$i]);
+						$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($h_img);$i++){
+						$tmp = explode("|",$h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+7)."' id='cell-".($i+7)."' onmouseover='_show(\"cell-".($i+7)."\")' onmouseout='_hide(\"cell-".($i+7)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+7)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					//css cho truong hop co 11 anh, trong do k co tam anh to
+					drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_11-style-'.rand(9,11).'.css');
+				}else{
+					//select random nid trong db
+					$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+					$rs_nids = db_query($query)->fetchAll();
+					foreach($rs_nids as $nid){
+						$node = node_load($nid->nid);
+						$usr = user_load($node->uid);
+
+						//lay tam anh dau tien
+						$fid=$node->media_gallery_media['und'][0]['fid'];
+						$query="SELECT * FROM file_managed WHERE fid=$fid";
+						$rs_thumb = db_query($query)->fetchAll();
+						$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+						if($img_size[0]>$img_size[1]){
+							if(count($h_img)<6){
+								array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+
+							if(count($s_h_img)<3){
+								array_push($s_h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}else{
+							if(count($v_img)<2){
+								array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}
+						$i++;
+					}
+
+					for($i = 0;$i<count($v_img);$i++){
+						$tmp = explode("|",$v_img[$i]);
+						$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($s_h_img);$i++){
+						$tmp = explode("|",$s_h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+3)."' id='cell-".($i+3)."' onmouseover='_show(\"cell-".($i+3)."\")' onmouseout='_hide(\"cell-".($i+3)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+3)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($h_img);$i++){
+						$tmp = explode("|",$h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+6)."' id='cell-".($i+6)."' onmouseover='_show(\"cell-".($i+6)."\")' onmouseout='_hide(\"cell-".($i+6)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+6)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					//css cho truong hop co 11 anh, trong do k co tam anh to
+					drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_11-style-'.rand(1,8).'.css');
+				}
+			break;
+			case 12:
+				//$f_or_s = rand(5,6);
+				$f_or_s = 6;
+
+				if($f_or_s==5){
+					//select random nid trong db
+					$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+					$rs_nids = db_query($query)->fetchAll();
+					foreach($rs_nids as $nid){
+						$node = node_load($nid->nid);
+						$usr = user_load($node->uid);
+
+						//lay tam anh dau tien
+						$fid=$node->media_gallery_media['und'][0]['fid'];
+						$query="SELECT * FROM file_managed WHERE fid=$fid";
+						$rs_thumb = db_query($query)->fetchAll();
+						$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+						if($img_size[0]>$img_size[1]){
+							if(count($h_img)<5){
+								array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+
+							if(count($s_h_img)<2){
+								array_push($s_h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}else{
+							if(count($v_img)<5){
+								array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}
+						$i++;
+					}
+
+					for($i = 0;$i<count($v_img);$i++){
+						$tmp = explode("|",$v_img[$i]);
+						$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($h_img);$i++){
+						$tmp = explode("|",$h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+6)."' id='cell-".($i+6)."' onmouseover='_show(\"cell-".($i+6)."\")' onmouseout='_hide(\"cell-".($i+6)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+6)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($s_h_img);$i++){
+						$tmp = explode("|",$s_h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+11)."' id='cell-".($i+11)."' onmouseover='_show(\"cell-".($i+11)."\")' onmouseout='_hide(\"cell-".($i+11)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+11)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					//css cho truong hop co 10 anh, trong do k co tam anh to
+					drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_12-style-'.rand(1,4).'.css');
+				}else{
+					//select random nid trong db
+					$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+					$rs_nids = db_query($query)->fetchAll();
+					foreach($rs_nids as $nid){
+						$node = node_load($nid->nid);
+						$usr = user_load($node->uid);
+
+						//lay tam anh dau tien
+						$fid=$node->media_gallery_media['und'][0]['fid'];
+						$query="SELECT * FROM file_managed WHERE fid=$fid";
+						$rs_thumb = db_query($query)->fetchAll();
+						$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+						if($img_size[0]>$img_size[1]){
+							if(count($h_img)<6){
+								array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+
+							if(count($s_h_img)<4){
+								array_push($s_h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}else{
+							if(count($v_img)<2){
+								array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}
+						$i++;
+					}
+
+					for($i = 0;$i<count($v_img);$i++){
+						$tmp = explode("|",$v_img[$i]);
+						$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($h_img);$i++){
+						$tmp = explode("|",$h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+3)."' id='cell-".($i+3)."' onmouseover='_show(\"cell-".($i+3)."\")' onmouseout='_hide(\"cell-".($i+3)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+3)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($s_h_img);$i++){
+						$tmp = explode("|",$s_h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+9)."' id='cell-".($i+9)."' onmouseover='_show(\"cell-".($i+9)."\")' onmouseout='_hide(\"cell-".($i+9)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+9)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					//css cho truong hop co 10 anh, trong do k co tam anh to
+					drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_12-style-'.rand(5,9).'.css');
+
+				}
+			break;
+			case 13:
+				//$f_or_s = rand(5,6);
+				$f_or_s = 6;
+
+				if($f_or_s==5){
+					//select random nid trong db
+					$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+					$rs_nids = db_query($query)->fetchAll();
+					foreach($rs_nids as $nid){
+						$node = node_load($nid->nid);
+						$usr = user_load($node->uid);
+
+						//lay tam anh dau tien
+						$fid=$node->media_gallery_media['und'][0]['fid'];
+						$query="SELECT * FROM file_managed WHERE fid=$fid";
+						$rs_thumb = db_query($query)->fetchAll();
+						$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+						if($img_size[0]>$img_size[1]){
+							if(count($h_img)<5){
+								array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+
+							if(count($s_h_img)<4){
+								array_push($s_h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}else{
+							if(count($v_img)<4){
+								array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}
+						$i++;
+					}
+
+					for($i = 0;$i<count($v_img);$i++){
+						$tmp = explode("|",$v_img[$i]);
+						$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($h_img);$i++){
+						$tmp = explode("|",$h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+5)."' id='cell-".($i+5)."' onmouseover='_show(\"cell-".($i+5)."\")' onmouseout='_hide(\"cell-".($i+5)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+5)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($s_h_img);$i++){
+						$tmp = explode("|",$s_h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+10)."' id='cell-".($i+10)."' onmouseover='_show(\"cell-".($i+10)."\")' onmouseout='_hide(\"cell-".($i+10)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+10)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					//css cho truong hop co 10 anh, trong do k co tam anh to
+					drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_13-style-'.rand(1,2).'.css');
+				}else{
+					//select random nid trong db
+					$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+					$rs_nids = db_query($query)->fetchAll();
+					foreach($rs_nids as $nid){
+						$node = node_load($nid->nid);
+						$usr = user_load($node->uid);
+
+						//lay tam anh dau tien
+						$fid=$node->media_gallery_media['und'][0]['fid'];
+						$query="SELECT * FROM file_managed WHERE fid=$fid";
+						$rs_thumb = db_query($query)->fetchAll();
+						$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+						if($img_size[0]>$img_size[1]){
+							if(count($h_img)<6){
+								array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+
+							if(count($s_h_img)<1){
+								array_push($s_h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}else{
+							if(count($v_img)<6){
+								array_push($v_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+							}
+						}
+						$i++;
+					}
+
+					for($i = 0;$i<count($v_img);$i++){
+						$tmp = explode("|",$v_img[$i]);
+						$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($h_img);$i++){
+						$tmp = explode("|",$h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+7)."' id='cell-".($i+7)."' onmouseover='_show(\"cell-".($i+7)."\")' onmouseout='_hide(\"cell-".($i+7)."\")'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title' id='cell-".($i+7)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					for($i = 0;$i<count($s_h_img);$i++){
+						$tmp = explode("|",$s_h_img[$i]);
+						$html_div.="<div class='cell cell-".($i+13)."'>
+										<a href='?q=cat/".base64_encode($tmp[3])."'>
+											<div class='carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+											<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+										</a>
+									</div>";
+					}
+
+					//css cho truong hop co 10 anh, trong do k co tam anh to
+					drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_13-style-3.css');
+				}
+			break;
+			case 14:
+				//select random nid trong db
+				$query="SELECT nid FROM node WHERE node.type='media_gallery' ORDER BY RAND() LIMIT 15";
+				$rs_nids = db_query($query)->fetchAll();
+				foreach($rs_nids as $nid){
+					$node = node_load($nid->nid);
+					$usr = user_load($node->uid);
+
+					//lay tam anh dau tien
+					$fid=$node->media_gallery_media['und'][0]['fid'];
+					$query="SELECT * FROM file_managed WHERE fid=$fid";
+					$rs_thumb = db_query($query)->fetchAll();
+					$img_size = getimagesize(file_create_url($rs_thumb[0]->uri));
+
+					if($img_size[0]>$img_size[1]){
+						if(count($h_img)<6){
+							array_push($h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+						}
+
+						if(count($s_h_img)<8){
+							array_push($s_h_img,$rs_thumb[0]->uri.'|'.$img_size[0].'|'.$img_size[1].'|'.$node->nid);
+						}
+					}
+
+					$i++;
+				}
+
+				for($i = 0;$i<count($h_img);$i++){
+					$tmp = explode("|",$h_img[$i]);
+					$html_div.="<div class='cell cell-".($i+1)."' id='cell-".($i+1)."' onmouseover='_show(\"cell-".($i+1)."\")' onmouseout='_hide(\"cell-".($i+1)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+1)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+
+				for($i = 0;$i<count($s_h_img);$i++){
+					$tmp = explode("|",$s_h_img[$i]);
+					$html_div.="<div class='cell cell-".($i+7)."' id='cell-".($i+7)."' onmouseover='_show(\"cell-".($i+7)."\")' onmouseout='_hide(\"cell-".($i+7)."\")'>
+									<a href='?q=cat/".base64_encode($tmp[3])."'>
+										<div class='carousel_title' id='cell-".($i+7)."-carousel_title'>
+												<span class='padder'>
+													Photo by
+													<span style='font-weight:bold'>".$usr->name."</span>
+												</span>
+											</div>
+										<img src='".file_create_url($tmp[0])."' style='width:".$tmp[1]."px;height:".$tmp[2]."px;'>
+									</a>
+								</div>";
+				}
+
+				//css cho truong hop co 10 anh, trong do k co tam anh to
+				drupal_add_css(drupal_get_path('module','mbm_gallery').'/css/_14-style-1.css');
+			break;
+		}
+	}
+	return $html_div;
+}
+
+/*
+ * author: nampham (nampham@mbm.vn)
+ * */
+function display_images($nid) {
+	drupal_add_js(drupal_get_path('module','mbm_gallery').'/js/view_gallery.js');
+	$_nid = base64_decode($nid);
+	$node = node_load($_nid);
+	$fid = $node->media_gallery_media[LANGUAGE_NONE][0]['fid'];
+	$query = "SELECT uri FROM file_managed WHERE fid=$fid LIMIT 0, 1";
+	$rs = db_query($query)->fetchAssoc();
+	$furi = $rs['uri'];
+	$large = image_style_url('media_gallery_large', $furi);
+	$thumb = image_style_url('square_thumbnail', $furi);
+
+	$str = "<input type='hidden' id='node_id' value='$nid' />
+			<div id='gallery-content'>
+				<div id='mycarousel' class='jcarousel-skin-tango'>
+					<ul>
+
+					</ul>
+				</div>
+			</div>
+
+			<! -- Galeriffic -->
+			<div id='galleriffic_box' style='margin-left: auto; margin-right: auto'>
+			<div id='largeshow'>
+				<div id='controls' class='controls'></div>
+				<div class='slideshow-container'>
+					<div id='loading' class='loader'></div>
+					<div id='slideshow' class='slideshow'></div>
+				</div>
+
+				<div id='caption' class='caption-container'></div>
+			</div>
+			<div id='thumbs' class='navigation'>
+				<ul class='thumbs noscript'>
+				<li>
+					<a class='thumb' name='image' href='$large' title=''>
+						<img src='$thumb' alt='' width='75' height='75' />
+					</a>
+				</li>
+				</ul>
+			</div>
+			</div>";
+	return $str;
+}
+
+/*
+ * Author: nampham (nampham@mbm.vn)
+ * Update: Quan
+ * */
+function list_images($nid) {
+	//decode nid
+	$_nid = base64_decode($nid);
+	//load thong tin cua node
+	$node = node_load($_nid);
+	//lay fid cua img
+	$imgs = $node->media_gallery_media[LANGUAGE_NONE];
+	$lstyle = 'media_gallery_large';
+	$tstyle = 'square_thumbnail';
+
+
+	// Array indexes are 0-based, jCarousel positions are 1-based.
+	$first = max(0, intval($_GET['first']) - 1);
+	$last  = max($first + 1, intval($_GET['last']) - 1);
+
+	$length = $last - $first + 1;
+
+	// ---
+	$images = array();
+	$thumbs = array();
+	foreach ($imgs as $img) {
+		//select image tu DB
+		$query = "SELECT * FROM file_managed WHERE fid=".$img['fid'];
+		$rs_thumb = db_query($query)->fetchAll();
+		$uri = $rs_thumb[0]->uri;
+		//array_push($images, file_create_url($uri));
+		array_push($images, image_style_url($lstyle, $uri));
+		array_push($thumbs, image_style_url($tstyle, $uri));
+	}
+
+	$total    = count($images);
+	$selected = array_slice($images, $first, $length);
+
+	// ---
+
+	header('Content-Type: text/xml');
+
+	echo '<data>';
+
+	// Return total number of images so the callback
+	// can set the size of the carousel.
+	echo '  <total>' . $total . '</total>';
+
+	foreach (array_combine($images, $thumbs) as $large => $thumb) {
+		echo '  <image>' . $large . '</image>';
+		echo '  <thumbnail>' . $thumb . '</thumbnail>';
+	}
+
+	echo '</data>';
+}
+?>

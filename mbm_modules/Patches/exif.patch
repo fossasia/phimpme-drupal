@@ -1,0 +1,76 @@
+diff --git exif.class.php exif.class.php
+index 0221a4d..7d957be 100644
+--- exif.class.php
++++ exif.class.php
+@@ -157,9 +157,12 @@ Class Exif {
+     */
+    function _normalise_fraction($fraction) {
+      $parts = explode('/', $fraction);
+-     $top = $parts[0];
+-     $bottom = $parts[1];
+- 
++     $top = (float)$parts[0];
++     $bottom = (float)$parts[1];
++     if ($top == 0) {
++       return 0;
++     }
++
+      if ($top > $bottom) {
+        // Value > 1
+        if (($top % $bottom) == 0) {
+@@ -180,7 +183,7 @@ Class Exif {
+        }
+      }
+      return $value;
+-   }  
++   }
+ 
+   /**
+    * Helper function to change GPS co-ords into decimals.
+@@ -256,7 +259,7 @@ Class Exif {
+     $exif = exif_read_data($file, 0,$enable_sections);
+     $arSmallExif = array();
+     foreach ((array)$exif as $key1 => $value1) {
+-       
++
+       if (is_array($value1)) {
+         $value2 = array ();
+         foreach ((array)$value1 as $key3 => $value3) {
+@@ -807,7 +810,7 @@ Class Exif {
+       "2#135" => "language_identifier",
+       "2#131" => "image_orientation",
+       "2#130" => "image_type",
+-      "2#125" => "rasterized_caption",    
++      "2#125" => "rasterized_caption",
+       "2#122" => "writer",
+       "2#120" => "caption",
+       "2#118" => "contact",
+@@ -827,7 +830,7 @@ Class Exif {
+       "2#070" => "program_version",
+       "2#065" => "originating_program",
+       "2#063" => "digital_creation_time",
+-      "2#062" => "digital_creation_date",   
++      "2#062" => "digital_creation_date",
+       "2#060" => "creation_time",
+       "2#055" => "creation_date",
+       "2#050" => "reference_number",
+@@ -843,9 +846,9 @@ Class Exif {
+       "2#026" => "content_location_code",
+       "2#025" => "keywords",
+       "2#022" => "fixture_identifier",
+-      "2#020" => "supplemental_category", 
++      "2#020" => "supplemental_category",
+       "2#015" => "category",
+-      "2#010" => "subject_reference", 
++      "2#010" => "subject_reference",
+       "2#010" => "urgency",
+       "2#008" => "editorial_update",
+       "2#007" => "edit_status",
+@@ -853,7 +856,7 @@ Class Exif {
+       "2#004" => "object_attribute_reference",
+       "2#003" => "object_type_reference",
+       "2#000" => "record_version",
+-      "1#090" => "envelope_character_set"    
++      "1#090" => "envelope_character_set"
+       );
+   }

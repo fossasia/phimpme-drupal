@@ -1,0 +1,17 @@
+name = Views content panes
+description = Allows Views content to be used in Panels, Dashboard and other modules which use the CTools Content API.
+package = Views
+dependencies[] = ctools
+dependencies[] = views
+core = 7.x
+package = Chaos tool suite
+files[] = plugins/views/views_content_plugin_display_ctools_context.inc
+files[] = plugins/views/views_content_plugin_display_panel_pane.inc
+files[] = plugins/views/views_content_plugin_style_ctools_context.inc
+
+; Information added by drupal.org packaging script on 2012-03-28
+version = "7.x-1.0"
+core = "7.x"
+project = "ctools"
+datestamp = "1332962446"
+

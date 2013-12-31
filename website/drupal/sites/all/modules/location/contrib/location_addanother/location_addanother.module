@@ -1,0 +1,110 @@
+<?php
+
+/**
+ * @file
+ * "Add location from node view" functionality.
+ * Split from main location.module in version 3.
+ */
+
+/**
+ * Implements hook_node_view().
+ */
+function location_addanother_node_view($node, $view_mode) {
+  if (variable_get('location_addanother_' . $node->type, 0) && count($node->locations) < variable_get('location_maxnum_' . $node->type, 0) && $view_mode == 'full' && node_access('update', $node)) {
+    $addanother_form = drupal_get_form('location_addanother_form', $node);
+    $node->content['location_addanother'] = array(
+      '#type' => 'markup',
+      '#markup' => drupal_render($addanother_form),
+    );
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ * Alter the node_type_form form.
+ */
+function location_addanother_form_node_type_form_alter(&$form, &$form_state, $form_id) {
+  $type = $form['#node_type']->type;
+
+  $form['location_settings']['multiple']['location_addanother'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Add another location from node view page'),
+    '#default_value' => variable_get('location_addanother_' . $type, 0),
+    '#description' => t('Display the "Add another location" option on the node view page.'),
+  );
+}
+
+/**
+ * Form to display directly on a node view for "quick location add" functionality.
+ */
+function location_addanother_form($form, &$form_state, &$node) {
+  $settings = variable_get('location_settings_node_' . $node->type, array());
+
+  $form['location'] = array(
+    '#type' => 'location_element',
+    '#title' => t('Add another location'),
+    '#default_value' => NULL,
+    '#location_settings' => $settings['form']['fields'],
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+  $form['location']['nid'] = array(
+    '#type' => 'hidden', // @@@ See if we can get away with value-ing this.
+    '#value' => $node->nid,
+  );
+
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add location'),
+    '#weight' => 50,
+  );
+  return $form;
+}
+
+/**
+ * Validation function for "add another location" form.
+ */
+function location_addanother_form_validate($form, &$form_state) {
+  $location = $form_state['values']['location'];
+  $node = node_load($location['nid']);
+  unset($location['nid']);
+  if (!(variable_get('location_addanother_' . $node->type, 0) && count($node->locations) < variable_get('location_maxnum_' . $node->type, 0) && node_access('update', $node))) {
+    form_set_error('location', t("You don't have permission to add a location to this node, or the node has the maximum number of locations already."));
+  }
+}
+
+/**
+ * Submission function for "add another location" form.
+ */
+function location_addanother_form_submit($form, &$form_state) {
+  $location = $form_state['values']['location'];
+  $node = node_load($location['nid']);
+  $locations = $node->locations;
+  unset($location['nid']);
+  $locations[] = $location;
+
+  location_save_locations($locations, array('nid' => $node->nid, 'vid' => $node->vid));
+
+  return 'node/' . $node->nid;
+}
+
+/**
+ * Implements hook_node_type_delete().
+ * Synchronize our settings.
+ */
+function hook_node_type_delete($info) {
+  variable_del('location_addanother_' . $info->type);
+}
+
+/**
+ * Implements hook_node_type_update().
+ * Synchronize our settings.
+ */
+function hook_node_type_update($info) {
+  if (!empty($info->old_type) && $info->old_type != $info->type) {
+    $setting = variable_get('location_addanother_' . $info->old_type, 0);
+    variable_del('location_addanother_' . $info->old_type);
+    variable_set('location_addanother_' . $info->type, $setting);
+  }
+}

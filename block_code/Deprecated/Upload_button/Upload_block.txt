@@ -1,0 +1,98 @@
+$view = new view;
+$view->name = 'Upload';
+$view->description = '';
+$view->tag = 'default';
+$view->base_table = 'node';
+$view->human_name = 'Upload';
+$view->core = 7;
+$view->api_version = '3.0';
+$view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
+
+/* Display: Master */
+$handler = $view->new_display('default', 'Master', 'default');
+$handler->display->display_options['access']['type'] = 'perm';
+$handler->display->display_options['cache']['type'] = 'none';
+$handler->display->display_options['query']['type'] = 'views_query';
+$handler->display->display_options['query']['options']['query_comment'] = FALSE;
+$handler->display->display_options['exposed_form']['type'] = 'basic';
+$handler->display->display_options['pager']['type'] = 'some';
+$handler->display->display_options['pager']['options']['items_per_page'] = '1';
+$handler->display->display_options['pager']['options']['offset'] = '0';
+$handler->display->display_options['style_plugin'] = 'default';
+$handler->display->display_options['row_plugin'] = 'fields';
+/* Relationship: Content: Author */
+$handler->display->display_options['relationships']['uid']['id'] = 'uid';
+$handler->display->display_options['relationships']['uid']['table'] = 'node';
+$handler->display->display_options['relationships']['uid']['field'] = 'uid';
+$handler->display->display_options['relationships']['uid']['required'] = 0;
+/* Field: Node: Link */
+$handler->display->display_options['fields']['view_node']['id'] = 'view_node';
+$handler->display->display_options['fields']['view_node']['table'] = 'views_entity_node';
+$handler->display->display_options['fields']['view_node']['field'] = 'view_node';
+$handler->display->display_options['fields']['view_node']['label'] = '';
+$handler->display->display_options['fields']['view_node']['alter']['alter_text'] = 1;
+$handler->display->display_options['fields']['view_node']['alter']['text'] = '<a href=\'../media/browser?render=media-popup\' class=\'upload\'>Upload Photo</a>';
+$handler->display->display_options['fields']['view_node']['alter']['make_link'] = 0;
+$handler->display->display_options['fields']['view_node']['alter']['absolute'] = 0;
+$handler->display->display_options['fields']['view_node']['alter']['replace_spaces'] = 0;
+$handler->display->display_options['fields']['view_node']['alter']['trim_whitespace'] = 0;
+$handler->display->display_options['fields']['view_node']['alter']['nl2br'] = 0;
+$handler->display->display_options['fields']['view_node']['alter']['word_boundary'] = 1;
+$handler->display->display_options['fields']['view_node']['alter']['ellipsis'] = 1;
+$handler->display->display_options['fields']['view_node']['alter']['strip_tags'] = 0;
+$handler->display->display_options['fields']['view_node']['alter']['trim'] = 0;
+$handler->display->display_options['fields']['view_node']['alter']['html'] = 0;
+$handler->display->display_options['fields']['view_node']['element_label_colon'] = FALSE;
+$handler->display->display_options['fields']['view_node']['element_default_classes'] = 1;
+$handler->display->display_options['fields']['view_node']['hide_empty'] = 0;
+$handler->display->display_options['fields']['view_node']['empty_zero'] = 0;
+$handler->display->display_options['fields']['view_node']['hide_alter_empty'] = 1;
+$handler->display->display_options['fields']['view_node']['text'] = 'UPLOAD';
+/* Sort criterion: Content: Post date */
+$handler->display->display_options['sorts']['created']['id'] = 'created';
+$handler->display->display_options['sorts']['created']['table'] = 'node';
+$handler->display->display_options['sorts']['created']['field'] = 'created';
+$handler->display->display_options['sorts']['created']['order'] = 'DESC';
+/* Contextual filter: Content: Author uid */
+$handler->display->display_options['arguments']['uid']['id'] = 'uid';
+$handler->display->display_options['arguments']['uid']['table'] = 'node';
+$handler->display->display_options['arguments']['uid']['field'] = 'uid';
+$handler->display->display_options['arguments']['uid']['default_action'] = 'default';
+$handler->display->display_options['arguments']['uid']['default_argument_type'] = 'user';
+$handler->display->display_options['arguments']['uid']['default_argument_options']['user'] = FALSE;
+$handler->display->display_options['arguments']['uid']['default_argument_skip_url'] = 0;
+$handler->display->display_options['arguments']['uid']['summary']['number_of_records'] = '0';
+$handler->display->display_options['arguments']['uid']['summary']['format'] = 'default_summary';
+$handler->display->display_options['arguments']['uid']['summary_options']['items_per_page'] = '25';
+$handler->display->display_options['arguments']['uid']['specify_validation'] = 1;
+$handler->display->display_options['arguments']['uid']['validate']['type'] = 'user';
+$handler->display->display_options['arguments']['uid']['validate_options']['restrict_roles'] = 0;
+$handler->display->display_options['arguments']['uid']['break_phrase'] = 0;
+$handler->display->display_options['arguments']['uid']['not'] = 0;
+/* Contextual filter: User: Uid */
+$handler->display->display_options['arguments']['uid_1']['id'] = 'uid_1';
+$handler->display->display_options['arguments']['uid_1']['table'] = 'users';
+$handler->display->display_options['arguments']['uid_1']['field'] = 'uid';
+$handler->display->display_options['arguments']['uid_1']['relationship'] = 'uid';
+$handler->display->display_options['arguments']['uid_1']['default_action'] = 'default';
+$handler->display->display_options['arguments']['uid_1']['default_argument_type'] = 'current_user';
+$handler->display->display_options['arguments']['uid_1']['default_argument_skip_url'] = 0;
+$handler->display->display_options['arguments']['uid_1']['summary']['number_of_records'] = '0';
+$handler->display->display_options['arguments']['uid_1']['summary']['format'] = 'default_summary';
+$handler->display->display_options['arguments']['uid_1']['summary_options']['items_per_page'] = '25';
+$handler->display->display_options['arguments']['uid_1']['specify_validation'] = 1;
+$handler->display->display_options['arguments']['uid_1']['validate']['type'] = 'user';
+$handler->display->display_options['arguments']['uid_1']['validate_options']['restrict_roles'] = 0;
+$handler->display->display_options['arguments']['uid_1']['break_phrase'] = 0;
+$handler->display->display_options['arguments']['uid_1']['not'] = 0;
+/* Filter criterion: Content: Published */
+$handler->display->display_options['filters']['status']['id'] = 'status';
+$handler->display->display_options['filters']['status']['table'] = 'node';
+$handler->display->display_options['filters']['status']['field'] = 'status';
+$handler->display->display_options['filters']['status']['value'] = 1;
+$handler->display->display_options['filters']['status']['group'] = 1;
+$handler->display->display_options['filters']['status']['expose']['operator'] = FALSE;
+
+/* Display: Block */
+$handler = $view->new_display('block', 'Block', 'block');
+

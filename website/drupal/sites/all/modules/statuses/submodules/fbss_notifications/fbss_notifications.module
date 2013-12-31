@@ -1,0 +1,656 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Notifications with Statuses.
+ */
+
+// Max number of elements per page for user account tabs
+define('FBSS_NOTIFICATIONS_PAGER', 20);
+
+/**
+ * Implements hook_menu().
+ */
+function fbss_notifications_menu() {
+  $items = array();
+  $items['admin/messaging/notifications/status'] = array(
+    'title' => 'Status subscriptions',
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fbss_notifications_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'fbss_notifications.pages.inc',
+  );
+  $items['user/%user/notifications/status'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('maintain own subscriptions'),
+    'title' => 'Status threads',
+    'page callback' => 'fbss_notifications_page_thread',
+    'page arguments' => array(1),
+    'weight' => 10,
+    'file' => 'fbss_notifications.pages.inc',
+  );
+  foreach (statuses_all_contexts() as $type => $info) {
+    $items['user/%user/notifications/' . $type . '-stream'] = array(
+      'type' => MENU_LOCAL_TASK,
+      'access callback' => FALSE,
+      'title' => $info['title'] . ' statuses',
+      'page callback' => 'fbss_notifications_page_type',
+      'pàge arguments' => array(1),
+      'weight' => 30,
+      'file' => 'fbss_notifications.pages.inc',
+    );
+  }
+  $items['fbss_notifications/autocomplete'] = array(
+    'title' => 'Recipient autocomplete callback',
+    'type' => MENU_CALLBACK,
+    'page callback' => 'fbss_notifications_autocomplete_recipient',
+    'access arguments' => array('access user profiles'),
+    'file' => 'fbss_notifications.pages.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function fbss_notifications_permission() {
+  $perms = array(
+    'subscribe to a status stream' => array(
+      'title' => t('subscribe to a status stream'),
+      'description' => t('TODO Add a description for \'subscribe to a status stream\''),
+    ),
+  );
+  if (module_exists('fbss_comments')) {
+    $perms[] = 'subscribe to comments on a status';
+  }
+  return $perms;
+}
+
+/**
+ * Implements hook_statuses_delete().
+ */
+function fbss_notifications_statuses_delete($status) {
+  db_query("
+    DELETE {notifications}, {notifications_fields}
+    FROM {notifications} n
+    INNER JOIN {notifications_fields} f
+      ON n.sid = f.sid
+    WHERE
+      (n.event_type = 'status' AND f.intval = %d) OR
+      (n.event_type = 'stream' AND f.intval = %d)
+  ", $status->sid, $status->recipient);
+}
+
+/**
+ * Implements hook_statuses_save().
+ */
+function fbss_notifications_statuses_save($status, $context, $edit, $options) {
+  global $user;
+  foreach (array('status', 'stream') as $event_type) {
+    if (empty($options['has attachment'])) {
+      $self = ($status->type == 'user' && $status->sender == $status->recipient);
+      if ($edit) {
+        if ($self) {
+          $event = array(
+            'uid' => $status->sender,
+            'created' => $status->created,
+            'module' => 'fbss_notifications',
+            'oid' => $status->sid,
+            'type' => $event_type,
+            'action' => 'update-self',
+            'params' => array(
+              'sid' => $status->sid,
+              'recipient' => $status->recipient,
+              'type' => $status->type,
+            ),
+          );
+          notifications_event($event);
+        }
+        else {
+          $event = array(
+            'uid' => $status->sender,
+            'created' => $status->created,
+            'module' => 'fbss_notifications',
+            'oid' => $status->sid,
+            'type' => $event_type,
+            'action' => 'update-other',
+            'params' => array(
+              'sid' => $status->sid,
+              'recipient' => $status->recipient,
+              'type' => $status->type,
+            ),
+          );
+          notifications_event($event);
+        }
+      }
+      else {
+        if (module_exists('notifications_autosubscribe')) {
+          if (notifications_user_setting('auto', $user)) {
+            $has_subscription = notifications_user_get_subscriptions($user->uid, $event_type, 'sid', $status->sid);
+            if (!$has_subscription) {
+              $subscription = array(
+                'uid' => $user->uid,
+                'type' => 'status',
+                'event_type' => $event_type,
+                'fields' => array('sid' => $status->sid),
+              );
+              notifications_save_subscription($subscription);
+            }
+          }
+        }
+        if ($self) {
+          $event = array(
+            'uid' => $status->sender,
+            'created' => $status->created,
+            'module' => 'fbss_notifications',
+            'oid' => $status->sid,
+            'type' => $event_type,
+            'action' => 'create-self',
+            'params' => array(
+              'sid' => $status->sid,
+              'recipient' => $status->recipient,
+              'type' => $status->type,
+            ),
+          );
+          notifications_event($event);
+        }
+        else {
+          $event = array(
+            'uid' => $status->sender,
+            'created' => $status->created,
+            'module' => 'fbss_notifications',
+            'oid' => $status->sid,
+            'type' => $event_type,
+            'action' => 'create-other',
+            'params' => array(
+              'sid' => $status->sid,
+              'recipient' => $status->recipient,
+              'type' => $status->type,
+            ),
+          );
+          notifications_event($event);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_fbss_comments_after_save().
+ */
+function fbss_notifications_fbss_comments_after_save($comment, $edit) {
+  if (!$edit) {
+    $event = array(
+      'uid' => $comment->uid,
+      'created' => $comment->created,
+      'module' => 'fbss_notifications',
+      'oid' => $comment->sid,
+      'type' => 'status',
+      'action' => 'comment',
+      'params' => array('sid' => $comment->sid),
+    );
+    notifications_event($event);
+    if (module_exists('notifications_autosubscribe')) {
+      global $user;
+      if (notifications_user_setting('auto', $user)) {
+        $has_subscription = notifications_user_get_subscriptions($user->uid, 'status', 'sid', $comment->sid);
+        if (!$has_subscription) {
+          $subscription = array(
+            'uid' => $user->uid,
+            'type' => 'status',
+            'event_type' => 'status',
+            'fields' => array('sid' => $comment->sid),
+          );
+          notifications_save_subscription($subscription);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_notifications().
+ */
+function fbss_notifications_notifications($op, &$arg0 = NULL, $arg1 = NULL, $arg2 = NULL) {
+  switch ($op) {
+    case 'subscription types': // Kinds of subscriptions a user can add, e.g. "Subscribe to thread" and "Subscribe to stream"
+      $types = array();
+      if (module_exists('fbss_comments')) {
+        $types['status'] = array(// 'status' is $subscription->type
+          'event_type' => 'status', // 'status' is $subscription->event_type
+          'title' => t('Status thread'),
+          'access' => "subscribe to a user's status updates",
+          'page callback' => 'fbss_notifications_page_thread',
+          'user page' => 'user/%user/notifications/status',
+          'fields' => array('sid'),
+          'description' => t('Subscribe to comments on this status.'),
+          'disabled' => in_array('status', array_values(variable_get('fbss_notifications_type', array()))),
+        );
+      }
+      foreach (statuses_all_contexts() as $type => $info) {
+        $types[$type . '-stream'] = array(// $type-stream is $subscription->type
+          'event_type' => 'stream', // 'stream' is $subscription->event_type
+          'title' => t('!type status stream', array('!type' => $info['title'])),
+          'access' => "subscribe to an entity's status stream",
+          'page callback' => 'fbss_notifications_page_type',
+          'user page' => 'user/%user/notifications/' . $type . '-stream',
+          'fields' => array('recipient', 'fs_type'),
+          'description' => t('Subscribe to this stream of statuses.'),
+          'disabled' => in_array($type . '-stream', array_values(variable_get('fbss_notifications_type', array()))),
+        );
+      }
+      return $types;
+    case 'names': // Determine the administrative name of a subscription and store it in the subscription's "names" attribute
+      $subs = &$arg0;
+      if ($subs->event_type == 'status' || $subs->event_type == 'stream') {
+        $subs->type_name = t('Statuses');
+        if (!empty($subs->fields['recipient']) && (!empty($subs->fields['type']) || !empty($subs->fields['fs_type']))) {
+          $type = empty($subs->fields['fs_type']) ? $subs->fields['type'] : $subs->fields['fs_type'];
+          $context = statuses_determine_context($type);
+          $recipient = $context['handler']->load_recipient($subs->fields['recipient']);
+          $subs->names['recipient'] = t('Status stream: @name', array('@name' => $context['handler']->recipient_name($recipient)));
+        }
+        if (!empty($subs->fields['sid']) || !empty($subs->fields['fs_sid'])) {
+          $sid = empty($subs->fields['fs_sid']) ? $subs->fields['sid'] : $subs->fields['fs_sid'];
+          $status = statuses_load($sid);
+          $message = $status->message;
+          // 100 is an arbitrary length.
+          if (drupal_strlen($message) > 100) {
+            // "\xE2\x80\xA6" is the unicode escape sequence for the HTML entity &hellip; (an ellipsis)
+            $message = drupal_substr($message, 0, 99) . "\xE2\x80\xA6";
+          }
+          $subs->names['type'] = t('Status thread: @message', array('@message' => $message));
+        }
+      }
+      break;
+    case 'subscription fields': // Describe important properties of an object a subscription may be against.
+      // Used to get info about the fields used in queries, not to actually build queries.
+      // Also used to display options for adding an arbitrary subscription.
+      $fields = array();
+      $fields['sid'] = array(
+        'name' => t('Status ID'),
+        'field' => 'sid',
+        'type' => 'int',
+      );
+      module_load_include('inc', 'fbss_notifications', 'fbss_notifications.pages');
+      $fields['recipient'] = array(
+        'name' => t('Stream owner'), // Basically Recipient, but that doesn't make sense to the user in context
+        'field' => 'recipient',
+        'type' => 'int',
+        'autocomplete path' => 'fbss_notifications/autocomplete',
+        'autocomplete callback' => 'fbss_notifications_recipient_name_callback',
+        'format callback' => 'fbss_notifications_author_name',
+        'value callback' => 'fbss_notifications_author_uid',
+      );
+      $fields['fs_type'] = array(
+        'name' => t('Stream type'),
+        'field' => 'fs_type',
+        'type' => 'string',
+        'options callback' => 'fbss_notifications_types_callback',
+      );
+      return $fields;
+    case 'event load': // Load the objects relevant to an event and store them in the event object. Called before sending messages in order to evaluate tokens in the message templates, so objects' keys should correspond to token types.
+      $event = &$arg0;
+      if ($event->type == 'status' || $event->type == 'stream') { // $event->type is the same as $subscription->event_type
+        if (!empty($event->params['recipient']) && (!empty($event->params['type']) || !empty($event->params['fs_type']))) {
+          $type = empty($event->params['fs_type']) ? $event->params['type'] : $event->params['fs_type'];
+          $event->objects['context'] = statuses_determine_context($type);
+          if (!empty($event->objects['context'])) {
+            $event->objects['recipient'] = $event->objects['context']['handler']->load_recipient($subs->fields['recipient']);
+          }
+        }
+        if (!empty($event->params['sid'])) {
+          $event->objects['statuses'] = statuses_load($event->params['sid']);
+          if (empty($event->objects['statuses'])) {
+            $event->delete = TRUE;
+          }
+        }
+      }
+      break;
+    case 'event types': // Define the events that can trigger a status-related notification
+      $types = array();
+      foreach (array('status', 'stream') as $type) {
+        $types[] = array(
+          'type' => $type,
+          'action' => 'create-self',
+          'name' => t('@type: A user has saved a new status update', array('@type' => $type)),
+          'line' => t('[sender-name] [message-unformatted]'),
+          'digest' => array('statuses', 'recipient'),
+          'description' => t('Personal status creation'),
+        );
+        $types[] = array(
+          'type' => $type,
+          'action' => 'update-self',
+          'name' => t('@type: A user has edited their status', array('@type' => $type)),
+          'line' => t('[sender-name] [message-unformatted]'),
+          'digest' => array('statuses', 'recipient'),
+          'description' => t('Personal status update'),
+        );
+        $types[] = array(
+          'type' => $type,
+          'action' => 'create-other',
+          'name' => t('@type: A user has sent a new status message', array('@type' => $type)),
+          'line' => t("[sender-name] \xE2\x80\xA6 [recipient-name]: [message-unformatted]"),
+          'digest' => array('statuses', 'recipient'),
+          'description' => t('New status message sent'),
+        );
+        $types[] = array(
+          'type' => $type,
+          'action' => 'update-other',
+          'name' => t('@type: A user has edited their status', array('@type' => $type)),
+          'line' => t('[sender-name] [message-unformatted]'),
+          'digest' => array('statuses', 'recipient'),
+          'description' => t('Status message edited'),
+        );
+      }
+      $types[] = array(
+        'type' => 'status',
+        'action' => 'status comment',
+        'name' => t('@type: A user has commented on a status', array('@type' => $type)),
+        'line' => t('[commenter-name] wrote [message-unformatted] at [status-url]'),
+        'digest' => array('statuses', 'sid'),
+        'description' => t('Status comment'),
+      );
+      return $types;
+    case 'query': // Describe which field values identify an object so that Notifications can detect whether a subscription exists for it
+      $op = $arg0; // Either 'user' or 'event'
+      $event_type = $arg1;
+      $object = $arg2; // the event object if $op == 'event', or the status/node/comment object if $op == 'user'
+      if ($event_type == 'status' && (($op == 'event' && $status = statuses_load($object->params['sid'])) || ($op == 'user' && $status = $object))) { // status
+        $query = array();
+        $query[]['fields'] = array(
+          'sid' => $status->sid,
+        );
+        return $query;
+      }
+      elseif ($event_type == 'stream' && $op == 'event' && !empty($object->params['type']) && !empty($object->params['recipient'])) { // stream
+        $query = array();
+        $query[]['fields'] = array(
+          'recipient' => $object->params['recipient'],
+          'type' => $object->params['type'],
+          'fs_type' => $object->params['type'],
+        );
+        return $query;
+      }
+      // elseif ($event_type == 'stream' && $op == 'user' && $recipient = $object) {} // This case never happens.
+      break;
+    case 'user options': // Describe the links that should show up on the user for subscribing to their stream
+      // $arg0 == $account, $arg1 == $recipient
+      $options = array();
+      if (in_array('user', array_values(variable_get('fbss_notifications_link', array('user' => 'user', 'node' => 0, 'og' => 'og'))))) {
+        $options[] = array(
+          'name' => t('All status updates by @name', array('@name' => $arg1->name)),
+          'type' => 'user-stream',
+          'fields' => array(
+            'recipient' => $arg1->uid,
+            'type' => 'user',
+          ),
+        );
+      }
+      return $options;
+    case 'node options': // Describe the links that should show up on the node for subscribing to its stream
+      // $arg0 == $account, $arg1 == $node
+      $options = array();
+      if (in_array('node', array_values(variable_get('fbss_notifications_link', array('user' => 'user', 'node' => 0, 'og' => 'og'))))) {
+        $options[] = array(
+          'name' => t('All status updates on %name', array('@name' => $arg1->title)),
+          'type' => 'node-stream',
+          'fields' => array(
+            'recipient' => $arg1->nid,
+            'type' => 'node',
+          ),
+        );
+      }
+      elseif (module_exists('og') && in_array('og', array_values(variable_get('fbss_notifications_link', array('user' => 'user', 'node' => 0, 'og' => 'og'))))) {
+        if (db_query("SELECT nid FROM {og} WHERE nid = :nid", array(':nid' => $arg1->nid))->fetchField()) {
+          $options[] = array(
+            'name' => t('All status updates on %name', array('@name' => $arg1->title)),
+            'type' => 'node-stream',
+            'fields' => array(
+              'recipient' => $arg1->nid,
+              'type' => 'node',
+            ),
+          );
+        }
+      }
+      return $options;
+    case 'access':
+      $op = $arg0;
+      $account = &$arg1;
+      $object = &$arg2; // the event object if $op == 'event' and the subscription object if $op = 'subscription'
+      $access = TRUE;
+      // For events we check that node and comment are allowed
+      if ($op == 'event' && ($object->type == 'status' || $object->type == 'stream')) {
+        if (!empty($object->objects['recipient'])) { // stream
+          $access = statuses_user_access('view_stream', $recipient, $object->objects['context']['handler']->type(), $account);
+          $access = $access && user_access('subscribe to a status stream');
+        }
+        elseif (!empty($object->objects['status'])) { // status
+          $access = statuses_user_access('view', $object->objects['status'], $account);
+          $access = $access && user_access('subscribe to comments on a status');
+        }
+      }
+      elseif ($op == 'subscription') {
+        if (!empty($object->fields['recipient'])) { // stream
+          $type = empty($object->fields['fs_type']) ? $object->fields['type'] : $object->fields['fs_type'];
+          $context = statuses_determine_context($type);
+          $recipient = $context['handler']->load_recipient($object->fields['recipient']);
+          $access = statuses_user_access('view_stream', $recipient, $context['handler']->type(), $account);
+          $access = $access && user_access('subscribe to a status stream');
+        }
+        elseif (!empty($object->fields['sid'])) { // status
+          if ($status = statuses_load($object->fields['sid'])) {
+            $access = statuses_user_access('view', $status, $account);
+            $access = $access && user_access('subscribe to comments on a status');
+          }
+          else {
+            $access = FALSE;
+          }
+        }
+      }
+      // We return an array that will be merged with the ones from other modules
+      return array($access);
+    case 'event objects': // Not actually called anywhere and not documented, although implemented for nodes; purpose unknown
+      return array('status' => t('Status'));
+    case 'insert': // Allows reacting when a subscription is saved. $arg0 is the subscription object.
+    case 'update': // Allows reacting when a subscription is updated. $arg0 is the subscription object.
+    case 'event trigger': // Allows modifying the event object ($arg0) when an event occurs.
+    case 'event queued': // Allows reacting when an event has been added to the notifications queue. $arg0 is the event object.
+    case 'digest methods': // Describe new digest formats. Default ones include "short" and "long."
+    default:
+      break;
+  }
+}
+
+/**
+ * Implements hook_messaging().
+ */
+function fbss_notifications_messaging($op, $arg1 = NULL, $arg2 = NULL) {
+  switch ($op) {
+    case 'message groups':
+      /**
+       * The Messaging module will search for message templates in this order:
+       *
+       * 1. $module-$type-[$event->type]-[$event->action]
+       * 2. $module-$type-[$event->type]
+       * 3. $module-$type
+       *
+       * $type is either "event" or "digest." In our case, $event->type is
+       * either "status" or "stream." $event->action must be specified when
+       * notifications_event() is called and in our case is one of
+       * create-self, create-other, update-self, update-other, and comment.
+       *
+       * Due to what I consider a bug, $module is always "notifications."
+       */
+      $info = array();
+      $info['notifications-event-stream'] = array(
+        'module' => 'fbss_notifications',
+        'name' => t('Status update notifications'),
+        'description' => t('Updates related to statuses'),
+        'fallback' => 'notifications-event',
+      );
+      $info['notifications-event-stream-create-self'] = array(
+        'module' => 'fbss_notifications',
+        'name' => t("Notifications for saving individual users' status updates"),
+        'description' => t('Notifications produced when a user saves a new status.'),
+        'fallback' => 'notifications-event-stream',
+      );
+      $info['notifications-event-stream-create-other'] = array(
+        'module' => 'fbss_notifications',
+        'name' => t('Notifications for saving status messages'),
+        'description' => t('Notifications produced when a new status message is sent.'),
+        'fallback' => 'notifications-event-stream',
+      );
+      $info['notifications-event-stream-update-self'] = array(
+        'module' => 'fbss_notifications',
+        'name' => t("Notifications for editing individual users' status updates"),
+        'description' => t('Notifications produced when a user edits one of their status updates.'),
+        'fallback' => 'notifications-event-stream',
+      );
+      $info['notifications-event-stream-update-other'] = array(
+        'module' => 'fbss_notifications',
+        'name' => t('Notifications for editing status messages'),
+        'description' => t('Notifications produced when a status message is edited.'),
+        'fallback' => 'notifications-event-stream',
+      );
+      $info['notifications-event-status-comment'] = array(
+        'module' => 'fbss_notifications',
+        'name' => t('Notifications for comments on status messages'),
+        'description' => t('Notifications produced when a user comments on a status.'),
+        'fallback' => 'notifications-event-stream',
+      );
+      $info['notifications-digest-status'] = array(
+        'module' => 'fbss_notifications',
+        'name' => t('Group digests per status'),
+        'description' => t('Group of events digested for each status.'),
+        'fallback' => 'notifications-digest',
+      );
+      $info['notifications-digest-stream'] = array(
+        'module' => 'fbss_notifications',
+        'name' => t('Group digests per status stream'),
+        'description' => t('Group of events digested for each status stream.'),
+        'fallback' => 'notifications-digest',
+      );
+      return $info;
+    case 'message keys':
+      switch ($arg1) {
+        case 'notifications-event-stream':
+        case 'notifications-event-stream-create-self':
+        case 'notifications-event-stream-create-other':
+        case 'notifications-event-stream-update-self':
+        case 'notifications-event-stream-update-other':
+        case 'notifications-event-status-comment':
+          return array(
+            'subject' => t('Subject'),
+            'main' => t('Content'),
+            'digest' => t('Digest line'),
+          );
+        case 'notifications-digest-status':
+        case 'notifications-digest-stream':
+          return array(
+            'title' => t('Group title'),
+            'closing' => t('Group footer'),
+          );
+      }
+      break;
+
+    case 'messages':
+      switch ($arg1) {
+        case 'notifications-event-stream':
+          return array(
+            'subject' => t('A status to which you are subscribed has been updated'),
+            'main' => array(
+              t('A status to which you are subscribed has been updated:'),
+              '[status-themed]',
+              t('Read more and respond at [status-url]'),
+            ),
+            'digest' => array(
+              '[status-themed]',
+              t('Read more at [status-url]'),
+            ),
+          );
+        case 'notifications-event-stream-create-self':
+          return array(
+            'subject' => t('[sender-name-raw] has a new status: [message-raw]'),
+            'main' => array(
+              t('[sender-name-raw] has a new status update:'),
+              '[status-themed]',
+              t('Read more and respond at [status-url]'),
+            ),
+            'digest' => array(
+              '[status-themed]',
+              t('Read more at [status-url]'),
+            ),
+          );
+        case 'notifications-event-stream-create-other':
+          return array(
+            //"\xC2\xBB" is the unicode escape sequence for the HTML entity &raquo; (a double right angle bracket)
+            'subject' => t('[sender-name-raw] \xC2\xBB [recipient-name-raw]: [message-raw]'),
+            'main' => array(
+              t('[sender-name-raw] sent a new status message to [recipient-name-raw]:'),
+              '[status-themed]',
+              t('Read more and respond at [status-url]'),
+            ),
+            'digest' => array(
+              '[status-themed]',
+              t('Read more at [status-url]'),
+            ),
+          );
+        case 'notifications-event-stream-update-self':
+          return array(
+            'subject' => t('[sender-name-raw] edited their status: [message-raw]'),
+            'main' => array(
+              t('[sender-name-raw] edited their status:'),
+              '[status-themed]',
+              t('Read more and respond at [status-url]'),
+            ),
+            'digest' => array(
+              '[status-themed]',
+              t('Read more at [status-url]'),
+            ),
+          );
+        case 'notifications-event-stream-update-other':
+          return array(
+            'subject' => t('[sender-name-raw] edited a status message to [recipient-name-raw]'),
+            'main' => array(
+              t('[sender-name-raw] edited their status message to [recipient-name-raw]:'),
+              '[status-themed]',
+              t('Read more and respond at [status-url]'),
+            ),
+            'digest' => array(
+              '[status-themed]',
+              t('Read more at [status-url]'),
+            ),
+          );
+        case 'notifications-event-status-comment':
+          return array(
+            'subject' => t('[commenter-name] commented on a status message'),
+            'main' => array(
+              t('[commenter-name] commented on a status:'),
+              '[message-unformatted]',
+              t('Read more and respond at [status-url]'),
+            ),
+            'digest' => array(
+              '[status-themed]',
+              t('Read more at [status-url]'),
+            ),
+          );
+        case 'notifications-digest-status':
+          return array(
+            'title' => t('Updates for [sender-name-raw]'),
+            'closing' => t('Read more at [sender-themed]'),
+          );
+        case 'notifications-digest-stream':
+          return array(
+            'title' => t('Updates for [recipient-name-raw]'),
+            'closing' => t('Read more at [recipient-link]'),
+          );
+      }
+      break;
+    case 'tokens':
+      return array('statuses');
+    default:
+      break;
+  }
+}

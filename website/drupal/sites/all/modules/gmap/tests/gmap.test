@@ -1,0 +1,89 @@
+<?php
+
+/**
+ * @file
+ * Unit tests for gmap.module.
+ */
+
+class GMapSimpleAPITest extends DrupalUnitTestCase {
+  function getInfo() {
+    return array(
+      'name' => 'GMap API sanity checks',
+      'description' => 'Test the simple API functions in the public GMap API.',
+      'group' => 'GMap',
+    );
+  }
+
+  /**
+   * Verify gmap_todim().
+   */
+  function testGMapToDim() {
+    // Valid stuff
+    $this->assertEqual(gmap_todim('500PX'), '500px', t('Testing case normalization'));
+    $this->assertEqual(gmap_todim('   500    px   '), '500px', t('Testing spaces'));
+    $this->assertEqual(gmap_todim('1.5em'), '1.5em', t('Testing em'));
+    $this->assertEqual(gmap_todim('1.5ex'), '1.5ex', t('Testing ex'));
+    $this->assertEqual(gmap_todim('1.5in'), '1.5in', t('Testing in'));
+    $this->assertEqual(gmap_todim('1.5cm'), '1.5cm', t('Testing cm'));
+    $this->assertEqual(gmap_todim('1.5mm'), '1.5mm', t('Testing mm'));
+    $this->assertEqual(gmap_todim('1.5pt'), '1.5pt', t('Testing pt'));
+    $this->assertEqual(gmap_todim('1.5pc'), '1.5pc', t('Testing pc'));
+    $this->assertEqual(gmap_todim('150%'), '150%', t('Testing %'));
+
+    // Invalid stuff
+    $this->assertEqual(gmap_todim('500pxBLUE SMURFpx'), FALSE, t('Testing invalid data'));
+    $this->assertEqual(gmap_todim('500'), FALSE, t('Testing missing dimension type'));
+    $this->assertEqual(gmap_todim(500), FALSE, t('Testing raw number'));
+
+    // REALLY invalid stuff
+    $this->assertEqual(gmap_todim(NULL), FALSE, t('Testing invalid data (NULL)'));
+    $this->assertEqual(gmap_todim(array()), FALSE, t('Testing invalid data (Array)'));
+  }
+}
+
+class GMapMacroTest extends DrupalUnitTestCase {
+  function getInfo() {
+    return array(
+      'name' => 'GMap Macro checks',
+      'description' => 'Test the ability to parse macros into map arrays.',
+      'group' => 'GMap',
+    );
+  }
+
+  function testEmptyMacro() {
+    $macro = '';
+    $map = gmap_parse_macro($macro);
+    $this->assertEqual(preg_match('/^auto\d+map$/', $map['id']), 1, t('Testing ID injection'));
+    $this->assertEqual(count($map), 1, t('Testing contents of map array.'));
+
+    $macro = '[gmap]';
+    $map = gmap_parse_macro($macro);
+    $this->assertEqual(preg_match('/^auto\d+map$/', $map['id']), 1, t('Testing ID injection'));
+    $this->assertEqual(count($map), 1, t('Testing contents of map array.'));
+
+    $macro = '[gmap ]';
+    $map = gmap_parse_macro($macro);
+    $this->assertEqual(preg_match('/^auto\d+map$/', $map['id']), 1, t('Testing ID injection'));
+    $this->assertEqual(count($map), 1, t('Testing contents of map array.'));
+  }
+
+  function testMacroBehaviorFlags() {
+    $macro = '[gmap |behavior=+foobehavior +barbehavior -bazbehavior]';
+    $map = gmap_parse_macro($macro);
+    $b = $map['behavior'];
+    $this->assertEqual($b['foobehavior'], TRUE, t('Testing +behavior'));
+    $this->assertEqual($b['barbehavior'], TRUE, t('Testing another +behavior'));
+    $this->assertEqual($b['bazbehavior'], FALSE, t('Testing -behavior'));
+    // NOT passing through default flags was a bug.
+    //$this->assertEqual(count($b), 3, t('Testing for leaked default flags'));
+  }
+
+  function testMacroRenamedDirectives() {
+    $macro = '[gmap |type=Foo |control=Bar |behaviour=+baz |tcontrol=on]';
+    $map = gmap_parse_macro($macro);
+    $this->assertEqual($map['maptype'], 'Foo', t('Testing type -> maptype conversion'));
+    $this->assertEqual($map['controltype'], 'Bar', t('Testing control -> controltype conversion'));
+    $this->assertEqual($map['behavior']['baz'], TRUE, t('Testing behaviour -> behavior conversion'));
+    $this->assertEqual($map['mtc'], 'standard', t('Testing tcontrol -> mtc=standard'));
+  }
+}

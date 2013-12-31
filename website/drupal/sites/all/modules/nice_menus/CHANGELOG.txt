@@ -1,0 +1,34 @@
+
+=== DRUPAL 6.x-2.x ===
+6.x-2.1-RC1
+- BUG #834120: Fixed non-parent items displaying an arrow.
+- BUG #924324: Fixed PHP notices.
+- BUG #824916: Test depth before setting menuparent class.
+
+6.x-2.1-Beta3
+- TASK #323784: Move JS and CSS to theme function and remove hook_init().
+
+6.x-2.1-Beta2
+- BUG #800324: Take hidden menu items into account when applying first/last classes.
+- BUG #781856: Fixed Superfish animation speed.
+- FEATURE #762032: Changed ie-over class to generic over.
+- BUG #798500: jQuery JS compatibility.
+
+6.x-2.1-Beta1
+- BUG #730348: Fixed Superfish animation on first load.
+- BUG #363366: Moved menu-$mlid from a CSS ID to a class to prevent invalid HTML.
+
+6.x-2.1-Alpha2
+- FEATURE #301247: Add first, last, even, odd classes to menu items.
+- BUG #621544: Get global setting to play nice with admin menu.
+- BUG #507642: Moved CSS comment with HTML to the README so that it doesn't break CSS aggregation.
+- FEATURE #457692: Add hoverIntent plugin.
+
+6.x-2.1-Alpha1
+- FEATURE #300628: Add support for i18n module menu translations.
+- FEATURE #322962: Add configurable JS with Superfish.
+- FEATURE #135771: Choose starting and ending menu depth.
+- FEATURE #219804: Set active menu trail CSS selectors.
+- FEATURE #340105: Added theme function for secondary links menu.
+- TASK #340103: Renamed theme functions to module name.
+- FEATURE #181446: Added RTL language support.

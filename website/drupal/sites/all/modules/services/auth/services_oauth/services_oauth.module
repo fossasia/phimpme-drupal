@@ -1,0 +1,15 @@
+<?php
+
+/**
+ * Implementation of hook_services_authentication().
+ */
+function services_oauth_services_authentication_info() {
+  return array(
+    'file'             => 'services_oauth.inc',
+    'title'            => t('OAuth authentication'),
+    'description'      => t('An open protocol to allow secure API authorization'),
+    'security_settings' => '_services_oauth_security_settings',
+    'authenticate_call' => '_services_oauth_authenticate_call',
+    'controller_settings' => '_services_oauth_controller_settings',
+  );
+}

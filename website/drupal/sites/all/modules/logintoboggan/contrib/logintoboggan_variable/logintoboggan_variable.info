@@ -1,0 +1,13 @@
+name = "LoginToboggan Variable Integration"
+description = "Integrates LoginToboggan with Variable module"
+core = "7.x"
+
+dependencies[] = logintoboggan
+dependencies[] = variable
+
+; Information added by drupal.org packaging script on 2011-11-09
+version = "7.x-1.3"
+core = "7.x"
+project = "logintoboggan"
+datestamp = "1320873335"
+

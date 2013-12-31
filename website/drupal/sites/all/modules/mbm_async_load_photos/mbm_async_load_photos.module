@@ -1,0 +1,230 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function mbm_async_load_photos_menu() {
+  $items['async_load_photos/%'] = array(
+    'access callback' => 'user_access',
+    'access arguments' => array('access content'),
+    'page callback' => '_get_own_photos',
+    'page arguments' => array(1),
+  );
+  return $items;
+}
+
+/**
+ * Implement hook_theme_registry_alter()
+ * We want to add our preprocess function in order to insert our JavaScript
+ * to the view, without modifying Views Galleriffic source code.
+ **/
+function mbm_async_load_photos_theme_registry_alter(&$theme_registry) {
+  // We will insert our preprocess function
+  // Current preprocess functions
+  $currents = &$theme_registry['views_galleriffic_view']['preprocess functions'];
+  // Locate the views_galleriffic
+  $inspos = array_search('template_preprocess_views_galleriffic_view', $currents);
+  if ($inspos !== FALSE) {
+    // Insert our function next to it
+    array_splice($currents, $inspos + 1, 0, array('mbm_async_load_photos_preprocess_style_views'));
+  }
+  unset($currents);
+}
+
+/**
+ * Implement hook_views_plugins_alter().
+ * Add some functionalities to the Views Galleriffic handler.
+ * Seems to replace VG's one with our own. But actually, our handler will call VG's handler before
+ * doing our stuff.
+ **/
+function mbm_async_load_photos_views_plugins_alter(&$plugins) {
+  $plugins['style']['views_galleriffic']['handler'] = 'mbm_async_load_photos_style_views';
+}
+
+/**
+ * Implement hook_views_pre_view()
+ **/
+function mbm_async_load_photos_views_pre_view(&$view, &$display_id, &$args) {
+}
+
+/**
+ * Implement hook_views_pre_render()
+ **/
+function mbm_async_load_photos_views_pre_render(&$view) {
+  if ($view->plugin_name == 'views_galleriffic') {
+    // This code is just a note to remember how to determine the presence of
+    // views_galleriffic in Views.
+  }
+}
+
+/**
+ * Our preprocess function, to add our JS next to Views Galleriffic
+ **/
+function mbm_async_load_photos_preprocess_style_views(&$vars) {
+  $view = $vars['view'];
+  $page_options = $view->display_handler->default_display->options['pager']['options'];
+  // Determine which field is used for Galleriffic
+  $field_slide = $view->display_handler->default_display->options['row_options']['slide_field'];
+  $field_thumbnail = $view->display_handler->default_display->options['row_options']['thumbnail_field'];
+  // The image style of those fields
+  $style_slide = $view->result[0]->{'field_'.$field_slide};
+  $style_slide = $style_slide[0]['rendered']['file']['#style_name'];
+  $style_thumbnail = $view->result[0]->{'field_'.$field_thumbnail};
+  $style_thumbnail = $style_thumbnail[0]['rendered']['file']['#style_name'];
+
+  $uid = $view->args[0];
+  $setting = array(
+    'ajax_url' => base_path()."async_load_photos/$uid",
+    'page' => $view->query->pager->current_page,
+    'pagesize' => $page_options['items_per_page'],
+    'total' => $view->query->pager->total_items,
+    'offset' => $page_options['offset'],
+    'style_slide' => $style_slide,
+    'style_thumbnail' => $style_thumbnail
+  );
+  drupal_add_js(array('AsyncLoadPhotos' => $setting), 'setting');
+  $path = drupal_get_path('module', 'mbm_async_load_photos');
+  drupal_add_js($path.'/async_load_photos.js');
+  drupal_add_css($path.'/photo_map.css');
+}
+
+/**
+ * The page provide data as JSON
+ **/
+function _get_own_photos($uid, $page=0, $page_size=20, $asc=0) {
+  if (is_numeric($uid)) {
+    $id = $uid;
+  }
+  else {
+    drupal_json_output(NULL);
+    return;
+  }
+  if (isset($_GET['page']) && is_numeric($_GET['page'])) {
+    $page = $_GET['page'];
+  }
+  if (isset($_GET['pagesize']) && is_numeric($_GET['pagesize'])) {
+    $page_size = $_GET['pagesize'];
+  }
+  if (isset($_GET['asc']) && is_numeric($_GET['asc'])) {
+    $asc = $_GET['asc'];
+  }
+
+  if (isset($_GET['slide'])) {
+    $style_slide = $_GET['slide'];
+  }
+  else  {
+    $style_slide = '';
+  }
+  if (isset($_GET['thumbnail'])) {
+    $style_thumbnail = $_GET['thumbnail'];
+  }
+  else {
+    $style_thumbnail = '';
+  }
+
+  $file_select = db_select('file_managed', 'f');
+  $file_select->join('field_data_media_gallery_media', 'm', 'f.fid = m.media_gallery_media_fid');
+  $file_select->fields('f');
+  $file_select->addField('m', 'entity_id', 'nid');
+  // Get title
+  $file_select->leftJoin('field_data_media_title', 'tt', 'f.fid = tt.entity_id');
+  $file_select->addField('tt', 'media_title_value', 'title');
+  // Get description
+  $file_select->leftJoin('field_data_media_description', 'd', 'f.fid = d.entity_id');
+  $file_select->addField('d', 'media_description_value', 'description');
+  $file_select->addField('d', 'media_description_format', 'description_format');
+  // Get extra text field data
+  foreach(_get_exif_fields() as $name) {
+    $file_select->leftJoin("field_data_field_$name", "fd_$name", "f.fid = fd_$name.entity_id");
+    $file_select->addField("fd_$name", "field_{$name}_value", $name);
+  }
+
+  $file_select->condition('f.uid', $id, '=');
+  $file_select->condition('f.type', 'image', '=');
+  if ($asc == 1) {
+    $file_select->orderBy('f.fid', 'ASC');
+  }
+  else {
+    $file_select->orderBy('f.fid', 'DESC');
+  }
+  $file_select->range($page*$page_size, $page_size);
+  $results = $file_select->execute()->fetchAll();
+
+  /* Add more info for Gallery */
+  foreach($results as &$item) {
+    $item->url = file_create_url($item->uri);
+    $item->slide = image_style_url($style_slide, $item->uri);
+    $item->thumbnail = image_style_url($style_thumbnail, $item->uri);
+    // Format description
+    $item->description = _format_text($item->description);
+    unset($item->description_format);
+    // Get tag
+    $item->tags = _get_tags($item->fid);
+    // Create title if empty
+    _create_title($item);
+    // Link to edit photo
+    if (user_access('edit own media') || user_access('edit media')) {
+      $item->edit_link = base_path()."media-gallery/detail/{$item->nid}/{$item->fid}/edit";
+    }
+    // Exif data
+  }
+  unset($item);
+  drupal_json_output($results);
+}
+
+function _format_text($text, $format=NULL) {
+  // TODO: Format text subject to $format
+  return strip_tags($text);
+}
+
+function _get_exif_fields() {
+  $select = db_select('field_config_instance', 'i');
+  $select->join('field_config', 'c', 'i.field_id = c.id');
+  $select->addField('i', 'field_name', 'name');
+  $select->condition(db_or()
+                     ->condition('i.field_name', 'field\_exif\_%', 'LIKE')
+                     ->condition('i.field_name', 'field\_gps\_%', 'LIKE'));
+  $select->condition('i.bundle', 'image');
+  //$select->condition('c.module', 'text');
+  $select->condition('c.active', TRUE);
+  $ret = array();
+  foreach($select->execute() as $r) {
+    // Strip out 'field_' from the name
+    $ret[] = substr($r->name, strlen('field_'));
+  }
+  return $ret;
+}
+
+function _get_tags($fid) {
+  $select = db_select('field_data_field_tags', 't');
+  $select->join('taxonomy_term_data', 'tag', 't.field_tags_tid = tag.tid');
+  $select->condition('t.entity_id', $fid, '=');
+  $select->fields('tag', array('name', 'tid'));
+  $result = array();
+  foreach ($select->execute() as $row) {
+    $row->link = base_path()."photo-tag/".$row->tid;
+    $result[] = $row;
+  }
+  return $result;
+}
+
+/**
+ * Create title from filename, if title is null.
+ * Borrowed from Media Gallery module.
+ */
+function _create_title(&$item) {
+  if (empty($item->title) && !empty($item->filename)) {
+  // Base it on the file's filename, but with some adjustments for
+  // human-friendly display.
+    $replacements = array(
+      '/\..*/' => '',                     // Remove first "." and everything after.
+      '/[^a-zA-Z0-9]+/' => ' ',           // Replace non letters or numbers with a single space.
+      '/([a-z])([A-Z])/' => '\1 \2',      // Insert a space between a lowercase letter and an uppercase letter.
+      '/([a-zA-Z])([0-9])/' => '\1 \2',   // Insert a space between a letter and a number.
+      '/([0-9])([a-zA-Z])/' => '\1 \2',   // Insert a space between a number and a letter.
+    );
+    // In addition to above replacements, also capitalize the first letter of
+    // each word, and remove leading and trailing spaces.
+    $item->title = trim(ucwords(preg_replace(array_keys($replacements), array_values($replacements), $item->filename)));
+  }
+}

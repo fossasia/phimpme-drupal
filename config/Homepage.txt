@@ -1,0 +1,2 @@
+- Create a new content of "basic page" type, named "Home".
+- Go to Admin > Configuration > Site information, set default front page at "/home"

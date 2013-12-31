@@ -1,0 +1,13 @@
+diff --git a/additional_modules/views_galleriffic/views-galleriffic-view-gallerifficrows.tpl.php b/additional_modules/views_galleriffic/views-galleriffic-view-gallerifficrows.tpl.php
+index 47a56df..1513413 100644
+--- a/additional_modules/views_galleriffic/views-galleriffic-view-gallerifficrows.tpl.php
++++ b/additional_modules/views_galleriffic/views-galleriffic-view-gallerifficrows.tpl.php
+@@ -4,7 +4,7 @@
+  * template for views galleriffic row
+  */
+ ?>
+-<?php if ($fields['slide']->content): ?>
++<?php if (isset($fields['slide']) && $fields['slide']->content): ?>
+   <li>
+     <a class="thumb" href="<?php print $fields['slide']->content; ?>" title="<?php  if($fields['title']) { print $fields['title']->stripped;} ?>" name="<?php if($fields['title']) { print $fields['title']->stripped; }?>"><img src="<?php print $fields['thumbnail']->content; ?>" alt="<?php  if($fields['title']) { print $fields['title']->stripped; } ?>" /></a>
+     <div class="caption">

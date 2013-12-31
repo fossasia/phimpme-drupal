@@ -1,0 +1,16 @@
+-When enabled Media Gallery this module will create  Galleries link on main menu.(This link storge all galleries of users)
+-To using REST Server we must download file spyc.php from http://spyc.googlecode.com/svn/trunk/spyc.php and replace to /sites/all/modules/services/servers/rest_server/lib
+-Create first API at address admin/structure/services
+ +Name:api
+ + Server:REST
+ +Path:api(this is path using access to api:http://phimp.me/api)
+ -Modify API resources at admin/structure/services/list/api/resources
+     *Resources in api
+    +contentadmin/config/services/gmap
+    +comment
+    +file
+    +node
+    +system
+    +taxonomy_term
+    +taxonomy_vocabulary
+    +user

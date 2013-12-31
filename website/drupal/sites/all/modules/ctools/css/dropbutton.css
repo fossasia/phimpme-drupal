@@ -1,0 +1,67 @@
+/* $Id$ */
+
+.ctools-dropbutton-processed {
+  padding-right: 18px;
+  position: relative;
+  background-color: inherit;
+}
+
+.ctools-dropbutton-processed.open {
+  z-index: 200;
+}
+
+.ctools-dropbutton-processed .ctools-content li,
+.ctools-dropbutton-processed .ctools-content a {
+  display: block;
+}
+
+.ctools-dropbutton-processed .ctools-link {
+  bottom: 0;
+  display: block;
+  height: auto;
+  position: absolute;
+  right: 0;
+  text-indent: -9999px; /* LTR */
+  top: 0;
+  width: 17px;
+}
+
+.ctools-dropbutton-processed .ctools-link a {
+  overflow: hidden;
+}
+
+.ctools-dropbutton-processed .ctools-content ul {
+  margin: 0;
+  overflow: hidden;
+}
+
+.ctools-dropbutton-processed.open li + li {
+  padding-top: 4px;
+}
+
+/**
+ * This creates the dropbutton arrow and inherits the link color
+ */
+.ctools-twisty {
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-style: solid;
+  border-width: 4px 4px 0;
+  line-height: 0;
+  right: 6px;
+  position: absolute;
+  top: 0.75em;
+}
+
+.ctools-dropbutton-processed.open .ctools-twisty {
+  border-bottom: 4px solid;
+  border-left-color: transparent;
+  border-right-color: transparent;
+  border-top-color: transparent;
+  top: 0.5em;
+}
+
+.ctools-no-js .ctools-twisty {
+  display: none;
+}

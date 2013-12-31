@@ -1,0 +1,123 @@
+<?php
+
+/**
+ * @file
+ * Install file for menu_token module.
+ */
+
+/**
+ * Implements hook_update_N().
+ */
+function menu_token_update_7000(&$sandbox) {
+  $schema['menu_token'] = array(
+    'description' => t('Menu token properties'),
+    'fields' => array (
+      'mlid' => array (
+        'description' => t('The menu link {menu_links}.mlid'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'link_path' => array (
+        'description' => t('The actual path with tokens'),
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+
+    'primary key' => array('mlid'),
+  );
+
+  // Create schema.
+  db_create_table('menu_token', $schema['menu_token']);
+}
+
+/**
+ * Implements hook_update_N().
+ */
+function menu_token_update_7001(&$sandbox) {
+
+  // Initializing sandbox variables.
+  if (!isset($sandbox['progress'])) {
+    // Preparing array of menu items for batch insert.
+    foreach (variable_get('menu_token_enabled', array()) as $mlid => $link_path) {
+      $sandbox['items'][] = array('mlid' => $mlid, 'link_path' => $link_path);
+    }
+    $sandbox['progress'] = 0;
+    $sandbox['max'] = count($sandbox['items']);
+  }
+
+  // Insert current record.
+  if (!empty($sandbox['max'])) {
+    db_merge('menu_token')
+      ->key(array('mlid' => $sandbox['items'][$sandbox['progress']]['mlid']))
+      ->fields(array('link_path' => $sandbox['items'][$sandbox['progress']]['link_path']))
+      ->execute();
+  }
+
+  $sandbox['progress']++;
+
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+
+  // Delete variable in case of all queries were executed
+  if ($sandbox['#finished']) {
+    variable_del('menu_token_enabled');
+  }
+}
+
+/**
+ * Implements hook_update_N().
+ */
+function menu_token_update_7002(&$sandbox) {
+  if (!isset($sandbox['progress'])) {
+    $sandbox['progress'] = 0;
+    if (db_table_exists('menu_token')) {
+      $sandbox['max'] = db_select('menu_token', 'mt')->countQuery()->execute()->fetchField();
+    }
+  }
+
+  if (!empty($sandbox['max'])) {
+    $tokens = db_select('menu_token', 'mt')
+      ->fields('mt', array('mlid', 'link_path'))
+      ->orderBy('mlid')
+      ->range($sandbox['progress'], 10)
+      ->execute()
+      ->fetchAllKeyed();
+
+    if (!empty($tokens)) {
+      $links = db_select('menu_links', 'ml')
+        ->fields('ml', array('mlid', 'options'))
+        ->condition('mlid', array_keys($tokens))
+        ->execute()
+        ->fetchAllKeyed();
+
+      foreach ($links as $mlid => $options) {
+        $options = unserialize($options);
+        $options['menu_token_link_path'] = $tokens[$mlid];
+        $options['menu_token_link_data'] = array();
+
+        db_update('menu_links')
+          ->fields(array('options' => serialize($options)))
+          ->condition('mlid', $mlid)
+          ->execute();
+      }
+    }
+
+    $sandbox['progress'] += 10;
+  }
+
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : $sandbox['progress'] / $sandbox['max'];
+
+  if ($sandbox['#finished'] >= 1) {
+    $sandbox['#finished'] = 1;
+
+    // Drop the deprecated menu_token table if it exists.
+    if (db_table_exists('menu_token')) {
+      db_drop_table('menu_token');
+    }
+
+    return t('The Menu Token module has been updated successfully.');
+  }
+}

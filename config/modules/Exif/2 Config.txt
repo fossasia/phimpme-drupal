@@ -1,0 +1,8 @@
+Go to admin/structure/taxonomy
+Add new vocabulary, name Photographies'metadata
+
+Go to admin/config/media/exif/settings
+Nodetype: Gallery
+Mediatype: Image
+
+Now you can configure Views block to show Exif-related fields.

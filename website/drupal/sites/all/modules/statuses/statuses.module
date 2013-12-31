@@ -1,0 +1,1470 @@
+<?php
+
+/**
+ * @file
+ *   Creates context-sensitive social streams.
+ */
+
+/**
+ * The number of seconds within which a user can override a previously
+ * submitted status update.
+ */
+define('STATUSES_OVERRIDE_TIMER', 10);
+
+//===============
+// DRUPAL HOOKS.
+//===============
+
+/**
+ * Implements hook_help().
+ */
+function statuses_help($path, $arg) {
+  if ($path == 'admin/help#statuses') {
+    return t('Creates social streams of "status updates" for users or other entities.') . ' ' .
+      t('Please see the <a href="@project">Project page</a> or <a href="@docs">documentation</a> for more information.',
+        array(
+          '@project' => 'http://drupal.org/project/statuses',
+          '@docs' => 'http://drupal.org/node/421128',
+        )
+      );
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function statuses_menu() {
+  $items = array();
+  $items['admin/config/statuses'] = array(
+    'title' => 'Statuses',
+    'description' => 'Settings for statuses.',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('access administration pages'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+  );
+  $items['admin/config/statuses/settings'] = array(
+    'title' => 'Statuses',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('statuses_admin'),
+    'access arguments' => array('administer Statuses settings'),
+    'description' => 'Allows administrators to adjust settings for Statuses.',
+    'file' => 'includes/utility/statuses.admin.inc',
+  );
+  $items['admin/config/statuses/settings/basic'] = array(
+    'title' => 'Basic',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'access arguments' => array('administer Statuses settings'),
+    'weight' => -1,
+  );
+  $items['admin/config/statuses/settings/advanced'] = array(
+    'title' => 'Advanced',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('statuses_admin_advanced'),
+    'access arguments' => array('administer Statuses settings'),
+    'description' => 'Allows administrators to adjust advanced settings for Statuses.',
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'includes/utility/statuses.admin.inc',
+  );
+  $items['admin/config/statuses/contexts'] = array(
+    'title' => 'Contexts',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('statuses_admin_contexts'),
+    'access arguments' => array('administer Statuses settings'),
+    'description' => 'Allows administrators to adjust context stream settings for Statuses.',
+    'file' => 'includes/utility/statuses.admin.inc',
+  );
+  $items['admin/config/statuses/contexts/%statuses_context'] = array(
+    'title' => 'Context settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('statuses_admin_context_settings', 4),
+    'access arguments' => array('administer Statuses settings'),
+    'description' => 'Allows administrators to adjust context stream settings for Statuses.',
+    'file' => 'includes/utility/statuses.admin.inc',
+  );
+  $items['statuses/announce'] = array(
+    'title' => 'Make an announcement',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('statuses_announce_admin'),
+    'access arguments' => array('send messages to all users at once'),
+    'description' => 'Allows administrators to send status updates to all users at once.',
+    'file' => 'includes/utility/statuses.announce.inc',
+  );
+  $items['statuses/share'] = array(
+    'title' => 'Share status',
+    'page callback' => 'statuses_share_page',
+    'access callback' => 'statuses_user_access',
+    'access arguments' => array('add'),
+    'description' => 'Allows users to share statuses.',
+    'type' => MENU_SUGGESTED_ITEM,
+  );
+  $items['statuses/conversation'] = array(
+    'title' => 'Conversation',
+    'page callback' => '_statuses_conversation',
+    'access callback' => 'statuses_user_access',
+    'access arguments' => array('converse'),
+    'description' => 'Shows a conversation between users, with a form to contribute to it if applicable.',
+    'type' => MENU_CALLBACK,
+    'file' => 'includes/utility/statuses.conversation.inc',
+  );
+  $items['statuses/%statuses/edit'] = array(
+    'title' => 'Edit status',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('statuses_edit', 1),
+    'access callback' => 'statuses_user_access',
+    'access arguments' => array('edit', 1),
+    'type' => MENU_CALLBACK,
+    'file' => 'includes/utility/statuses.edit.inc',
+  );
+  $items['statuses/%statuses/delete'] = array(
+    'title' => 'Delete status',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('_statuses_delete', 1),
+    'access callback' => 'statuses_user_access',
+    'access arguments' => array('delete', 1),
+    'type' => MENU_CALLBACK,
+    'file' => 'includes/utility/statuses.edit.inc',
+  );
+  $items['statuses/%statuses'] = array(
+    'title' => 'Status',
+    'page callback' => 'statuses_show',
+    'page arguments' => array(1, array('page' => TRUE)),
+    'access callback' => 'statuses_user_access',
+    'access arguments' => array('view', 1),
+    'type' => MENU_CALLBACK,
+  );
+  $items['statuses/ajax'] = array(
+    'title' => 'AHAH callback', 
+    'page callback' => 'statuses_ajax_form_callback', 
+    'delivery callback' => 'ajax_deliver', 
+    'access callback' => TRUE, 
+    'theme callback' => 'ajax_base_page_theme', 
+    'type' => MENU_CALLBACK,
+    'file' => 'includes/utility/statuses.form.inc',
+  );
+  if (module_exists('devel_generate')) {
+    $items['admin/config/development/generate/statuses'] = array(
+      'title' => 'Generate statuses',
+      'description' => 'Generate a given number of statuses. Optionally delete current items.',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('statuses_generate_form'),
+      'access callback' => 'statuses_user_access',
+      'access arguments' => array('generate'),
+      'file' => 'includes/utility/statuses.generate.inc',
+    );
+  }
+  return $items;
+}
+
+/**
+ * The page callback for the share-status page.
+ */
+function statuses_share_page() {
+  $view = variable_get('statuses_share_view', 'statuses');
+  return theme('statuses_form_display', array('recipient' => $GLOBALS['user'], 'type' => 'user', 'view' => $view));
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function statuses_block_info() {
+  $block = array('statuses' => array());
+  $block['statuses']['info'] = t('Statuses');
+  $block['statuses']['visibility'] = 0;
+  $block['statuses']['pages'] = 'statuses/share';
+  return $block;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function statuses_block_view($delta) {
+  if ($delta == 'statuses') {
+    $context = statuses_determine_context();
+    $view = FALSE;
+    if (!variable_get('statuses_block_view', 1) && !empty($context['view'])) {
+      unset($context['view']);
+    }
+    $block['subject'] = '';
+    $block['content'] = theme('statuses_form_display', array('recipient' => $context));
+    return $block;
+  }
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function statuses_block_configure($delta) {
+  if ($delta == 'statuses') {
+    $form['statuses'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Statuses Settings'),
+      '#collapsible' => TRUE,
+      '#weight' => -4,
+      '#tree' => TRUE,
+    );
+    $form['statuses']['statuses_block_view'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Show a view on this block'),
+      '#description' => t('If enabled, the view displayed is chosen automatically based on the setting for the relevant context.'),
+      '#default_value' => variable_get('statuses_block_view', 1),
+    );
+    return $form;
+  }
+}
+
+/**
+ * Implements hook_block_save().
+ */
+function statuses_block_save($delta, $edit) {
+  if ($delta == 'statuses' && isset($edit['statuses'])) {
+    variable_set('statuses_block_view', $edit['statuses']['statuses_block_view']);
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function statuses_permission() {
+  return array(
+    'administer Statuses settings' => array(
+      'title' => t('Administer Statuses settings'),
+    ),
+    'delete all statuses' => array(
+      'title' => t('Delete all statuses'),
+      'description' => t('Delete statuses created by anyone'),
+    ),
+    'delete own statuses' => array(
+      'title' => t('Delete own statuses'),
+      'description' => t('Delete statuses you created'),
+    ),
+    'delete status messages on own profile' => array(
+      'title' => t('Delete status messages on own profile'),
+      'description' => t('Delete status messages sent to you'),
+    ),
+    'delete status messages on own nodes' => array(
+      'title' => t('Delete status messages on own nodes'),
+      'description' => t('Delete status messages left on nodes you created'),
+    ),
+    'edit all statuses' => array(
+      'title' => t('Edit all statuses'),
+      'description' => t('Edit statuses created by anyone'),
+    ),
+    'edit own statuses' => array(
+      'title' => t('Edit own statuses'),
+      'description' => t('Edit statuses you created'),
+    ),
+    'post status messages to other streams' => array(
+      'title' => t('Post status messages to other streams'),
+      'description' => t('Send status messages to other people, groups, etc.'),
+    ),
+    'send messages to all users at once' => array(
+      'title' => t('Send messages to all users at once'),
+      'description' => t('You can do this at /statuses/announce, but be careful! It is very processing-intensive on large sites.'),
+    ),
+    'update and view own stream' => array(
+      'title' => t('Update and view own stream'),
+      'description' => t('Create and view personal status updates'),
+    ),
+    'use PHP for context visibility' => array(
+      'title' => t('Use PHP for context visibility'),
+      'description' => t('In the advanced settings for stream contexts, allow using PHP to determine where a context applies.'),
+      'restrict access' => TRUE,
+    ),
+    'view all statuses' => array(
+      'title' => t('View all statuses'),
+      'description' => t('View statuses created by anyone'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_user_cancel().
+ */
+function statuses_user_cancel($edit, $account, $method) {
+  if ($method == 'user_cancel_block_unpublish' && module_exists('fbss_privacy')) {
+    db_update('statuses')
+      ->fields(array('private' => 1))
+      ->condition(db_or()
+        ->condition('sender', $account->uid)
+        ->condition('recipient', $account->uid)
+      )
+      ->execute();
+  }
+  elseif ($method == 'user_cancel_reassign') {
+    db_update('statuses')
+      ->fields(array('sender' => 0))
+      ->condition('sender', $account->uid)
+      ->execute();
+    db_update('statuses')
+      ->fields(array('recipient' => 0))
+      ->condition(db_and()
+        ->condition('recipient', $account->uid)
+        ->condition('type', 'user')
+      )
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_user_delete().
+ */
+function statuses_user_delete($account) {
+  // Remove abandoned statuses from the database on user account deletion.
+  db_delete('statuses')
+    ->condition(db_or()
+      ->condition('sender', $account->uid)
+      ->condition(db_and()
+        ->condition('recipient', $account->uid)
+        ->condition('type', 'user')
+      )
+    )
+    ->execute();
+  // NOTE: modules that integrate with FBSS should implement hook_user_delete()
+  // themselves instead of relying on hook_statuses_delete().
+  // Administrators who use the interface to create actions that occur when a
+  // status is deleted should make sure that these actions also occur for a
+  // user's statuses when that user is deleted. This is because users can have
+  // a very large number of status updates, and deleting them one by one can
+  // cause PHP memory limit timeouts as well as create an unnecessarily large
+  // number of database requests.
+}
+
+/**
+ * Implements hook_user_view().
+ */
+function statuses_user_view($account, $view_mode) {
+  if (variable_get('statuses_profile', 1)) {
+    $value = theme('statuses_form_display', array('recipient' => $account, 'type' => 'user'));
+    // Don't show this section if there's nothing there or the user doesn't have permission to see it.
+    if (empty($value)) {
+      return;
+    }
+    if (!isset($account->content['statuses'])) {
+      $account->content['statuses'] = array();
+    }
+    $account->content['statuses'] += array(
+      '#type' => 'user_profile_category',
+      '#attributes' => array('class' => array('statuses-profile-category')),
+      '#weight' => -5,
+      '#title' => t('Messages'),
+    );
+    $account->content['statuses']['status'] = array(
+      '#type' => 'user_profile_item',
+      '#title' => '',
+      '#markup' => $value,
+      '#attributes' => array('class' => array('statuses profile')),
+    );
+  }
+}
+
+/**
+ * Implements hook_init().
+ */
+function statuses_init() {
+  // Don't clear the default text on first focus if the default text was manually set in the URL.
+  $undefault = isset($_GET['status-text']);
+  if (isset($_GET['sid']) && is_numeric($_GET['sid'])) {
+    $rs = statuses_load($_GET['sid']);
+    $undefault = $undefault || ($rs->sender != $GLOBALS['user']->uid && $rs->message);
+  }
+  drupal_add_js(array('statuses' => array(
+    'autofocus' => (
+      (arg(0) == 'statuses' && arg(1) == 'share') ||
+      (arg(0) == 'statuses' && is_numeric(arg(1)) && arg(2) == 'edit') ||
+      (arg(0) == 'statuses' && arg(1) == 'conversation')
+    ),
+    'noautoclear' => (
+      $undefault ||
+      (arg(0) == 'statuses' && is_numeric(arg(1)) && arg(2) == 'edit')
+    ),
+    'maxlength' => variable_get('statuses_length', 140),
+    'hideLength' => variable_get('statuses_hide_length', 0),
+    'refreshLink' => (bool) variable_get('statuses_refresh', 0),
+  )), array('type' => 'setting', 'scope' => JS_DEFAULT));
+}
+
+/**
+ * Implements hook_link().
+ */
+function statuses_link($type, $status) {
+  if ($type != 'statuses') {
+    return;
+  }
+  global $user;
+  $links = array();
+  if (statuses_user_access('edit', $status)) {
+    $links['edit'] = array(
+      'href' => 'statuses/' . $status->sid . '/edit',
+      'title' => t('Edit'),
+      'attributes' => array('class' => array('statuses-edit', 'statuses-action-link')),
+      'query' => array('destination' => $_GET['q']),
+      'weight' => -5,
+    );
+  }
+  if (statuses_user_access('delete', $status)) {
+    $links['delete'] = array(
+      'href' => 'statuses/' . $status->sid . '/delete',
+      'title' => t('Delete'),
+      'attributes' => array('class' => array('statuses-delete', 'statuses-action-link')),
+      'query' => array('destination' => $_GET['q']),
+      'weight' => -4,
+    );
+  }
+  // If not self update by current user (because if it is a self update by the current user, there is no need for a response)
+  if (!module_exists('fbss_comments') && $status->type == 'user' && ($status->recipient != $status->sender || $status->sender != $user->uid)) {
+    // If permission to respond
+    if (statuses_user_access('add', _statuses_user_load($status->sender), 'user', $user)) {
+      $second_uid = $user->uid;
+      // If to current user (not a self update)
+      if ($status->type == 'user' && $status->recipient == $user->uid) {
+        $title = t('Reply');
+      }
+      // If self update (not by current user)
+      elseif ($status->type == 'user' && $status->recipient == $status->sender) {
+        $title = t('Respond');
+      }
+      // If from one user to another and the current user is not the recipient
+      elseif ($status->type == 'user') {
+        $title = t('View conversation');
+        $second_uid = $status->recipient;
+      }
+      $links['respond'] = array(
+        'href' => 'statuses/conversation/' . $status->sender . ',' . $second_uid,
+        'title' => $title,
+        'attributes' => array('class' => array('statuses-respond', 'statuses-action-link')),
+        'weight' => 3,
+      );
+    }
+  }
+  if (statuses_user_access('add', $user, 'user', $user)) {
+    $links['share'] = array(
+      'href' => 'statuses/share',
+      'title' => t('share'),
+      'query' => array(
+        'sid' => $status->sid,
+        'destination' => $_GET['q'],
+      ),
+      'attributes' => array('class' => array('statuses-share', 'statuses-action-link')),
+      'weight' => 5,
+    );
+  }
+  return $links;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function statuses_theme($existing, $type, $theme, $path) {
+  return array(
+    'statuses_item' => array(
+      'variables' => array(
+        'status' => NULL,
+        'options' => array(),
+      ),
+      'template' => 'templates/statuses-item',
+      'file' => 'includes/statuses.preprocess.inc',
+    ),
+    'statuses_form_display' => array(
+      'variables' => array(
+        'recipient' => NULL,
+        'type' => NULL,
+        'view' => NULL,
+        'display' => 'default',
+      ),
+      'file' => 'includes/utility/statuses.form.inc',
+    ),
+    'statuses_time' => array(
+      'variables' => array(
+        'time' => REQUEST_TIME,
+      ),
+    ),
+    'statuses_admin_contexts' => array(
+      'render element' => 'form',
+      'file' => 'includes/utility/statuses.admin.inc',
+    ),
+  );
+}
+
+//==================
+// THEME FUNCTIONS.
+//==================
+
+/**
+ * Display a status message.
+ * This is basically a wrapper for theme('statuses_item').
+ *
+ * @param $status
+ *   A status object.
+ * @param $options
+ *   An associative array with the following optional properties:
+ *   - links: Whether to show links with the status
+ *   - page: Whether the status is being shown on a page by itself
+ *   - cacheable: Whether the themed text will be stored
+ *   - extras: Whether to show extra information (like comments and
+ *     attachments) if applicable
+ * @return
+ *   HTML representing a status.
+ */
+function statuses_show($status, $options = array()) {
+  module_load_include('inc', 'statuses', 'includes/statuses.preprocess');
+  return _statuses_show($status, $options);
+}
+
+/**
+ * Returns a formatted string showing the time the status was submitted.
+ *
+ * @param $time
+ *   The Unix timestamp for when the relevant status was updated.
+ * @return
+ *   If the status was submitted within the last 3 days, returns a "time ago"
+ *   date. If not, returns a normal (small) date. If zero, returns FALSE.
+ */
+function theme_statuses_time($variables) {
+  $time = $variables['time'];
+  if (!$time) {
+    return FALSE;
+  }
+  if (module_exists('timeago')) {
+    return timeago_format_date($time);
+  }
+  if (REQUEST_TIME - $time < 60) {
+    return t('a moment ago');
+  }
+  elseif (REQUEST_TIME - $time < 60 * 60 * 24 * 3) {
+    return t('!time ago', array('!time' => format_interval(REQUEST_TIME - $time, 1)));
+  }
+  else {
+    return format_date($time, 'short');
+  }
+}
+
+//====================================
+// APPLICATION PROGRAMMING INTERFACE.
+//====================================
+
+/**
+ * Checks that users have permission to perform various status-related tasks.
+ * Use this function instead of the derivatives so that other modules can alter
+ * the access rules.
+ *
+ * @param $op
+ *   The name of the relevant task.
+ * @param ...
+ *   Relevant contextual information based on the task:
+ *   - 'add':
+ *     - $recipient: The object representing the recipient (defaults to the
+ *       current user)
+ *     - $type: The recipient type (defaults to 'user')
+ *     - $sender: The user object representing the sender (defaults to the
+ *       current user)
+ *   - 'converse':
+ *     - Automatically determines context from URL parameters. (Note that this
+ *       permission checks for ability to view the conversation, not to
+ *       participate in it.) This is basically a special-case for "view" for
+ *       the "user" type.
+ *   - 'delete', 'edit', 'view':
+ *     - $status: The status being considered for deletion/editing/viewing
+ *     - $account: The user object of the person taking the action (defaults to
+ *       the current user)
+ *   - 'view_stream':
+ *     - $recipient: The owner of the stream being viewed
+ *     - $account: The user object of the person taking the action (defaults to
+ *       the current user)
+ *   - 'generate': (no other parameters)
+ * @return
+ *   TRUE if the user has permission to perform the task; FALSE otherwise.
+ */
+function statuses_user_access($op) {
+  module_load_include('inc', 'statuses', 'includes/utility/statuses.access');
+  $args = func_get_args();
+  array_shift($args);
+  $allow = call_user_func_array("statuses_user_access_$op", $args);
+  drupal_alter('statuses_user_access', $allow, $op, $args);
+  return $allow;
+}
+
+/**
+ * Fetches status updates in reverse chronological order.
+ *
+ * @param $senders
+ *   A user ID of the sender of status updates, or an array of User IDs for
+ *   users who posted statuses. If empty, all users are considered.
+ * @param $recipients
+ *   An ID of the recipient of status updates, or an array of IDs for
+ *   recipients of status updates. If empty, all users are considered.
+ * @param $total
+ *   The maximum number of statuses to return. If zero, all relevant statuses
+ *   are returned.
+ * @return
+ *   An array of status objects matching the relevant criteria.
+ */
+function statuses_get_statuses($senders = array(), $recipients = array(), $type = NULL, $total = 0) {
+  if (is_numeric($senders)) {
+    $senders = array($senders);
+  }
+  if (is_numeric($recipients)) {
+    $recipients = array($recipients);
+  }
+  $statuses = array();
+  $args = array(':type' => $type);
+  $query = "SELECT * FROM {statuses} WHERE created <> 0 AND type = :type";
+  if (!empty($senders)) {
+    $query .= " AND sender IN (:senders)";
+    $args = array_merge($args, array(':senders' => $senders));
+  }
+  if (!empty($recipients)) {
+    $query .= " AND recipient IN (:recipients)";
+    $args = array_merge($args, array(':recipients' => $recipients));
+  }
+  $query .= " ORDER BY created DESC, sid DESC";
+  $result = ($total > 0 ? db_query_range($query, 0, $total, $args) : db_query($query, $args));
+  foreach ($result as $status) {
+    $statuses[] = $status;
+  }
+  return $statuses;
+}
+
+/**
+ * Determines whether a recipient has statuses.
+ *
+ * @param $recipient_id
+ *   The ID of the recipient whose number of statuses will be looked up.
+ *   Defaults to the current user.
+ * @param $type
+ *   The stream type.
+ * @param $sender_id
+ *   The user ID of the sender. If not passed, all users are considered.
+ * @return
+ *   The number of statuses of the relevant recipient (by the relevant sender
+ *   if specified).
+ */
+function statuses_has_status($recipient_id = NULL, $type = 'user', $sender_id = NULL) {
+  global $user;
+  $recipient_id = (empty($recipient_id) ? $user->uid : $recipient_id);
+  if (!empty($sender_id)) {
+    return db_query("SELECT COUNT(sid) FROM {statuses} WHERE type = :type AND recipient = :recipient AND sender = :sender", array(':type' => $type, ':recipient' => $recipient_id, ':sender' => $sender_id))->fetchField();
+  }
+  return db_query("SELECT COUNT(sid) FROM {statuses} WHERE type = :type AND recipient = :recipient", array(':type' => $type, ':recipient' => $recipient_id))->fetchField();
+}
+
+/**
+ * Loads a status object.
+ *
+ * @param $sid
+ *   The Status ID.
+ * @return
+ *   A status object containing sid, sender, recipient, type, created, message.
+ *   If the fbss_privacy submodule is installed, the object also has the
+ *   "private" property.
+ */
+function statuses_load($sid) {
+  $statuses = &drupal_static(__FUNCTION__);
+  if (!isset($statuses)) {
+    $statuses = array();
+  }
+  if (!isset($statuses[$sid])) {
+    $statuses[$sid] = db_query("SELECT * FROM {statuses} WHERE sid = :sid", array(':sid' => $sid))->fetchObject();
+  }
+  return $statuses[$sid];
+}
+
+/**
+ * Helps load a context array from a URL.
+ */
+function statuses_context_load($type) {
+  return statuses_determine_context($type);
+}
+
+/**
+ * Determines the current context to use when building the status update form.
+ *
+ * @param $type
+ *   The type of context to return. If not specified, the context is
+ *   automatically determined.
+ * @return
+ *   An associative array of associative arrays. The outer array keys indicate
+ *   the context type (machine name). Inner arrays have these elements:
+ *   - title: The "friendly" name of the context type.
+ *   - description (optional): An explanation of who owns the recipient stream
+ *     if this context is used. This will be displayed in a "title" attribute,
+ *     so do not use double quotes.
+ *   - handler: The name of a class that extends statuses_context (and
+ *     thus defines useful methods to describe the context).
+ *   - parent (optional): The name of the parent context type (not the
+ *     parent handler).
+ *   - dependencies (optional): An array containing the names of modules that
+ *     must be enabled for that context type to be used.
+ *   - selectors (optional): A string containing CSS selectors separated by
+ *     newlines. Each selector will be automatically updated via AJAX when a
+ *     new status of the relevant type is saved. Do not include selectors that
+ *     include the status update form.
+ *   - view (optional): The default view to use as the context stream.
+ *   - visibility (optional): Flag to indicate how to apply contexts on pages.
+ *     - -1: Use module default settings
+ *     - 0: Show on all pages except listed pages
+ *     - 1: Show only on listed pages
+ *     - 2: Use custom PHP code to determine visibility
+ *     - 3: Use the conditions from a Context from the Context module
+ *   - pages (optional): Either a list of paths on which to include/exclude the
+ *     context or PHP code, depending on "visibility" setting. Visibility and
+ *     pages provide a user-facing way of overriding the is_applicable()
+ *     function of the context handler.
+ *   - context (optional): A Context defined by the Context module whose
+ *     conditions should be used to determine whether the stream context
+ *     applies on this page if the "visibility" flag is set appropriately.
+ *     Overrides the is_applicable() function of the context handler.
+ *   - weight (optional): The default precedence of the context type.
+ *   - file (optional): A file to load before loading the context handler.
+ */
+function statuses_determine_context($type = NULL) {
+  $contexts = statuses_all_contexts();
+  if (empty($type)) {
+    $context = array();
+    // The user context is our base case, so we never end up with no context.
+    foreach ($contexts as $type => $context) {
+      if (!empty($context['file']) && file_exists($context['file'])) {
+        require_once DRUPAL_ROOT . '/' . $context['file'];
+      }
+      // Make sure the parent class is always loaded.
+      if (empty($context['parent'])) {
+        module_load_include('inc', 'statuses', '/includes/utility/statuses.contexts');
+      }
+      else {
+        statuses_determine_context($context['parent']);
+      }
+      $context['handler'] = new $context['handler']();
+      if (_statuses_context_applies($context)) {
+        $context['type'] = $type;
+        break;
+      }
+    }
+  }
+  elseif (isset($contexts[$type])) {
+    $context = $contexts[$type];
+    if (!empty($context['file']) && file_exists($context['file'])) {
+      require_once DRUPAL_ROOT . '/' . $context['file'];
+    }
+    // Make sure the parent class is always loaded.
+    if (empty($context['parent'])) {
+      module_load_include('inc', 'statuses', '/includes/utility/statuses.contexts');
+    }
+    else {
+      statuses_determine_context($context['parent']);
+    }
+    $context['handler'] = new $context['handler']();
+    $context['type'] = $type;
+  }
+  else {
+    // We can't find the requested context, so abort.
+    return;
+  }
+  // title and handler are required.
+  $context += array(
+    'description' => '',
+    'view' => '',
+    'selectors' => '',
+    'visibility' => -1,
+    'pages' => '',
+    'context' => '',
+    'weight' => 0,
+    'file' => '',
+    'parent' => '',
+    'dependencies' => array(),
+  );
+  return $context;
+}
+
+/**
+ * Gets a list of all contexts.
+ * @see statuses_determine_context()
+ */
+function statuses_all_contexts() {
+  static $contexts;
+  if (isset($contexts)) {
+    return $contexts;
+  }
+  $result = db_query("SELECT * FROM {statuses_contexts}", array(), array('fetch' => PDO::FETCH_ASSOC));
+  $contexts = module_invoke_all('statuses_context_info');
+  foreach ($result as $c) {
+    $contexts[$c['type']]['in_db'] = TRUE;
+    $contexts[$c['type']]['weight'] = $c['weight'];
+    $contexts[$c['type']]['view'] = $c['view'];
+    $contexts[$c['type']]['selectors'] = $c['selectors'];
+    $contexts[$c['type']]['visibility'] = $c['visibility'];
+    $contexts[$c['type']]['pages'] = $c['pages'];
+    $contexts[$c['type']]['context'] = $c['context'];
+  }
+  uasort($contexts, '_statuses_element_sort');
+  foreach ($contexts as $type => $context) {
+    if (isset($context['dependencies'])) {
+      foreach ($context['dependencies'] as $dependency) {
+        if (!module_exists($dependency)) {
+          unset($contexts[$type]);
+          break;
+        }
+      }
+    }
+  }
+  return $contexts;
+}
+
+/**
+ * Delete a status from the database.
+ *
+ * @param $status
+ *   The Status ID or a status object.
+ * @param $meta
+ *   An array of metadata that affects what behaviors are triggered from this
+ *   function. There are no default options, but other modules may use them.
+ *   For example, the Facebook-style Micropublisher module makes use of a
+ *   "has attachment" option, which denotes whether the status that is being
+ *   deleted has attached media.
+ */
+function statuses_delete_status($status, $meta = array()) {
+  if (!is_object($status)) {
+    $status = statuses_load($status);
+  }
+  // Trigger integration.
+  // Don't call if there is an attachment (from the FBSMP module) because there is a separate trigger for that.
+  if (module_exists('trigger') && empty($options['has attachment'])) {
+    module_invoke_all('statuses', 'fbss_deleted', $status);
+    $type = $status->type;
+    if ($type == 'user') {
+      $type .= ($status->sender == $status->recipient ? '_self' : '_other');
+    }
+    module_invoke_all('statuses', 'fbss_deleted_' . $type, $status);
+  }
+  module_invoke_all('statuses_delete', $status, $meta);
+  db_delete('statuses')
+    ->condition('sid', $status->sid)
+    ->execute();
+}
+
+/**
+ * Saves a status into the database.
+ *
+ * @param $recipient
+ *   The object representing the recipient of the status.
+ * @param $type
+ *   The status stream type.
+ * @param $message
+ *   The status text to be saved.
+ * @param $sender
+ *   The user object representing the sender of the status. Defaults to the
+ *   current user.
+ * @param $options
+ *   An array of options that affects what behaviors this function uses. These
+ *   are the defaults, used if no option is specified for the relevant keys:
+ *   array(
+ *     'discard duplicates' => TRUE,
+ *     'timed override' => FALSE,
+ *     'discard blank statuses' => TRUE,
+ *   );
+ * @return
+ *   The saved status object.
+ */
+function statuses_save_status($recipient, $type, $message, $sender = NULL, $options = array()) {
+  $sender = (empty($sender) ? $GLOBALS['user'] : $sender);
+  $context = statuses_determine_context($type);
+  $recipient_id = $context['handler']->recipient_id($recipient);
+  $time = REQUEST_TIME;
+  $message = trim($message);
+  if (module_exists('og') && arg(0) == 'statuses' && arg(1) == 'js') {
+    og_set_group_context($recipient);
+  }
+  // Merge in defaults.
+  $options += array(
+    'discard duplicates' => TRUE,
+    'timed override' => FALSE,
+    'discard blank statuses' => TRUE,
+  );
+  // Calls hook_statuses_save_options_alter(&$options, $edit).
+  $edit = FALSE;
+  drupal_alter('statuses_save_options', $options, $edit);
+  // Pretend to have set a new status if the submitted status is exactly the same as the old one.
+  $status = _statuses_get_status_fast($sender->uid);
+  // The status object to be saved.
+  $object = (object) array(
+    'message' => $message,
+    'created' => $time,
+    'sender' => $sender->uid,
+    'recipient' => $recipient_id,
+    'type' => $type,
+    'private' => isset($options['form_state']['values']['private']) ? $options['form_state']['values']['private'] : 0,
+  );
+  if (empty($status) || $message != $status->message || $type != $status->type || $recipient_id != $status->recipient || !$options['discard duplicates']) {
+    $edit = FALSE;
+    // If a new status is submitted on one's own profile within
+    // STATUSES_OVERRIDE_TIMER seconds of the old one,
+    // we assume the user didn't mean to post the first one.
+    if (!empty($status) && $time - $status->created < STATUSES_OVERRIDE_TIMER && $type = 'user' && $sender->uid == $recipient_id && $options['timed override']) {
+      db_update('statuses')
+        ->fields(array(
+          'message' => $message,
+          'created' => $time,
+        ))
+        ->condition('sid', $status->sid)
+        ->execute();
+      $object->sid = $status->sid;
+      $edit = TRUE;
+    }
+    else {
+      // Avoid saving blank statuses except on a user's own profile if this is explicitly allowed.
+      if ($type != 'user' || $sender->uid != $recipient_id || !empty($message) || !$options['discard blank statuses']) {
+        drupal_write_record('statuses', $object);
+      }
+    }
+    // Invokes hook_statuses_save($status, $context, $edit, $options).
+    module_invoke_all('statuses_save', $object, $context, $edit, $options);
+    // Trigger integration.
+    // Don't call if the status is blank because usually nothing interesting is happening.
+    // Also don't call if there is an attachment (from the FBSMP module) because there is a separate trigger for that.
+    if (module_exists('trigger') && !empty($message) && empty($options['has attachment'])) {
+      $op = 'fbss_submitted_' . $type;
+      if ($type == 'user') {
+        $op .= ($recipient_id == $sender->uid ? '_self' : '_other');
+      }
+      module_invoke_all('statuses', $op, $object, $context);
+      module_invoke_all('statuses', 'fbss_submitted', $object, $context);
+    }
+  }
+  elseif ($message == $status->message) {
+    $object->sid = $status->sid;
+  }
+  return $object;
+}
+
+/**
+ * Update a status.
+ *
+ * @param $status
+ *   The status object to be edited.
+ * @param $new_message
+ *   The new text of the status.
+ * @param $options
+ *   An array of options that affects what behaviors this function uses. These
+ *   are the defaults, used if no option is specified for the relevant keys:
+ *   array(
+ *     'discard duplicates' => TRUE,
+ *     'timed override' => TRUE,
+ *     'discard blank statuses' => TRUE,
+ *     'update timestamp' => FALSE,
+ *   );
+ *   The first three options have little meaning if the status is being edited,
+ *   but other modules are free to add their own options that should be
+ *   respected here.
+ */
+function statuses_edit_status($status, $new_message, $options = array()) {
+  $context = statuses_determine_context($status->type);
+  $new_message = trim($new_message);
+  // Merge in defaults.
+  $options += array(
+    'discard duplicates' => TRUE,
+    'timed override' => TRUE,
+    'discard blank statuses' => TRUE,
+    'update timestamp' => FALSE,
+  );
+  // Calls hook_statuses_save_options_alter(&$options, $edit).
+  $edit = TRUE;
+  drupal_alter('statuses_save_options', $options, $edit);
+  $time = REQUEST_TIME;
+  global $user;
+  // Pretend to have set a new status if the submitted status is exactly the same as the old one.
+  if ($new_message != $status->message) {
+    if ($options['update timestamp']) {
+      db_update('statuses')
+        ->fields(array(
+          'message' => $new_message,
+          'created' => $time,
+        ))
+        ->condition('sid', $status->sid)
+        ->execute();
+      $status->created = $time;
+    }
+    else {
+      db_update('statuses')
+        ->fields(array(
+          'message' => $new_message,
+        ))
+        ->condition('sid', $status->sid)
+        ->execute();
+    }
+    $status->message = $new_message;
+    // Invokes hook_statuses_save($status, $context, $edit, $options).
+    module_invoke_all('statuses_save', $status, $context, TRUE, $options);
+  }
+  // Trigger integration.
+  // Don't call if the status is blank because usually nothing interesting is happening.
+  // Also don't call if there is an attachment (from the FBSMP module) because there is a separate trigger for that.
+  if (module_exists('trigger') && !empty($new_message) && empty($options['has attachment'])) {
+    $op = 'fbss_edited_' . $status->type;
+    if ($status->type == 'user') {
+      $op .= ($status->recipient == $status->sender ? '_self' : '_other');
+    }
+    module_invoke_all('statuses', $op, $status, $context);
+    module_invoke_all('statuses', 'fbss_edited', $status, $context);
+  }
+  return $status;
+}
+
+//===================
+// HELPER FUNCTIONS.
+//===================
+
+/**
+ * A saner sort function for use in uasort().
+ * Identical to element_sort() except uses "weight" instead of "#weight."
+ */
+function _statuses_element_sort($a, $b) {
+  $a_weight = (is_array($a) && isset($a['weight'])) ? $a['weight'] : 0;
+  $b_weight = (is_array($b) && isset($b['weight'])) ? $b['weight'] : 0;
+  if ($a_weight == $b_weight) {
+    return 0;
+  }
+  return ($a_weight < $b_weight) ? -1 : 1;
+}
+
+/**
+ * Helper function that runs filters on statuses.
+ */
+function _statuses_run_filter($status) {
+  if (variable_get('statuses_filter', 'none') != 'none') {
+    return check_markup($status, variable_get('statuses_filter', 'none'));
+  }
+  return check_plain($status);
+}
+
+/**
+ * Gets the most recent own status update by a user.
+ *
+ * @param $uid
+ *   The User ID of the user whose latest status should be retrieved.
+ * @return
+ *   A status object.
+ */
+function _statuses_get_status_fast($uid) {
+  return db_query("
+    SELECT *
+    FROM {statuses}
+    WHERE
+      sender = :sender AND
+      recipient = :recipient AND
+      type = :type
+    ORDER BY sid DESC
+  ", array(
+    ':sender' => $uid,
+    ':recipient' => $uid,
+    ':type' => 'user'
+  ))->fetchObject();
+}
+
+/**
+ * A wrapper for user_load().
+ *
+ * We used this in D6 to provide a static cache around user_load(). It is not
+ * necessary in D7 because user_load() has its own static cache.
+ * TODO: Remove this, and replace it with user_load() everywhere it's used.
+ *
+ * @param $uid
+ *   A User ID.
+ * @return
+ *   A $user object.
+ */
+function _statuses_user_load($uid) {
+  return user_load($uid);
+}
+
+/**
+ * In D6, a wrapper for user_load(); now pointless.
+ *
+ * We used this in D6 to provide a static cache around user_load(). It is not
+ * necessary in D7 because user_load_by_name() has its own static cache.
+ * TODO: Remove this, and replace it with user_load_by_name() everywhere.
+ *
+ * @param $name
+ *   A username.
+ * @return
+ *   A $user object.
+ */
+function _statuses_user_load_by_name($name) {
+  return user_load_by_name($name);
+}
+
+/**
+ * Determine whether a context applies in the current situation.
+ *
+ * @param $context
+ *   The context array to test for application.
+ * @return
+ *   TRUE if the context applies here; FALSE otherwise.
+ */
+function _statuses_context_applies($context) {
+  $context += array(
+    'visibility' => -1,
+  );
+  if ($context['visibility'] == -1) {
+    return $context['handler']->is_applicable();
+  }
+  elseif ($context['visibility'] == 3) {
+    if (module_exists('context')) {
+      return in_array($context['context'], array_keys(context_active_contexts()));
+    }
+    return $context['handler']->is_applicable();
+  }
+  // Match path if necessary. This behavior adapted from block_block_list_alter().
+  elseif (!empty($context['pages'])) {
+    if ($context['visibility'] < BLOCK_VISIBILITY_PHP) {
+      $pages = drupal_strtolower($context['pages']);
+      $path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
+      // Compare with the internal and path alias (if any).
+      $page_match = drupal_match_path($path, $pages);
+      if ($path != $_GET['q']) {
+        $page_match = $page_match || drupal_match_path($_GET['q'], $pages);
+      }
+      // When $context['visibility'] has a value of 0
+      // (BLOCK_VISIBILITY_NOTLISTED), the block is displayed on all pages
+      // except those listed in $context['pages']. When set to 1
+      // (BLOCK_VISIBILITY_LISTED), it is displayed only on those pages listed
+      // in $context['pages'].
+      return !($context['visibility'] xor $page_match);
+    }
+    elseif (module_exists('php')) {
+      return php_eval($context['pages']);
+    }
+    else {
+      return FALSE;
+    }
+  }
+  else {
+    return TRUE;
+  }
+}
+
+//==========================
+// STREAM TYPE DEFINITIONS.
+//==========================
+
+/**
+ * Implements hook_statuses_context_info().
+ */
+function statuses_statuses_context_info() {
+  $path = drupal_get_path('module', 'statuses') . '/includes/utility/statuses.contexts.inc';
+  return array(
+    'user' => array(
+      'title' => t('User profiles'),
+      'description' => t('If a profile is currently being viewed, then the stream belongs to the owner of that profile.') . ' ' .
+        t('Otherwise, the stream belongs to the current user.'),
+      'handler' => 'statuses_user_context',
+      'view' => module_exists('activity_log') ? 'activity_log_stream' : (module_exists('user_relationship_views') ? 'fbss_ur_stream' : 'statuses_stream'),
+      'weight' => 999,
+      'file' => $path,
+    ),
+    'node' => array(
+      'title' => t('Nodes'),
+      'description' => t('The stream belongs to the currently viewed node, if applicable.'),
+      'handler' => 'statuses_node_context',
+      'view' => 'statuses_stream',
+      'weight' => -1,
+      'file' => $path,
+    ),
+    'og' => array(
+      'title' => t('Organic Groups'),
+      'description' => t('The stream belongs to the currently viewed Organic Group, if applicable.'),
+      'handler' => 'statuses_og_context',
+      'parent' => 'node',
+      'dependencies' => array('og', 'og_context'),
+      'view' => module_exists('activity_log') ? 'activity_log_stream' : 'statuses_stream',
+      'weight' => -50,
+      'file' => $path,
+    ),
+    'term' => array(
+      'title' => t('Taxonomy terms'),
+      'description' => t('The stream belongs to the currently viewed taxonomy term, if applicable.'),
+      'handler' => 'statuses_term_context',
+      'dependencies' => array('taxonomy'),
+      'view' => 'statuses_stream',
+      'weight' => 1000, // heavier than the user context, therefore disabled by default
+      'file' => $path,
+    ),
+    'domain' => array(
+      'title' => module_exists('fbss_domain') ? t('Domains') : t('General - the site itself'),
+      'description' => t('The stream belongs to the site itself. Allows using FBSS like a guestbook.'),
+      'handler' => 'statuses_domain_context',
+      'view' => 'statuses_stream',
+      'weight' => 1337, // heavier than the user context, therefore disabled by default
+      'file' => $path,
+    ),
+  );
+}
+
+//======================
+// TRIGGER INTEGRATION.
+//======================
+
+/**
+ * Implements hook_trigger_info().
+ */
+function statuses_trigger_info() {
+  $info = array(
+    'statuses' => array(
+      'statuses_fbss_deleted' => array(
+        'label' => t('A status has been deleted'),
+      ),
+      'statuses_fbss_deleted_user_self' => array(
+        'label' => t('A user has deleted their status'),
+      ),
+      'statuses_fbss_deleted_user_other' => array(
+        'label' => t('A user has deleted a status message to another user'),
+      ),
+      'statuses_fbss_edited' => array(
+        'label' => t('A status has been edited'),
+      ),
+      'statuses_fbss_edited_user_self' => array(
+        'label' => t('A user has edited their own status'),
+      ),
+      'statuses_fbss_edited_user_other' => array(
+        'label' => t('A user has edited a status message to another user'),
+      ),
+      'statuses_fbss_submitted' => array(
+        'label' => t('A status has been submitted'),
+      ),
+      'statuses_fbss_submitted_user_self' => array(
+        'label' => t('A user has updated their own status'),
+      ),
+      'statuses_fbss_submitted_user_other' => array(
+        'label' => t('A user has posted a status message to another user'),
+      ),
+    ),
+  );
+  foreach (statuses_all_contexts() as $type => $details) {
+    if ($type != 'user') {
+      $info['statuses']['fbss_deleted_' . $type] = array(
+        'runs when' => t('A user has deleted a status message to a stream of type %type', array('%type' => $type)),
+      );
+      $info['statuses']['fbss_edited_' . $type] = array(
+        'runs when' => t('A user has edited a status message to a stream of type %type', array('%type' => $type)),
+      );
+      $info['statuses']['fbss_submitted_' . $type] = array(
+        'runs when' => t('A user has posted a new status to a stream of type %type', array('%type' => $type)),
+      );
+    }
+  }
+  return $info;
+}
+
+/**
+ * Implements hook_statuses().
+ * or
+ * Implements hook_trigger_name().
+ */
+function statuses_statuses($op, $status, $context = NULL) {
+  if (strpos($op, 'fbss_deleted') !== 0 && strpos($op, 'fbss_submitted') !== 0 && strpos($op, 'fbss_edited') !== 0) {
+    return;
+  }
+  $aids = trigger_get_assigned_actions('statuses');
+  $context = statuses_determine_context($status->type);
+  $recipient = $context['handler']->load_recipient($status->recipient);
+  $sender = user_load($status->sender);
+
+  // Reduce the amount of recalculation we will need to do later.
+  $sender->statuses = $status;
+  $sender->context = $context;
+
+  $activity_context = array(
+    'hook' => 'statuses',
+    'op' => $op,
+    'sender' => $sender,
+    'recipient' => $recipient,
+    'type' => $status->type,
+    'statuses' => $status,
+    'context' => $context,
+  );
+  actions_do(array_keys($aids), $sender, $activity_context);
+}
+
+//====================
+// TOKEN INTEGRATION.
+//====================
+
+/**
+ * Implements hook_token_list().
+ */
+function statuses_token_list($type = 'all') {
+  if ($type == 'statuses') {
+    $tokens['statuses'] = array(
+      'sender-themed' => t('The themed name of the user who posted the status message.'),
+      'sender-name' => t('The safe name of the user who posted the status message.'),
+      'sender-name-raw' => t('The raw name of the user who posted the status message. WARNING: raw user input.'),
+      'sender-uid' => t('The User ID of the user who posted the status message.'),
+      'sender-picture' => t('The profile picture of the user who posted the status message.'),
+      'recipient-type-name' => t('The machine name of the stream type of the recipient.'),
+      'recipient-type-title' => t('The readable name of the stream type of the recipient.'),
+      'recipient-link' => t('A link to the recipient.'),
+      'recipient-name' => t('The safe name of the recipient of the status message.'),
+      'recipient-name-raw' => t('The raw name of the recipient of the status message. WARNING: raw user input.'),
+      'recipient-id' => t('The ID of the recipient of the status message.'),
+      'message-unformatted' => t('The status text, with HTML escaped but no filters or anything run over it.'),
+      'message-formatted' => t('The status text completely themed.'),
+      'message-raw' => t('The completely unfiltered status text. WARNING: raw user input.'),
+      'status-themed' => t('The new status completely themed, including usernames and times.'),
+      'status-id' => t('The Status ID.'),
+      'status-url' => t('The URL of the status message.'),
+      'status-edit' => t('Edit status link.'),
+      'status-delete' => t('Delete status link.'),
+      'created' => t('The themed time the status was submitted.'),
+    );
+    if (module_exists('fbss_comments')) {
+      $tokens['statuses']['status-comment-count'] = t('The number of comments on the status.');
+      $tokens['statuses']['comments-email'] = t('The comments with inline styling suitable for emails.');
+    }
+    $tokens['statuses'] += token_get_date_token_info(t('The status created'), 'created-');
+    return $tokens;
+  }
+}
+
+/**
+ * Implements hook_token_values().
+ */
+function statuses_token_values($type, $data = NULL, $options = array()) {
+  if ($type != 'statuses' || empty($data)) {
+    return;
+  }
+  $status = $data;
+  $context = statuses_determine_context($status->type);
+
+  $message_formatted = _statuses_run_filter($status->message);
+  if (variable_get('statuses_nl2br', 0)) {
+    $message_formatted = nl2br($message_formatted);
+  }
+  $edit = '';
+  $delete = '';
+  if (statuses_user_access('edit', $status)) {
+    $edit = '<span class="statuses-edit-link statuses-action-link">' . l(t('Edit'), 'statuses/' . $status->sid . '/edit') . '</span>';
+  }
+  if (statuses_user_access('delete', $status)) {
+    $delete = '<span class="statuses-delete-link statuses-action-link">' .  l(t('Delete'), 'statuses/' . $status->sid . '/delete') . '</span>';
+  }
+  $sender = user_load($status->sender);
+  $recipient = $context['handler']->load_recipient($status->recipient);
+  $sender->imagecache_preset = variable_get('statuses_imagecache_preset', variable_get('user_picture_imagecache_profiles_default', ''));
+  $url = url('statuses/'. $status->sid, array('absolute' => TRUE));
+  $values = array(
+    'sender-themed' => theme('username', array('account' => $sender)),
+    'sender-name' => check_plain($sender->name),
+    'sender-name-raw' => $sender->name,
+    'sender-uid' => $sender->uid,
+    'sender-picture' => theme('user_picture', $sender),
+    'recipient-type-name' => $status->type,
+    'recipient-type-title' => $context['title'],
+    'recipient-link' => $context['handler']->recipient_link($recipient),
+    'recipient-name' => check_plain($context['handler']->recipient_name($recipient)),
+    'recipient-name-raw' => $context['handler']->recipient_name($recipient),
+    'recipient-id' => $context['handler']->recipient_id($recipient),
+    'message-unformatted' => check_plain($status->message),
+    'message-formatted' => $message_formatted,
+    'message-raw' => $status->message,
+    'status-themed' => statuses_show($status),
+    'status-id' => $status->sid,
+    'status-url' => $url,
+    'status-edit' => $edit,
+    'status-delete' => $delete,
+    'status-comment-count' => module_exists('fbss_comments') ? fbss_comments_count_comments($status->sid) : 0,
+    'comments-email' => module_exists('fbss_comments') ? theme('fbss_comments_items_email', fbss_comments_get_comments($status->sid, TRUE), $url) : '',
+    'created' => format_date($status->created, 'short'),
+  );
+  $values += token_get_date_token_values($status->created, 'created-');
+  return $values;
+}
+
+//====================
+// VIEWS INTEGRATION.
+//====================
+
+/**
+ * Implements hook_views_api().
+ */
+function statuses_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'statuses') . '/includes/views',
+  );
+}
+
+/**
+ * Displays the user picture with fixes for unfortunate magic found in Garland
+ * and other themes.
+ */
+function statuses_display_user_picture($account, $preset = NULL) {
+  drupal_add_css(drupal_get_path('module', 'statuses') . '/resources/statuses.css');
+  $image_vars = array('account' => $account);
+  if (!empty($preset) && module_exists('imagecache_profiles')) {
+    $image_vars['user_picture_style'] = $preset;
+  }
+  return theme('user_picture', $image_vars);
+}
+
+/**
+ * Implements hook_views_query_alter().
+ */
+function statuses_views_query_alter(&$view, &$query) {
+  if ($view->base_table == 'users') {
+    foreach ($query->table_queue as $alias => $info) {
+      if ($info['table'] == 'statuses') {
+        $query->add_groupby($info['alias'] . '.sid');
+        return;
+      }
+    }
+  }
+}
+
+//============================
+// SMS FRAMEWORK INTEGRATION.
+//============================
+
+/**
+ * Implements hook_sms_incoming().
+ */
+function statuses_sms_incoming($op, $number, $message, $options = NULL) {
+  global $user;
+  if ($op == 'process' && $user->uid && drupal_substr($message, 0, 3) == 's: ') {
+    $maxlen = variable_get('statuses_length', 140);
+    $message = drupal_substr($message, 3);
+    if (drupal_strlen($message) > $maxlen && $maxlen > 0) {
+      //"\xE2\x80\xA6" is the unicode escape sequence for the HTML entity &hellip; (an ellipsis)
+      $message = drupal_substr($message, 0, $maxlen - 1) . "\xE2\x80\xA6";
+    }
+    statuses_save_status($user, 'user', $message);
+  }
+}
+
+//====================================
+// VIEWS BULK OPERATIONS INTEGRATION.
+//====================================
+
+/**
+ * Implements hook_views_bulk_operations_object_info().
+ */
+function statuses_views_bulk_operations_object_info() {
+  return array(
+    'statuses' => array(
+      'type' => 'statuses',
+      'base_table' => 'statuses',
+      'load' => 'statuses_load',
+      'title' => 'message',
+    ),
+  );
+}
+
+//=====================
+// CTOOLS INTEGRATION.
+//=====================
+
+/**
+ * Implements hook_ctools_plugin_directory().
+ */
+function statuses_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'includes/ctools/' . $plugin;
+  }
+}

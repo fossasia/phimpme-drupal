@@ -1,0 +1,191 @@
+/**
+ * @group Visuals
+ *
+ * Things that you are relatively likely to want to override in your theme.
+ */
+
+.statuses-textarea-wrapper {
+  border-color: #CCCCCC;
+}
+
+.statuses-update .button {
+  background-color: #EEEEEE;
+  border-color: #CCCCCC;
+}
+
+.statuses-update .button:hover {
+  background-color: #F6F6F6;
+}
+
+.statuses-negative {
+  color: #900000;
+}
+
+.statuses-faded {
+  color: #999999;
+}
+
+.statuses-time { /* does not affect links */
+  color: #999999;
+  display: inline;
+}
+
+.statuses-item .statuses-links ul.links li {
+  background-image: none;
+  list-style: none;
+}
+
+/* Garland floats pictures right, which looks weird in FBSS Views. */
+.view .picture {
+  float: left; /* LTR */
+  margin: 0 1em 0 0;
+  padding: 0;
+}
+
+/* @end */
+
+/**
+ * Miscellaneous
+ */
+
+.statuses-chars {
+  clear: both;
+  float: right;
+}
+
+#statuses-edit .statuses-chars {
+  float: none;
+}
+
+.statuses-profile-category .profile {
+  clear: none;
+}
+
+.statuses-update {
+  margin-bottom: 1em;
+  width: 100%;
+}
+
+.statuses-update #statuses-box {
+  margin-bottom: 0;
+}
+
+.statuses-item .clearfix:after { /* adopted from Fusion */
+  clear: both;
+  content: ".";
+  display: block;
+  font-size: 0;
+  height: 0;
+  line-height: 0;
+  overflow: auto;
+  visibility: hidden;
+}
+
+/* @group Textareas
+ * 
+ * Make textareas fit in their boxes by bubbling borders and padding up
+ * to a wrapper element.
+ */
+
+.statuses-textarea-wrapper {
+  border-style: solid;
+  border-width: 1px;
+  -moz-box-shadow: 1px 1px 0 rgba(0,0,0,0.4) inset, 2px 2px 2px rgba(0,0,0,0.3) inset;
+  -o-box-shadow: 1px 1px 0 rgba(0,0,0,0.4) inset, 2px 2px 2px rgba(0,0,0,0.3) inset;
+  -webkit-box-shadow: 1px 1px 0 rgba(0,0,0,0.4) inset, 2px 2px 2px rgba(0,0,0,0.3) inset;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4) inset, 2px 2px 2px rgba(0, 0, 0, 0.3) inset;
+  clear: both;
+  margin-bottom: 0;
+  margin-top: 0;
+  padding: 4px 2px 2px 4px;
+}
+
+.statuses-textarea-wrapper .form-item {
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+.statuses-textarea-wrapper textarea {
+  border: 0 none;
+  display: block;
+  line-height: 1.5em;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* @end */
+
+/* @group Buttons */
+
+.statuses-update .button {
+  border-style: solid;
+  border-width: 1px;
+  cursor: pointer;
+  margin: -1px 0 0;
+  padding: 0.6em 1.2em;
+}
+
+.statuses-submit {
+  background-color: transparent;
+  border-style: solid;
+  border-width: 0 1px 1px 1px;
+  float: right;
+  margin: 0;
+  padding: 0;
+}
+
+.statuses-back {
+  float: right;
+  margin: 0.5em;
+}
+
+/* @end */
+
+/* @group Entry items
+ *
+ * Media is a generic class for any presentation that generally includes a
+ * user image to one side and content to the other.
+ */
+
+.statuses-media > .user-picture {
+  float: left; /* LTR */
+  margin-right: 10px; /* LTR */
+}
+
+.statuses-media > .content {
+  overflow: hidden;
+}
+
+.statuses-media > .content > * {
+  margin-top: 0.25em;
+}
+
+.statuses-media > .content > :first-child {
+  margin-top: 0;
+}
+
+.statuses-media .statuses-links {
+  float: right;
+}
+
+.statuses-media .links li {
+  padding: 0;
+}
+
+.statuses-media .links li + li {
+  margin: 0 0 0 0.5em;
+}
+
+.statuses-subitem {
+  padding: 0.75em;
+}
+
+.statuses-subitem.form-piece {
+  padding-top: 0;
+}
+
+.statuses-item .links {
+  margin-bottom: 0;
+}
+
+/* @end */

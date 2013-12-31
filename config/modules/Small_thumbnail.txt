@@ -1,0 +1,3 @@
+Create new image style, named "small_square_thumb", with "Scale and crop" effect. Choose 75x75px dimension.
+
+go to admin/config/media/file-types/manage/image/file-display/media_small, tick "Image" and choose "square_small_thumb" as Image style.

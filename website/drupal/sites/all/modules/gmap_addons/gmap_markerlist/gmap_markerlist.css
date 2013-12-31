@@ -1,0 +1,17 @@
+
+/**
+ * @file
+ * GMap Marker List styles.
+ */
+
+div.gmap_markerlist {
+  overflow: auto;
+  background-color: white;
+  width: 150px;
+  height: 200px;
+}
+
+div.gmap_markerlist li {
+  border: 1px solid black;
+  cursor: pointer;
+}

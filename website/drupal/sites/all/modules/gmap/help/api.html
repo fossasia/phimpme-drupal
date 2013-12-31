@@ -1,0 +1,309 @@
+<em>This documentation is still in flux.</em>
+
+<p>The GMap API is a simple way to create Google Maps from a macro or PHP code. It allows other modules to integrate Google Maps into their Drupal site. Among other things, the GMap API can be used by theme developers to integrate Google maps into portions of their theme, or by developers to insert a map into any block of PHP.</p>
+
+<h2>CONCEPTS</h2>
+
+<dl>
+<dt>Baselayer</dt>
+<dd>The actual map (Street map, topological map, satellite imagery, etc.) that everything is being displayed upon. This may also be referred to as the "map type".</dd>
+
+<dt>GMap macro</dt>
+<dd>A GMap-specific text-based representation of a Google Map.</dd>
+
+<dt>Overlay</dt>
+<dd>A transparent layer drawn on top of the baselayer.</dd>
+</dl>
+
+<h2>PROGRAMMING API</h2>
+
+There are two methods of inserting a Google Map using the GMap API. You may either describe your map with an associative array, or you may use a GMap macro (introduced in README.txt). GMap macros are appropriate for creating maps via the web interface; GMap arrays are more appropriate if you are writing code to generate a complex map.
+
+<h2>Macros</h2>
+
+<p>Each attribute of a macro is separated by a "|" and uses an "=" to define that attribute. Possible attributes are center, width, height, zoom, type, control, align, id, markers, feed, line, circle, polygon, and rpolygon.</p>
+
+<p>**See the MACRO-DICTIONARY.txt for an explaination of each of these attributes.</p>
+
+<p>You can convert a macro into a GMap array with the function gmap_parse_macro(). If you need to parse a macro generated with an old version of GMap where the point format was longitude, latitude, set $version to 1: gmap_parse_macro($my_macro, 1); otherwise, you may omit it.</p>
+
+<pre>
+/**
+ * function gmap_parse_macro()
+ * Convert a macro string into a GMap array.
+ *
+ * @param $macro_text
+ *   Macro to process.
+ * @param $version
+ *   Version to treat macro as.
+ *   Set to 1 when processing very old macros, otherwise leave as is.
+ * @return
+ *   A GMap array.
+ */
+
+  // usage
+  $macro_text = "[gmap zoom=7 |center=41.9023,-87.5391 |width=600px |height=400px |control=Small |type=Map]";
+  $map_array = gmap_parse_macro($macro_text);
+</pre>
+
+<h2>GMap Array</h2>
+
+<p>The main map array is quite complex. Most of the features have a macro equivilent, but some of the more powerful constructs do not. The map array is processed and converted to a javascript object. Shapes are parsed by gmap_shapes.js and loaded by shapeloader_static.js.</p>
+
+<h3>Using the GMap Array</h3>
+<p>Once you build a GMap array, you can render it as a map using a theme function provided by GMap. Anything left out of your GMap array will be filled in with the default map settings, which can be changed on the <a href="base_url:admin/settings/gmap">GMap settings page</a>.</p>
+
+<p>**See GMAP-ARRAY-DICTIONARY.txt for explainations of each of the GMap array options.</p>
+
+<pre>
+  // a simple GMap array
+  $map_array1 = array(
+    'id' => "my-map",         // id attribute for the map
+    'width' => "100%",        // map width in pixels or %
+    'height' => "400px",      // map height in pixels
+    'latitude' => 41.9023,    // map center latitude
+    'longitude' => -87.5391,  // map center longitude
+    'zoom' => 7,              // zoom level
+    'maptype' => "Map",       // baselayer type
+    'controltype' => "Small"  // size of map controls
+  );
+  $element1 = array(
+    '#type' => 'gmap',
+    '#gmap_settings' => $map_array1,
+  );
+  $output1 = drupal_render($element1);
+
+  // a more elaborate example
+  $map_array2 = array(
+    'id' => 'example',
+    'maptype' => 'Terrain',
+    'width' => '400px',
+    'height' => '400px',
+    'latitude' => 12.345,
+    'longitude' => 12.345,
+    'zoom' => 4,
+    'align' => 'left',
+    'controltype' => 'Small',
+    'mtc' => 'standard',
+
+    'behavior' => array(
+      'locpick' => FALSE,
+      'nodrag' => FALSE,
+      'nokeyboard' => TRUE,
+      'overview' => TRUE,
+      'scale' => TRUE,
+    ),
+
+    'markers' => array(
+      array(
+        'text' => 'First Marker',
+        'longitude' => 39.3739522204,
+        'latitude' => -81.5681648254,
+        'markername' => 'lblue',
+      ),
+      array(
+        'text' => 'Second Marker',
+        'longitude' => 44.205835001,
+        'latitude' => -70.3674316406,
+        'markername' => 'orange',
+      ),
+    ),
+
+    'shapes' => array(
+      array(
+        'type' => "polygon",
+        'style' => array("000000", 3, 25, "ffff00", 45),
+        'points' => array(
+          array(43.667871610117494,-70.675048828125),
+          array(43.43696596521823,-70.0927734375),
+          array(43.9058083561574,-69.202880859375),
+          array(44.512176171071054,-69.796142578125),
+          array(43.667871610117494,-70.675048828125),
+        ),
+      ),
+      array(
+        'type' => "circle",
+        'style' => array("000000", 3, 25, "ffff00", 45),
+        'radius' => 0.7622248729082767,
+        'center' => array(39.3739522204, -81.5681648254),
+      ),
+    ),
+
+    'feeds' => array(
+      array(
+        'url' => 'http://earthquake.usgs.gov/eqcenter/catalogs/eqs7day-M5.xml',
+        'markername' => 'red',
+      ),
+    ),
+  );
+  $element2 = array(
+    '#type' => 'gmap',
+    '#gmap_settings' => $map_array2,
+  );
+  $output2 = drupal_render($element2);
+</pre>
+
+
+<!--
+
+STUFF ABOVE THIS POINT HAS BEEN REVIEWED AND UPDATED
+FOR THE UPCOMING GMAP RELEASE
+JULY 7 2008
+
+<h2>GMAP VIEWS API</h2>
+
+The GMap_views module also provides a small API for providing additional
+overlay data to the produced map. By defining:
+
+    function hook_GMap_views_handle_field($phases, $data)
+
+You can tell GMap which fields contain the geographic information it
+needs to plot the nodes on the map.
+
+There are two phases to the hook, 'discovery' and 'process'. During the
+discovery phase, your hook will be called once for each field in the
+view. If your module can transform this field into latitude and
+longitude coordinates, you should return a value. This value will be
+store and returned to you during the 'process' phase. This can be use-
+ful in caching information, such has how to process the data, etc.
+
+If your module cannot process this field, return NULL (the norm in most
+cases).
+
+In the 'process' phase, the $data arugment will contain two keys:
+
+- 'module' => this will hold the name of the field, the module that is
+being invoked (your module) and an 'extra' field, containing whatever
+you returned during the 'discovery' phase.
+- 'entry' => the views "entry" containing all the fields returned from
+the database/
+
+From this data you should return an array with keys "lat" and "lon".
+Gmap_views will use this array to plot the node on the map.
+
+
+STUFF AFTER THIS POINT IS MISCELLANEOUS DOCS
+PRESUMABLY CREATED FOR THE UPCOMING GMAP RELEASE
+STILL NEEDS REVIEW
+
+<h2>HOOK_GMAP</h2>
+
+*hook_GMap()* is a general hook for easily extending GMap.
+
+    function hook_GMap($op, &$map)
+
+###$op 'macro'###
+
+Test test test
+
+###$op 'pre_theme_map'###
+
+Test test test
+
+###$op 'macro_multiple'###
+
+Test test test
+
+###$op 'behaviors'###
+
+Test test test
+
+<h2>GMAP_VIEWS EXTENSIONS</h2>
+
+In Views 1.x, you need to use the "argument handling code" box to apply settings to a map view.
+
+You can set a custom macro with $view->GMap_macro.
+
+    $view->GMap_macro = '[GMap |behavior=+autozoom]';
+
+You can set the map object directly with $view->GMap_map.
+
+    $view->GMap_map = $map;
+
+Extensions to core map object:
+
+    $map = array(
+      '#settings' => array(
+        'behavior' => array(
+          // Fatmarkers is used to pass the raw views data in as markers.
+          // This is useful if you are doing custom processing on the javascript side.
+          'fatmarkers' => FALSE,
+        ),
+        'GMap_views' => array( // @@@ TODO: Actually *implement* this functionality!
+          // Set all markers to the same thing.
+          'forcemarkername' => 'drupal',
+
+          // Lookup table for marker names.
+          // Use in combination with markername.
+          'markername_map' => array(
+            'blog' => 'blue',
+            'story' => 'green',
+            'page' => 'pink',
+          ),
+          // OR
+          //
+          'markername_map' => 'my_custom_map_function',
+
+          // Views fields
+          // ============
+
+          // The field to use to determine the marker name.
+          // Use in combination with markername_map if the field doesn't contain
+          // marker names.
+          'markername' => 'my_custom_field',
+
+          // The field to use to determine the marker offset.
+          // If not set, it will be automatically tracked.
+          'markeroffset' => 'my_custom_field',
+
+          // Latitude and longitude.
+          'lat' => 'my_custom_field',
+          'lon' => 'my_custom_field',
+
+          'popup_theme' => 'my_custom_popup',
+        ),
+      ),
+    );
+
+
+(parse macro header, integrate back into docs.)
+/**
+ *
+ * Returns a variable based on .
+ *
+ * @param $instring
+ * A string with the settings of GMap insertion in the format var=setting|var2=setting2
+ *  The possible variables are
+ *  id - the id of the map every map on a page must have a unique id
+ *  width - width of the map
+ *  height - height of the map
+ *  center - a string of the longitude and latitude of the centre of the map
+ *  zoom - the zoom factor of the google map
+ *  align - the alignment of the map 'right', 'left' or 'center'
+ *  control - the control shown on the map 'Large', 'Small', or 'None'
+ *  type - 'Map', 'Hybrid' or 'Satellite'
+ *  points/markers - a string of points to mark on the map with + between
+ *          each point
+ *  line - the line is defined by a set of points separated by a +
+ *  The following shape types require XMaps:
+ *  circle - a circle based on a center point and a radius in km separated
+ *          by a + and optionally can include the number of sizes.
+ *  rpolygon - a regular polygon is defined by the center point and a point
+ *          on the permiter separated by a +
+ *  polygon - a polygon is defined by a set of points
+ *
+ *  Each of the shapes types can optionally have charecteristics of colour,
+ *  width, opacity, pattern, text, fill colour, fill opacity.  Pattern, text
+ *  and fill are all only used by xmaps.
+ *      color - hexadecimal for the colour include the '#'
+ *
+ *
+ * @return
+ * A string with the google map ready to be inserted into a node.
+ *
+ */
+
+<h2>UPDATING OLD MACROS</h2>
+
+This section still needs to be written.
+-->

@@ -1,0 +1,17 @@
+<div id='box-profile'>
+	<div id='box-header'>
+		<hgroup id='carousel-header'>
+			<div id='carousel-header-content' style='padding:20px'>
+				<div id='carousel-postcard'>
+					<a href='#'><img alt='Start your photo journal' src='sites/default/files/collage.png'></a>
+				</div>
+				<div id='intro'>
+					<h2>Start your photo journal!</h2>
+					<div class='desc'>Keep all your moment in your personal photo journal, and selectively share them with friends, family or the Phimp.me community.</div>
+					
+				<div><a class='create-button shiny-button' href='user/register'><span class='title'>Create my gallery</span></a><a class='create-button shiny-button muted' href='#'><img alt='Available on Android market' src='sites/default/files/android_button.png'></a></div>
+				</div>
+			</div>
+		</hgroup>
+	</div>
+</div>

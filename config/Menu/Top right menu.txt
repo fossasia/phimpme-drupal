@@ -1,0 +1,11 @@
+Go to admin/structure/menu/manage/user-menu
+Create these menu items
+- Around (Path: around)
+- [current-user:picture] (use token)
+    +- Logout
+- Android App
+
+set the custom Nice Menu CSS: sites/all/themes/mbm/css/custom_nice_menu.css
+(change in the setting of the theme).
+
+Hide the Nice Menu bundled blocks (Nice Menu 1 & Nice Menu 2) from display.

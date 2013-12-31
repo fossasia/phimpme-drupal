@@ -1,0 +1,150 @@
+#largeshow {
+    display: none;
+    float: right;
+    width: 550px;
+}
+#largeshow a, div.navigation a {
+    color: #777777;
+    text-decoration: none;
+}
+#largeshow a:focus, #largeshow a:hover, #largeshow a:active {
+    text-decoration: underline;
+}
+div.controls {
+    height: 23px;
+    margin-top: 5px;
+}
+div.controls a {
+    padding: 5px;
+}
+div.ss-controls {
+    float: left;
+}
+div.nav-controls {
+    float: right;
+}
+div.slideshow-container {
+    clear: both;
+    height: 502px;
+    position: relative;
+}
+div.loader {
+    background-image: url("loader.gif");
+    background-position: center center;
+    background-repeat: no-repeat;
+    height: 502px;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 550px;
+}
+div.slideshow {
+}
+div.slideshow span.image-wrapper {
+    display: block;
+    left: 0;
+    position: absolute;
+    top: 0;
+}
+div.slideshow a.advance-link {
+    display: block;
+    height: 502px;
+    line-height: 502px;
+    text-align: center;
+    width: 550px;
+}
+div.slideshow a.advance-link:hover, div.slideshow a.advance-link:active, div.slideshow a.advance-link:visited {
+    text-decoration: none;
+}
+div.slideshow img {
+    border: 1px solid #CCCCCC;
+    vertical-align: middle;
+    max-height: 400px;
+    max-width: 400px;
+    vertical-align: top;
+}
+div.download {
+    float: right;
+}
+div.caption-container {
+    clear: left;
+    height: 75px;
+    position: relative;
+}
+span.image-caption {
+    display: block;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 550px;
+}
+div.caption {
+    padding: 12px;
+}
+div.image-title {
+    font-size: 1.4em;
+    font-weight: bold;
+}
+div.image-desc {
+    line-height: 1.3em;
+    padding-top: 12px;
+}
+div.navigation {
+}
+ul.thumbs {
+    clear: both;
+    margin: 0;
+    padding: 0;
+}
+ul.thumbs li {
+    float: left;
+    list-style: none outside none;
+    margin: 5px 10px 5px 0;
+    padding: 0;
+}
+a.thumb {
+    border: 1px solid #CCCCCC;
+    display: block;
+    padding: 2px;
+}
+ul.thumbs li.selected a.thumb {
+    background: none repeat scroll 0 0 #000000;
+}
+a.thumb:focus {
+    outline: medium none;
+}
+ul.thumbs img {
+    border: medium none;
+    display: block;
+}
+div.pagination {
+    clear: both;
+}
+div.navigation div.top {
+    height: 11px;
+    margin-bottom: 12px;
+}
+div.navigation div.bottom {
+    margin-top: 12px;
+}
+div.pagination a, div.pagination span.current, div.pagination span.ellipsis {
+    border: 1px solid #CCCCCC;
+    display: block;
+    float: left;
+    margin-right: 2px;
+    padding: 4px 7px 2px;
+}
+div.pagination a:hover {
+    background-color: #EEEEEE;
+    text-decoration: none;
+}
+div.pagination span.current {
+    background-color: #000000;
+    border-color: #000000;
+    color: #FFFFFF;
+    font-weight: bold;
+}
+div.pagination span.ellipsis {
+    border: medium none;
+    padding: 5px 0 3px 2px;
+}

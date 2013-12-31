@@ -1,0 +1,30 @@
+<?php
+
+/**
+ * @file
+ *   Install, update and uninstall functions for the location_addanother module.
+ */
+
+/**
+ * Implementshook_install().
+ */
+function location_addanother_install() {
+  // Change weight so we execute after location.
+  db_update('system')
+    ->fields(array(
+      'weight' => 1,
+    ))
+    ->condition('name', 'location_addanother')
+    ->condition('type', 'module')
+    ->execute();
+}
+
+/**
+ * Implementshook_uninstall().
+ */
+function location_addanother_uninstall() {
+  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'location_addanother_%'")->fetchCol();
+  foreach ($result as $row) {
+    variable_del($row->name);
+  }
+}

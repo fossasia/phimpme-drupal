@@ -1,0 +1,100 @@
+<?php
+/**
+ * @file
+ * Variable API module - Database storage
+ * 
+ * This module provides database storage for variable realms
+ */
+
+/**
+ * Get variable store
+ */
+function &variable_store($realm, $key) {
+  static $variable_store;
+  if (!isset($variable_store)) {
+    $variable_store = &drupal_static('variable_store');
+  }
+  if (!isset($variable_store[$realm][$key])) {
+    $variable_store[$realm][$key] = variable_store_load($realm, $key);
+  }
+  return $variable_store[$realm][$key];
+}
+
+/**
+ * Implementation of hook_boot()
+ */
+function variable_store_boot() {
+  // Do nothing, we just want this module to be available for boot.
+}
+
+/**
+ * Delete variable from db
+ */
+function variable_store_del($realm, $key, $name, $rebuild = TRUE) {
+  $store = &variable_store($realm, $key);
+  db_delete('variable_store')
+    ->condition('realm', $realm)
+    ->condition('realm_key', $key)
+    ->condition('name', $name)
+    ->execute();
+  unset($store[$name]);
+  variable_realm_del($realm, $key, $name, $rebuild);
+}
+
+/**
+ * Get single variable from store
+ */
+function variable_store_get($realm, $key, $name, $default = NULL) {
+  if ($variables = variable_store($realm, $key)) {
+    return isset($variables[$name]) ? $variables[$name] : $default;
+  }
+  else {
+    return $default;
+  }
+}
+
+/**
+ * Initialize realm from variable store
+ */
+function variable_store_initialize($realm, $key) {
+  $variables = variable_store($realm, $key);
+  variable_realm_add($realm, $key, $variables); 
+}
+
+/**
+ * Load realm from db store
+ */
+function variable_store_load($realm, $key) {
+  $cacheid = 'variable:' . $realm . ':' . $key;
+  if ($cached = cache_get($cacheid, 'cache_bootstrap')) {
+    $variables = $cached->data;
+  }
+  else {
+    $result = db_select('variable_store', 's')
+      ->fields('s', array('name', 'value', 'serialized'))
+      ->condition('realm', $realm)
+      ->condition('realm_key', $key)
+      ->execute();
+    $variables = array();
+    foreach ($result as $variable) {
+      $variables[$variable->name] = $variable->serialized ? unserialize($variable->value) : $variable->value;
+    }
+    cache_set($cacheid, $variables, 'cache_bootstrap');
+  }
+  return $variables;
+}
+
+/**
+ * Set variable value
+ */
+function variable_store_set($realm, $key, $name, $value, $rebuild = TRUE) {
+  $store = &variable_store($realm, $key);
+  $serialize = !is_int($value) && !is_string($value);
+  db_merge('variable_store')
+    ->key(array('realm' => $realm, 'realm_key' => $key, 'name' => $name))
+    ->fields(array('value' => $serialize ? serialize($value) : $value, 'serialized' => $serialize ? 1 : 0))
+    ->execute();
+  cache_clear_all('variable:' . $realm . ':' . $key, 'cache_bootstrap');
+  $store[$name] = $value;
+  variable_realm_set($realm, $key, $name, $value, $rebuild);
+}

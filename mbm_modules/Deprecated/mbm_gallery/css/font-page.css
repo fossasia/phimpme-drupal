@@ -1,0 +1,136 @@
+/*
+ * CSS for front page
+ * */
+div#zone-content,
+div#region-content{
+width:100%;
+margin:0;
+padding-top:15px;
+}
+
+div#box-profile{
+    margin:auto;
+    width: 800px
+}
+
+hgroup#carousel-header{
+background:#bfbfbf;
+border-color:white white white;
+border-style: solid solid none;
+border-width: 3px 3px 0;
+height:auto;
+}
+
+div#content-carousel{
+border:3px solid white;
+background:white;
+}
+
+div#content-carousel div.carousel-title{
+background: none repeat scroll 0 0 rgba(0, 0, 0, 0.698);
+color: #FFFFFF;
+font-size: 90%;
+height: auto;
+opacity: 0;
+position: absolute;
+top: 0;
+width: 100%;
+z-index: 2;
+}
+
+div#content-carousel div.carousel-title span.padder{
+display:inline-block;
+padding:13px;
+}
+
+#carousel-postcard{
+float: right;
+}
+
+#carousel-header-content h2{
+font-family: serif;
+font-size: 36px !important;
+font-weight: 100;
+margin-top: 5px !important;
+margin-bottom: 20px !important;
+}
+
+#carousel-postcard img{
+}
+
+#intro div {
+    font-family: sans-serif
+}
+
+#intro .desc {
+    margin-bottom: 20px
+}
+
+a.create-button {
+border-radius: 5px 5px 5px 5px;
+font-size: 110%;
+height: 58px;
+margin-right: 5px;
+text-decoration:none !important;
+}
+
+a.shiny-button {
+background: -moz-linear-gradient(center top , #99CCFF, #3366CC) repeat scroll 0 0 #3366CC;
+background-image: -webkit-gradient(linear,left top,left bottom,from(#9cf),to(#36c));
+background-image: -webkit-linear-gradient(top,#9cf,#36c);
+border: 1px solid black;
+border-radius: 3px 3px 3px 3px;
+color: #E8E8E8;
+display: inline-block;
+line-height: 27px;
+text-decoration: none;
+vertical-align: top;
+}
+
+a.shiny-button:active {
+background: #9CF;
+background-image: -webkit-gradient(linear,left top,left bottom,from(#36c),to(#9cf));
+background-image: -webkit-linear-gradient(top,#36c,#9cf);
+background-image: -moz-linear-gradient(top,#36c,#9cf);
+}
+
+a.shiny-button:hover {
+box-shadow: 0 0 10px 5px rgba(255,255,255,.2);
+color: white;
+}
+
+a, a:active, a:visited {
+text-decoration: none;
+}
+
+a.create-button span.title {
+font-size: 110%;
+line-height: 58px;
+padding: 0 20px;
+}
+
+a.shiny-button span.title {
+font-weight: bold;
+}
+
+.android-button{
+background:url('../images/android_button.png') no-repeat center center transparent !important;
+}
+
+#content-carousel .carousel_title span.padder{
+display:inline-block;
+padding:13px;
+}
+
+#content-carousel .carousel_title{
+-moz-transition: opacity 0.2s ease-in-out 0s;
+background: none repeat scroll 0 0 rgba(0, 0, 0, 0.698);
+color: #FFFFFF;
+font-size: 90%;
+height: auto;
+opacity: 0;
+position: absolute;
+top: 0;
+width: 100%;
+z-index: 2;
+}

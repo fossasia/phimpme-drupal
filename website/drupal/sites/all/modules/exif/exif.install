@@ -1,0 +1,70 @@
+<?php
+/**
+ * @file the install part of the module
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function exif_install() {
+  variable_set('exif_update',TRUE);
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function exif_uninstall() {
+  variable_del('exif_update');
+}
+
+/**
+ * implementation of hook_requirements
+ * @param $phase
+ */
+function exif_requirements($phase) {
+  $t = get_t();
+  $requirements = array();
+  if ($phase == 'runtime' || $phase == 'install') {
+    if (!function_exists('exif_read_data')) {
+      $requirements['exif_read_data'] = array(
+        'title' => $t('EXIF library is not available'),
+        'description' => $t('The Function exif_read_data is not available on the system. Please ensure the PHP module named EXIF has been installed.'),
+        'value' => $t('EXIF library is not available'),
+        'severity' => REQUIREMENT_ERROR,
+      );
+    }
+    if (!function_exists('iptcparse')) {
+      $requirements['iptcparse'] = array(
+        'title' => $t('IPTC library is not available'),
+        'description' => $t('The Function iptcparse is not available on the system. Please ensure the PHP module named GD has been installed.'),
+        'value' => $t('GD library is not available'),
+        'severity' => REQUIREMENT_ERROR,
+      );
+    }
+    if (!function_exists('GetImageSize')) {
+      $requirements['GetImageSize'] = array(
+        'title' => $t('Image library is not available'),
+        'description' => $t('The Function GetImageSize is not available on the system. Please ensure the PHP module named GD has been installed.'),
+        'value' => $t('GD library is not available'),
+        'severity' => REQUIREMENT_ERROR,
+      );
+    }
+    if (!function_exists('mb_convert_encoding')) {
+      $requirements['mb_convert_encoding'] = array(
+        'title' => $t('Multibyte library is not available'),
+        'description' => $t('The Function mb_convert_encoding is not available on the system. Please ensure the PHP module named php-mbstring has been installed.'),
+        'value' => $t('php-mbstring library is not available'),
+        'severity' => REQUIREMENT_ERROR,
+      );
+    }
+    if (!class_exists('SXMPFiles')) {
+      $requirements['SXMPFiles'] = array(
+        'title' => $t('XMP library is not available'),
+        'description' => $t('Functions SXMP are not available on the system. XMP metadata will not be extracted.'),
+        'value' => $t('SXMP library is not available'),        
+        'severity' => REQUIREMENT_WARNING,
+      );
+    }
+  }
+  return $requirements;
+}

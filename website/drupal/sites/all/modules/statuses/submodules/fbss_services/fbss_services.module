@@ -1,0 +1,162 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Services with Statuses.
+ */
+
+/**
+ * Implements hook_services_resources().
+ */
+function fbss_services_services_resources() {
+  module_load_include('inc', 'fbss_services', 'fbss_services.resources');
+  $resources = array(
+    'status' => array(
+      'file' => array(
+        'type' => 'inc',
+        'module' => 'fbss_services',
+      ),
+    ),
+  );
+  $resources['status'] += fbss_services_operations_resources();
+  $resources['status']['actions'] = fbss_services_actions_resources();
+  return $resources;
+}
+
+/**
+ * Services doesn't load the right file before the access callback gets called.
+ */
+function fbss_services_extended_access() {
+  module_load_include('inc', 'fbss_services', 'fbss_services.extended');
+  $args = func_get_args();
+  $callback = array_shift($args);
+  return call_user_func_array($callback, $args);
+}
+
+/**
+ * Services doesn't load the right file before the access callback gets called.
+ */
+function _fbss_services_access($action) {
+  module_load_include('inc', 'fbss_services');
+  return fbss_services_access($action);
+}
+
+//===========================
+// DEEP, DARK SERVICES MAGIC
+//===========================
+
+/**
+ * Implements hook_services_resources_post_processing_alter().
+ *
+ * Force Services to choose the right action instead of delegating to the
+ * default operations based on the request method.
+ */
+function fbss_services_services_resources_post_processing_alter(&$resources, $endpoint) {
+  // Gather the information we need to resolve the controller.
+  list($resource_name, $resource, $method, $path) = fbss_services_get_resource_params($resources, $endpoint);
+  // Detect what controller RESTServer->resolveController() would choose.
+  $bad_key = fbss_services_bad_resolve_controllers($resource, $method, $path);
+  // Replace the detected controller with the one we want, if they are different.
+  if ($bad_key !== NULL) {
+    $good_controller = fbss_services_good_resolve_controllers($resource, $method, $path);
+    if ($good_controller !== NULL) {
+      $resources[$resource_name][$bad_key] = $good_controller;
+    }
+  }
+}
+
+// BEGIN IMITATING SERVICES
+
+/**
+ * Do what the Services module does to get the information it needs to detect which controller to use.
+ */
+function fbss_services_get_resource_params($resources, $endpoint) {
+  module_load_include('inc', 'services', 'services.runtime');
+
+  $canonical_path = fbss_services_get_canonical_path();
+  $method = fbss_services_get_method();
+
+  // @see RESTServer->handle()
+  $path = explode('/', $canonical_path);
+  $leaf = array_pop($path);
+  $resource_name = array_shift($path);
+  $matches = array();
+  if ($leaf && preg_match('/^(.+)\.([^\.]+)$/', $leaf, $matches)) {
+    $leaf = $matches[1];
+  }
+  if ($leaf) {
+    if (!$resource_name) {
+      $resource_name = $leaf;
+    }
+    else {
+      array_push($path, $leaf);
+    }
+  }
+  if (!empty($resource_name) && isset($resources[$resource_name])) {
+    $resource = $resources[$resource_name];
+  }
+
+  return array($resource_name, $resource, $method, $path);
+}
+
+// @see rest_server_server()
+/**
+ * @todo Please document this function.
+ * @see http://drupal.org/node/1354
+ */
+function fbss_services_get_canonical_path() {
+  $endpoint_path = services_get_server_info('endpoint_path', 'services/rest');
+  $canonical_path = trim(substr($_GET['q'], drupal_strlen($endpoint_path)), '/');
+  $canonical_path = explode('/', $_GET['q']);
+  $endpoint_path_count = count(explode('/', $endpoint_path));
+  for ($x = 0; $x < $endpoint_path_count; $x++) {
+    array_shift($canonical_path);
+  }
+  return implode('/', $canonical_path);
+}
+
+// @see RESTServer->handle()
+/**
+ * @todo Please document this function.
+ * @see http://drupal.org/node/1354
+ */
+function fbss_services_get_method() {
+  $method = $_SERVER['REQUEST_METHOD'];
+  if ($method == 'POST' && isset($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'])) {
+    $method = $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'];
+  }
+  if ($method == 'POST' && (isset($_GET['_method']) && $_GET['_method'])) {
+    $method = $_GET['_method'];
+  }
+  return $method;
+}
+
+/**
+ * Returns the KEY of the $resource array for the controller that RESTServer->resolveController() would use.
+ *
+ * @see RESTServer->resolveController()
+ */
+function fbss_services_bad_resolve_controllers($resource, $method, $path) {
+  if (count($path) == 1 && $method == 'GET') {
+    if (isset($resource['retrieve'])) {
+      return 'retrieve';
+    }
+  }
+}
+
+// END IMITATING SERVICES
+
+/**
+ * Returns the correct CONTROLLER from the $resource array.
+ * This is where we select which controller gets used for a given request.
+ *
+ * This only runs if fbss_services_bad_resolve_controllers() returned
+ * something, so we only have to operate under the conditions in which that
+ * happens.
+ */
+function fbss_services_good_resolve_controllers($resource, $method, $path) {
+  // See if we have an action that matches the path we're looking at and if so let's use it instead.
+  if (isset($resource['actions'][$path[0]]) && isset($resource['actions'][$path[0]]['method']) && $resource['actions'][$path[0]]['method'] == $method) {
+    return $resource['actions'][$path[0]];
+  }
+}

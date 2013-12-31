@@ -1,0 +1,107 @@
+<?php
+
+/**
+ * @file
+ * Associate locations with taxonomy terms.
+ */
+
+/**
+ * NOTE: At the moment, you'll have to do your own theming.
+ * To load locations for a tid:
+ * $locations = location_load_locations('taxonomy:'. $tid, 'genid');
+ */
+
+/**
+ * Implements hook_taxonomy_vocabulary_delete().
+ */
+function location_taxonomy_taxonomy_vocabulary_delete($vocabulary) {
+  variable_del('location_taxonomy_' . $vocabulary->vid);
+}
+
+/**
+ * Implements hook_taxonomy_term_delete().
+ */
+function location_taxonomy_taxonomy_term_delete($term) {
+  $locations = array();
+  location_save_locations($locations, array('genid' => 'taxonomy:' . $term->tid));
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function location_taxonomy_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'taxonomy_form_vocabulary') {
+    $settings = array();
+    if (isset($form['vid'])) {
+      $settings = variable_get('location_taxonomy_' . $form['vid']['#value'], array());
+    }
+    $form['location_settings'] = location_settings($settings);
+    $form['#submit'][] = 'location_taxonomy_vocabulary_form_submit';
+  }
+  if ($form_id == 'taxonomy_form_term') {
+    $vid = $form['vid']['#value'];
+    $settings = variable_get('location_taxonomy_' . $vid, FALSE);
+    if ($settings && $settings['multiple']['max']) {
+      $locations = array();
+      if (isset($form['tid']) && $form['tid']['#value']) {
+        $locations = location_load_locations('taxonomy:' . $form['tid']['#value'], 'genid');
+      }
+      $form['locations'] = location_form($settings, $locations);
+      $form['#submit'][] = 'location_taxonomy_term_form_submit';
+    }
+  }
+
+  // Move the Save and Delete buttons down below our additions.
+  if ($form_id == 'taxonomy_form_vocabulary' || $form_id == 'taxonomy_form_term') {
+    if (isset($form['submit']['#weight'])) {
+      $form['submit']['#weight']++;
+    }
+    else {
+      $form['submit']['#weight'] = 1;
+    }
+    if (isset($form['delete'])) {
+      if (isset($form['delete']['#weight'])) {
+        $form['delete']['#weight'] += 2;
+      }
+      else {
+        $form['delete']['#weight'] = 2;
+      }
+    }
+  }
+}
+
+/**
+ * Submit handler for the vocabulary add/edit form.
+ */
+function location_taxonomy_vocabulary_form_submit($form, &$form_state) {
+  if (isset($form_state['values']['location_settings'])) {
+    variable_set('location_taxonomy_' . $form_state['values']['vid'], $form_state['values']['location_settings']);
+  }
+}
+
+/**
+ * Submit handler for the term add/edit form.
+ */
+function location_taxonomy_term_form_submit($form, &$form_state) {
+  $settings = variable_get('location_taxonomy_' . $form_state['values']['vid'], FALSE);
+  if ($settings && $settings['multiple']['max']) {
+    location_save_locations($form_state['values']['locations'], array('genid' => 'taxonomy:' . $form_state['values']['tid']));
+  }
+}
+
+/**
+ * Implements hook_locationapi().
+ */
+function location_taxonomy_locationapi(&$obj, $op, $a3 = NULL, $a4 = NULL, $a5 = NULL) {
+  switch ($op) {
+    case 'instance_links':
+      foreach ($obj as $k => $v) {
+        if (substr($v['genid'], 0, 9) == 'taxonomy:') {
+          $data = explode(':', $v['genid']);
+          $obj[$k]['href'] = 'taxonomy/term/' . $data[1];
+          $obj[$k]['title'] = t('Term location');
+          $obj[$k]['type'] = t('Taxonomy location');
+        }
+      }
+  }
+}

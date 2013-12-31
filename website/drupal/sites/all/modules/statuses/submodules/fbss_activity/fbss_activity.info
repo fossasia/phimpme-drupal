@@ -1,0 +1,14 @@
+name = Statuses Activity
+description = "Integrates Activity 2 with Statuses."
+package = Statuses
+dependencies[] = statuses
+dependencies[] = activity
+core = 7.x
+files[] = fbss_activity.module
+
+; Information added by drupal.org packaging script on 2012-03-15
+version = "7.x-1.0-unstable4"
+core = "7.x"
+project = "statuses"
+datestamp = "1331785844"
+

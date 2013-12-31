@@ -1,0 +1,200 @@
+
+/* Views Galleriffic default css
+ * Based off of css from original: http://www.twospy.com/galleriffic/index.html
+ */
+
+#galleriffic {
+  width: 700px;
+}
+#galleriffic #thumbs {
+  float: left;
+  height: 90px;
+  width: 700px;
+  overflow: hidden;
+  margin-left: 9px;
+}
+#controls {
+  width: 700px;
+}
+#galleriffic .loader {
+  background-image: url('loader.gif');
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 700px;
+  height: 350px
+}
+#galleriffic #caption {
+  position: relative;
+  margin: 0 7px 0 0;
+  width: 180px;
+  float: left;
+}
+#slideshow-container {
+  width: 700px;
+  position: relative;
+  float: left;
+  padding: 0 0 10px 0;
+  background-color: black;
+}
+#galleriffic .content a, #galleriffic .navigation a {
+  text-decoration: none;
+  color: #777;
+}
+#galleriffic .content  a:focus, #galleriffic .content  a:hover, #galleriffic .content  a:active {
+  text-decoration: underline;
+}
+#galleriffic .controls a {
+  font-size: .8em
+}
+#galleriffic .controls a.prev {
+  padding: 0 10px;
+}
+#galleriffic .ss-controls {
+  float: left;
+}
+#galleriffic .nav-controls {
+  float: right;
+}
+#galleriffic .slideshow {
+  position: relative;
+}
+#galleriffic .slideshow img {
+  border: none;
+  display: block;
+}
+#galleriffic .download {
+  float: right;
+}
+#galleriffic .image-title {
+  font-weight: bold;
+  font-size: 1.2em;
+}
+#galleriffic .image-desc {
+  line-height: .9em;
+  padding-top: 4px;
+}
+#galleriffic ul.thumbs {
+  margin: 0;
+  padding: 0;
+}
+#galleriffic ul.thumbs li {
+  float: left;
+  padding: 0;
+  margin: 0px 10px 5px 0;
+  list-style: none;
+}
+#galleriffic a.thumb {
+  padding: 2px;
+  display: block;
+  border: 1px solid #ccc;
+}
+#galleriffic ul.thumbs li.selected a.thumb {
+   background: #000;
+}
+#galleriffic a.thumb:focus {
+  outline: none;
+}
+#galleriffic ul.thumbs img {
+  border: none;
+  display: block;
+}
+#galleriffic .pagination {
+  clear: both;
+}
+#galleriffic .navigation.top {
+  margin-bottom: 12px;
+  height: 11px;
+}
+#galleriffic .navigation.bottom {
+  margin-top: 12px;
+}
+#galleriffic .pagination a, #galleriffic .pagination span.current {
+  display: block;
+  float: left;
+  margin-right: 2px;
+  padding: 4px 7px 2px 7px;
+  border: 1px solid #ccc;
+}
+#galleriffic .pagination a:hover {
+  background-color: #eee;
+  text-decoration: none;
+}
+#galleriffic .pagination span.current {
+  font-weight: bold;
+  background-color: #000;
+  border-color: #000;
+  color: #fff;
+}
+#galleriffic .slideshow,
+#galleriffic .loader,
+#galleriffic .slideshow a.advance-link {
+  clear: both;
+}
+#galleriffic .slideshow-container {
+  position: relative;
+  clear: both;
+  float: left;
+}
+#galleriffic .loader {
+  position: absolute;
+  background-image: url('loader.gif');
+  background-repeat: no-repeat;
+  background-position: center;
+}
+#galleriffic .slideshow span.image-wrapper {
+  display: block;
+  position: absolute;
+  left: 0;
+}
+#galleriffic .slideshow a.advance-link {
+  display: block;
+  line-height: 402px; /* This should be set to be at least the height of the largest image in the slideshow with padding */
+  text-align: center;
+  display: block;
+}
+#galleriffic .slideshow a.advance-link img {
+  padding: 2px;
+  border: 1px solid #ccc;
+}
+#galleriffic .slideshow a.advance-link:hover,
+#galleriffic .slideshow a.advance-link:active,
+#galleriffic .slideshow a.advance-link:visited {
+  text-decoration: none;
+}
+#galleriffic .caption {
+  padding: 0 5px;
+}
+#galleriffic span.image-wrapper {
+  top: 0;
+  width: 100%;
+  position: absolute;
+  text-align: center;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+#galleriffic span.image-caption {
+  top: 0;
+  left: 0;
+  position: absolute;
+  display: block;
+}
+#galleriffic .ellipsis {
+  float: left;
+}
+#galleriffic a.pageLink {
+  display: block;
+  position: relative;
+  float: left;
+  margin: 2px;
+  width: 16px;
+  background-position: center center;
+  background-repeat: no-repeat;
+  height: 77px;
+}
+
+#galleriffic a.pageLink.next {
+  background-image: url(nextPageArrow.gif);
+}
+#galleriffic a.pageLink.prev {
+  background-image: url(prevPageArrow.gif);
+}

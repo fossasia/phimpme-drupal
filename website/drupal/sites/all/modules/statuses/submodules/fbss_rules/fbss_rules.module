@@ -1,0 +1,29 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Rules with Statuses.
+ */
+
+/**
+ * Implements hook_statuses_delete().
+ */
+function fbss_rules_statuses_delete($status, $meta = array()) {
+  if (empty($meta['has attachment'])) {
+    rules_invoke_event('statuses_delete', $status);
+  }
+}
+
+/**
+ * Implements hook_statuses_save().
+ */
+function fbss_rules_statuses_save($status, $context, $edit, $options) {
+  if (empty($options['has attachment'])) {
+    if ($edit) {
+      rules_invoke_event('statuses_edit', $status/*, $context*/);
+    }
+    else {
+      rules_invoke_event('statuses_save', $status/*, $context*/);
+    }
+  }
+}

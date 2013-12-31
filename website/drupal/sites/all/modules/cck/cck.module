@@ -1,0 +1,370 @@
+<?php
+/**
+ * @file
+ * Allows administrators to use php code snippets to
+ * define allowed values or default values. The snippets
+ * are stored in a database table and retrieved in
+ * callback functions.
+ */
+
+/**
+ * Implementation of hook_perm().
+ */
+function cck_permission() {
+  return array(
+    // TODO : simplify machine name and update existing perms ?
+    'Use PHP input for field settings (dangerous - grant with care)' => array(
+      'title' => t('Use PHP input for field settings'),
+      'description' => t('Enter PHP code in the field for the field settings that allow it. Warning: Give to trusted roles only; this permission has security implications.'),
+    ),
+  );
+}
+
+/**
+ * Add fields to allowed values form to allow
+ * users to input a function or a PHP snippet
+ * that will return the allowed values.
+ */
+function cck_form_alter(&$form, $form_state, $form_id) {
+  switch ($form_id) {
+    case 'field_ui_field_settings_form':
+      $field = field_info_field($form['field']['field_name']['#value']);
+      if ($field['module'] == 'list') {
+        // @todo : core should put that for us.
+        $form['#field'] = $field;
+        cck_allowed_values_form($form, $form_state, $field);
+        $form['#validate'][] = 'cck_allowed_values_validate';
+      }
+      break;
+    case 'field_ui_field_edit_form':
+      $field = $form['#field'];
+      if ($field['module'] == 'list') {
+        cck_default_value_form($form, $form_state, $field);
+        cck_allowed_values_form($form, $form_state, $field);
+        $form['#validate'][] = 'cck_allowed_values_validate';
+        $form['#validate'][] = 'cck_default_value_validate';
+      }
+      break;
+  }
+}
+
+/**
+ * Add fields to allowed values form to allow
+ * users to input a function or a PHP snippet
+ * that will return the allowed values.
+ */
+function cck_allowed_values_form(&$form, $form_state, $field) {
+  $php_code = cck_field_get_setting('allowed_values_php', 'field', $field);
+  $allowed_values_function = $form['field']['settings']['allowed_values_function']['#value'];
+  if (!empty($php_code)) {
+    $allowed_values_function = 'cck_allowed_values_php';
+  }
+
+  // Add a field where users can specify some PHP
+  // code that will return the allowed values list.
+  $form['field']['settings']['allowed_values_php'] = array(
+    '#access' => user_access('Use PHP input for field settings (dangerous - grant with care)'),
+    '#type' => 'textarea',
+    '#title' => t('Allowed values PHP code'),
+    '#default_value' => $php_code,
+    '#description' => t('Advanced usage only: PHP code that returns an array of allowed values. Should not include &lt;?php ?&gt; delimiters. If this field is filled out, the value returned by this code will be used as the response to the function <strong>cck_allowed_values_php</strong> and will override any other allowed values list or function specified above. Expected format: <pre>!sample</pre>', array(
+      '!sample' => t("return array(\n  value_1 => label_1,\n  value_2 => label_2\n  ...\n);"),
+    )),
+    '#weight' => 5,
+  );
+
+  // Add a field where users can specify a function
+  // to return the allowed values list.
+  $form['field']['settings']['allowed_values_function'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Allowed values function'),
+    '#default_value' => $allowed_values_function,
+    '#description' => t('The name of a function that will return the allowed values list.'),
+    '#weight' => 6,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="field[settings][allowed_values_php]"]' => array('empty' => TRUE),
+      ),
+    )
+  );
+}
+
+/**
+ * Add fields to default value form to allow
+ * users to input a function or a PHP snippet
+ * that will return the default values.
+ */
+function cck_default_value_form(&$form, $form_state, $field) {
+  $instance = field_info_instance($form['instance']['entity_type']['#value'], $field['field_name'], $form['instance']['bundle']['#value']);
+  $default_value_function = !empty($instance['default_value_function']) ? $instance['default_value_function'] : '';
+  $php_code = cck_field_get_setting('default_value_php', 'instance', $field, $instance);
+  if (!empty($php_code)) {
+    $default_value_function = 'cck_default_value_php';
+  }
+
+  // Add a field where users can specify some PHP
+  // code that will return the default value.
+  module_load_include('install', $field['module']);
+  $schema = module_invoke($field['module'], 'field_schema', $field);
+  $columns = array_keys($schema['columns']);
+  $sample = t("return array(\n  0 => array(@columns),\n  // You'll usually want to stop here. Provide more values\n  // if you want your 'default value' to be multi-valued:\n  1 => array(@columns),\n  2 => ...\n);", array('@columns' => implode(', ', $columns)));
+
+  $form['instance']['default_value_widget']['default_value_php'] = array(
+    '#access' => user_access('Use PHP input for field settings (dangerous - grant with care)'),
+    '#type' => 'textarea',
+    '#title' => t('Default value PHP code'),
+    '#default_value' => $php_code,
+    '#description' => t('Advanced usage only: PHP code that returns a default value. Should not include &lt;?php ?&gt; delimiters. If this field is filled out, the value returned by this code will be used as the response to the function <strong>cck_default_value_php</strong> and will override any other default value or function specified above. Expected format: <pre>!sample</pre>To figure out the expected format, you can use the <em>devel load</em> tab provided by <a href="@link_devel">devel module</a> on a content page.', array(
+      '!sample' => $sample,
+      '@link_devel' => 'http://www.drupal.org/project/devel',
+    )),
+    '#weight' => 5,
+    '#parents' => array('instance', 'default_value_php'),
+  );
+
+  // Add a field where users can specify a function
+  // to return the default value.
+  $form['instance']['default_value_widget']['default_value_function'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Default value function'),
+    '#default_value' => $default_value_function,
+    '#description' => t('The name of a function that will return the default value.'),
+    '#states' => array(
+      'visible' => array(
+        ':input[name="instance[default_value_php]"]' => array('empty' => TRUE),
+      ),
+    ),
+    '#weight' => 6,
+    '#parents' => array('instance', 'default_value_function'),
+  );
+}
+
+/**
+ * Validation handler to store php allowed values.
+ */
+function cck_allowed_values_validate(&$form, &$form_state) {
+  $field = $form['#field'];
+
+  $php_code = $form_state['values']['field']['settings']['allowed_values_php'];
+  $allowed_values_function = $form_state['values']['field']['settings']['allowed_values_function'];
+  if (!empty($php_code)) {
+    $allowed_values_function = 'cck_allowed_values_php';
+  }
+  elseif (empty($php_code) && $allowed_values_function == 'cck_allowed_values_php') {
+    $allowed_values_function = '';
+  }
+  form_set_value($form['field']['settings']['allowed_values_function'], $allowed_values_function, $form_state);
+  // @todo This should be done at submit time, not validate.
+  cck_field_set_setting('allowed_values_php', 'field', $php_code, $field);
+}
+
+/**
+ * Validation handler to store php default values.
+ */
+function cck_default_value_validate(&$form, &$form_state) {
+  $field = $form['#field'];
+  $instance = $form['#instance'];
+
+  $default_value_function = $form_state['values']['instance']['default_value_function'];
+  $php_code = $form_state['values']['instance']['default_value_php'];
+  if (!empty($php_code)) {
+    $default_value_function = 'cck_default_value_php';
+  }
+  elseif (empty($php_code) && $default_value_function == 'cck_default_value_php') {
+    $default_value_function = '';
+  }
+  form_set_value($form['instance']['default_value_widget']['default_value_function'], $default_value_function, $form_state);
+  // @todo This should be done at submit time, not validate.
+  cck_field_set_setting('default_value_php', 'instance', $php_code, $field, $instance);
+}
+
+
+function cck_debug_field_info() {
+  if (function_exists('dsm')) {
+    module_load_include('inc', 'field', 'field.info');
+    dsm(_field_info_collate_types());
+    dsm(_field_info_collate_fields());
+    return '';
+  }
+  else {
+    return t('You need to enable devel.module to see this page');
+  }
+}
+
+/**
+ * We store all settings in a flat text field, but some settings
+ * will be arrays that need to be serialized and unserialized,
+ * like the default_value.
+ */
+function cck_serialized_settings() {
+  return array('default_value');
+}
+
+/**
+ * Helper function to retrieve field settings stored by CCK.
+ *
+ * CCK uses the 'cck_field_settings' table to store custom settings
+ * not used by core.
+ *
+ * Field settings will have no $instance nor a db bundle column.
+ */
+function cck_field_get_setting($setting, $setting_type, $field, $instance = NULL, $langcode = LANGUAGE_NONE) {
+  if ($setting_type == 'field' || empty($instance)) {
+    $value = db_select('cck_field_settings', 'fs')->fields('fs', array('setting_option'))
+      ->condition('fs.field_name', $field['field_name'])
+      ->condition('fs.setting', $setting)
+      ->condition('fs.setting_type', $setting_type)
+      ->execute()->fetchField();
+  }
+  else {
+    $value = db_select('cck_field_settings', 'fs')->fields('fs', array('setting_option'))
+      ->condition('fs.field_name', $field['field_name'])
+      ->condition('fs.entity_type', $instance['entity_type'])
+      ->condition('fs.bundle', $instance['bundle'])
+      ->condition('fs.language', $langcode)
+      ->condition('fs.setting', $setting)
+      ->condition('fs.setting_type', $setting_type)
+      ->execute()->fetchField();
+  }
+
+  if (in_array($setting, cck_serialized_settings())) {
+    $value = unserialize($value);
+  }
+  return $value;
+}
+
+/**
+ * Helper function to set field settings stored by CCK.
+ *
+ * CCK uses the 'cck_field_settings' table to store custom settings
+ * not used by core.
+ *
+ * Field settings will have no $instance nor a db bundle column.
+ */
+function cck_field_set_setting($setting, $setting_type, $value, $field, $instance = NULL, $langcode = LANGUAGE_NONE) {
+  // Delete any prior values.
+  $bundle = ($setting_type == 'field' || empty($instance)) ? NULL : $instance['bundle'];
+  $entity_type = ($setting_type == 'field' || empty($instance)) ? NULL : $instance['entity_type'];
+  if ($setting_type == 'field' || empty($instance)) {
+    db_delete('cck_field_settings')
+      ->condition('field_name', $field['field_name'])
+      ->condition('setting', $setting)
+      ->condition('setting_type', $setting_type)
+      ->execute();
+  }
+  else {
+    db_delete('cck_field_settings')
+      ->condition('field_name', $field['field_name'])
+      ->condition('entity_type', $entity_type)
+      ->condition('bundle', $bundle)
+      ->condition('language', $langcode)
+      ->condition('setting', $setting)
+      ->condition('setting_type', $setting_type)
+      ->execute();
+  }
+  // Create the new values.
+  if (in_array($setting, cck_serialized_settings())) {
+    $value = serialize($value);
+  }
+  $record = array(
+    'field_name' => $field['field_name'],
+    'entity_type' => $entity_type,
+    'bundle' => $bundle,
+    'language' => $langcode,
+    'setting' => $setting,
+    'setting_option' => $value,
+    'setting_type' => $setting_type,
+  );
+  $primary_keys = array();
+  drupal_write_record('cck_field_settings', $record, $primary_keys);
+}
+
+/**
+ * Callback to return default value constructed
+ * from php code snippet.
+ */
+function cck_default_value_php($entity_type, $entity, $field, $instance, $langcode = LANGUAGE_NONE) {
+  $default_value = array();
+  ob_start();
+  $result = eval(cck_field_get_setting('default_value_php', 'instance', $field, $instance, $langcode, $flatten = TRUE));
+  ob_end_clean();
+  if (is_array($result)) {
+    $default_value = $result;
+  }
+  return $default_value;
+}
+
+/**
+ * Callback to return allowed values constructed
+ * from php code snippet.
+ */
+function cck_allowed_values_php($field, $flatten = TRUE) {
+  $allowed_values = array();
+  ob_start();
+  $result = eval(cck_field_get_setting('allowed_values_php', 'field', $field));
+  ob_end_clean();
+  if (is_array($result)) {
+    if ($flatten) {
+      $result = cck_array_flatten($result);
+    }
+    $allowed_values = $result;
+  }
+  return $allowed_values;
+}
+
+/**
+ * Helper function to flatten an array of allowed values.
+ *
+ * @param $array
+ *   A single or multidimensional array.
+ * @return
+ *   A flattened array.
+ */
+function cck_array_flatten($array) {
+  $result = array();
+  if (is_array($array)) {
+    foreach ($array as $key => $value) {
+      if (is_array($value)) {
+        $result += cck_array_flatten($value);
+      }
+      else {
+        $result[$key] = $value;
+      }
+    }
+  }
+  return $result;
+}
+
+/**
+ * Implements hook_content_migrate_field_alter().
+ *
+ * Use this to tweak the conversion of field settings
+ * from the D6 style to the D7 style for specific
+ * situations not handled by basic conversion,
+ * as when field types or settings are changed.
+ *
+ * $field_value['widget_type'] is available to
+ * see what widget type was originally used.
+ */
+function cck_content_migrate_field_alter(&$field_value) {
+  if (!empty($field_value['settings']['allowed_values_php'])) {
+    $field_value['settings']['allowed_values_function'] = 'cck_allowed_values_php';
+    cck_field_set_setting('allowed_values_php', 'field', $field_value['settings']['allowed_values_php'], $field_value);
+  }
+}
+
+/**
+ * Implements hook_content_migrate_instance_alter().
+ *
+ * Use this to tweak the conversion of instance or widget settings
+ * from the D6 style to the D7 style for specific
+ * situations not handled by basic conversion, as when
+ * formatter or widget names or settings are changed.
+ */
+function cck_content_migrate_instance_alter(&$instance_value) {
+  if (!empty($instance_value['settings']['default_value_php'])) {
+    $field_value = content_migrate_get_field_values($instance_value['field_name']);
+    $instance_value['settings']['default_value_function'] = 'cck_default_value_php';
+    cck_field_set_setting('default_value_php', 'instance', $instance_value['settings']['default_value_php'], $field_value, $instance_value);
+  }
+}

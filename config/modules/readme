@@ -1,0 +1,18 @@
+-Configure user permission  authenticated user(at admin/people/permissions )
+    *Media:
+        +Administer media
+        +Import media files from the local filesystem
+        +View media
+        +Edit media
+    *Location:
+        +View node location table
+        +View user location table
+        +Submit latitude/longitude
+    *Image
+        +Administer image styles
+    *Node Gallery
+        +Create new content
+        +Edit own content
+        +Delete own content
+
+Turn on PHP Filter.

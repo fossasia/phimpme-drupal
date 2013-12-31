@@ -1,0 +1,5 @@
+<?php
+
+function views_test_schema() {
+  return variable_get('views_test_schema', array());
+}

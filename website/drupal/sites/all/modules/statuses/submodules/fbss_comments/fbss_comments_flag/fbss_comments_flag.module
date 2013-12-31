@@ -1,0 +1,88 @@
+<?php
+
+/**
+ * @file
+ *   Integrates Flag with Statuses Comments.
+ */
+
+/**
+ * Implements hook_statuses_delete().
+ */
+function fbss_comments_flag_statuses_delete($status) {
+  $subSelect = db_select('fbss_comments')
+    ->fields('fbss_comments',  array('cid'))
+    ->condition('sid', $status->sid);
+
+  /* db_query("DELETE FROM {flag_content} WHERE content_type = 'fbss_comment' AND content_id IN (SELECT cid FROM {fbss_comments} WHERE sid = %d)", $status->sid) */
+  db_delete('flag_content')
+    ->condition('content_type', 'fbss_comment')
+    ->condition('content_id', $subSelect, 'IN')
+    ->execute();
+  /* db_query("DELETE FROM {flag_counts} WHERE content_type = 'fbss_comment' AND content_id IN (SELECT cid FROM {fbss_comments} WHERE sid = %d)", $status->sid) */
+  db_delete('flag_counts')
+    ->condition('content_type', 'fbss_comment')
+    ->condition('content_id', $subSelect, 'IN')
+    ->execute();
+}
+
+/**
+ * Implements hook_fbss_comments_delete().
+ */
+function fbss_comments_flag_fbss_comments_delete($cid) {
+  /* db_query("DELETE FROM {flag_content} WHERE content_type = 'fbss_comment' AND content_id = %s", $cid) */
+  db_delete('flag_content')
+    ->condition('content_type', 'fbss_comment')
+    ->condition('content_id', $cid)
+    ->execute();
+  /* db_query("DELETE FROM {flag_counts} WHERE content_type = 'fbss_comment' AND content_id = %s", $cid) */
+  db_delete('flag_counts')
+    ->condition('content_type', 'fbss_comment')
+    ->condition('content_id', $cid)
+    ->execute();
+}
+
+/**
+ * Implements hook_flag_definitions().
+ */
+function fbss_comments_flag_flag_definitions() {
+  return array(
+    'fbss_comment' => array(
+      'title' => 'Statuses Comment',
+      'description' => t('Comments on status updates.'),
+      'handler' => 'fbss_comments_flag',
+    ),
+  );
+}
+
+/**
+ * Implements hook_flag_default_flags().
+ */
+function fbss_comments_flag_flag_default_flags() {
+  $flags = array();
+  $flags['like_comments'] = array(
+    'content_type' => 'fbss_comment',
+    'title' => t('Like'),
+    'global' => '0',
+    'types' => array('page'),
+    'flag_short' => t('Like'),
+    'flag_long' => '',
+    'flag_message' => '',
+    'unflag_short' => t('Un-like'),
+    'unflag_long' => '',
+    'unflag_message' => '',
+    'unflag_denied_text' => '',
+    'link_type' => 'toggle',
+    'roles' => array('flag' => array('2'), 'unflag' => array('2')),
+    'show_on_page' => FALSE,
+    'show_on_teaser' => FALSE,
+    'show_on_form' => FALSE,
+    'status' => TRUE,
+    'locked' => drupal_map_assoc(array('name', 'global', 'types', 'show_on_teaser', 'show_on_form', 'status')),
+    'module' => 'fbss_comments_flag',
+    'api_version' => 2,
+  );
+  return $flags;
+}
+
+//This is here because the Flag module does not support magic include files.
+module_load_include('inc', 'fbss_comments_flag', 'fbss_comments_flag.flag');

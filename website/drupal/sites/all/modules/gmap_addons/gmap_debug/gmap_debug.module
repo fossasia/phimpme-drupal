@@ -1,0 +1,101 @@
+<?php
+
+/**
+ * @file
+ * Debugging helpers for gmap.
+ */
+
+/**
+ * Implementation of hook_block().
+ */
+function gmap_debug_block($op = 'list', $delta = 0, $edit = array()) {
+  switch ($op) {
+    case 'list':
+      return array(
+        'gmap_debug' => array(
+          'info' => t('GMap Debug'),
+        ),
+      );
+
+    case 'view':
+      if ($delta = 'gmap_debug') {
+        drupal_add_js(drupal_get_path('module', 'gmap_debug') .'/gmap_debug.js', 'module', 'header', FALSE, TRUE, FALSE);
+        $output = '';
+        $output .= theme('menu_item', l(t('Force size check'), '', array('attributes' => array('id' => 'gmap-debug-forcesizecheck'))), FALSE);
+        $output .= theme('menu_item', l(t('Run behavior attach'), '', array('attributes' => array('id' => 'gmap-debug-startup'))), FALSE);
+        $output .= theme('menu_item', l(t('Shutdown map'), '', array('attributes' => array('id' => 'gmap-debug-shutdown'))), FALSE);
+        $output .= theme('menu_item', l(t('Reboot map'), '', array('attributes' => array('id' => 'gmap-debug-reboot'))), FALSE);
+        return array(
+          'subject' => t('GMap Debug'),
+          'content' => theme('menu_tree', $output),
+        );
+      }
+
+  }
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function gmap_debug_perm() {
+  return array(
+    'debug GMap',
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function gmap_debug_menu() {
+  $items['gmap_debug'] = array(
+    'type' => MENU_NORMAL_ITEM,
+    'title' => 'GMap Debugging',
+    'access arguments' => array('debug GMap'),
+    'page callback' => 'gmap_debug_page',
+  );
+  $items['gmap_debug/overview'] = array(
+    'title' => 'Overview',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  $items['gmap_debug/map100'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'title' => '100 Marker',
+    'access arguments' => array('debug GMap'),
+    'page callback' => 'gmap_debug_map_page',
+    'page arguments' => array('100'),
+  );
+  $items['gmap_debug/map1000'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'title' => '1000 Marker',
+    'access arguments' => array('debug GMap'),
+    'page callback' => 'gmap_debug_map_page',
+    'page arguments' => array('1000'),
+  );
+  $items['gmap_debug/map10000'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'title' => '10000 Marker',
+    'access arguments' => array('debug GMap'),
+    'page callback' => 'gmap_debug_map_page',
+    'page arguments' => array('10000'),
+  );
+  return $items;
+}
+
+function gmap_debug_page() {
+  return '<h1>Choose a debugging page above.</h1>';
+}
+
+function gmap_debug_map_page($nummarkers) {
+  $map = array_merge(gmap_defaults(), gmap_parse_macro('[gmap width=100% |height=600px]'));
+  for ($n = 0; $n < $nummarkers; $n++) {
+    $marker = array(
+      'latitude' => (float)((mt_rand(65000, 70000) - 60000)/1000),
+      'longitude' => (float)((mt_rand(181000, 190000) - 180000)/1000),
+      'markername' => 'drupal',
+      'offset' => $n,
+    );
+    $map['markers'][] = $marker;
+  }
+  return theme('gmap', $map);
+}

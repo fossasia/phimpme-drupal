@@ -1,0 +1,85 @@
+<?php
+// vim:set ft=php:
+
+/**
+ * @file
+ * Misc. overlays for GMap.
+ */
+
+
+/**
+ * Implementation of hook_gmap().
+ */
+function gmap_overlays_gmap($op, &$map) {
+  switch ($op) {
+    case 'pre_theme_map':
+      if (isset($map['overlay']) && is_array($map['overlay'])) {
+        $path = drupal_get_path('module', 'gmap_overlays') .'/js/';
+        foreach ($map['overlay'] as $overlay) {
+          switch ($overlay['type']) {
+            case 'clientsidekml':
+              drupal_add_js(drupal_get_path('module', 'gmap_overlays') .'/thirdparty/egeoxml.js', array('weight' => 20));
+            case 'kml':
+            case 'georss':
+              drupal_add_js($path .'overlay_geoxml.js', array('weight' => 20));
+              break;
+            case 'traffic':
+              drupal_add_js($path .'overlay_traffic.js', array('weight' => 20));
+              break;
+            case 'tile':
+              drupal_add_js($path .'overlay_tile.js', array('weight' => 20));
+              break;
+          }
+        }
+      }
+      else {
+        $map['overlay'] = array();
+      }
+      break;
+    case 'macro_multiple':
+      return array('overlay');
+    case 'parse_macro':
+      if (!empty($map['overlay'])) {
+        $temp = $map['overlay'];
+        $overlays = array();
+        foreach ($temp as $overlay) {
+          $s = array();
+          $cp = strpos($overlay, ':');
+          if ($cp !== false) {
+            $front = explode('/', substr($overlay, 0, $cp));
+            $s['type'] = strtolower($front[0]);
+            $rest = substr($overlay, $cp+1);
+            switch ($s['type']) {
+              case 'kml':
+              case 'clientsidekml':
+              case 'georss':
+                // $rest is just the url to fetch.
+                $s['url'] = trim($rest);
+                break;
+              case 'tile':
+                $s['options'] = array();
+                $s['options']['tileUrlTemplate'] = trim($rest);
+                $s['options']['isPng'] = TRUE;
+                if ($front[1]) {
+                  if ($front[1] == 'gif') {
+                    $s['options']['isPng'] = FALSE;
+                  }
+                  else {
+                    $s['options']['opacity'] = (float)$front[1];
+                  }
+                }
+                if ($front[2]) {
+                  $s['minZoom'] = (int)$front[2];
+                }
+                if ($front[3]) {
+                  $s['maxZoom'] = (int)$front[3];
+                }
+                break;
+            }
+            $overlays[] = $s;
+          }
+        }
+        return array('overlay' => $overlays);
+      }
+  }
+}

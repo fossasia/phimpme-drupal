@@ -1,0 +1,53 @@
+
+.quicktabs_main.quicktabs-style-phylactere{
+  clear:both;
+}
+ul.quicktabs-tabs.quicktabs-style-phylactere{
+  margin:0 0 10px 0;
+  padding:0;
+  font-size:12px;
+  list-style: none;
+  background:transparent url(images/shade.png) repeat-x bottom left;
+  height:28px;
+}
+ul.quicktabs-tabs.quicktabs-style-phylactere li{
+  float: left;
+  margin:0 5px;
+  padding:0 0 8px 23px;
+  background:transparent url(images/phy.png) no-repeat 0 -59px;
+}
+ul.quicktabs-tabs.quicktabs-style-phylactere li a{
+  font:bold 12px/170% Verdana;
+  margin: 0;
+  display:block;
+  padding:2px 21px 1px 0;
+  text-decoration:none;
+  color: #bbb !important;
+  background:transparent url(images/phy.png) no-repeat right -35px ;
+}
+ul.quicktabs-tabs.quicktabs-style-phylactere li a:hover{
+  text-decoration:none;
+  color:#888 !important;
+}
+ul.quicktabs-tabs.quicktabs-style-phylactere li.active a{
+  color: #0372d9 !important;
+}
+ul.quicktabs-tabs.quicktabs-style-phylactere li.active{
+  background-position: 0 0;
+  padding-bottom:11px;
+  position:relative;
+  top:-2px;
+}
+
+/* IE6 */
+
+*html ul.quicktabs-tabs.quicktabs-style-phylactere{
+  background: transparent url(images/shade.gif) repeat-x 0 25px;
+}
+*html ul.quicktabs-tabs.quicktabs-style-phylactere li a{
+  padding:0px 21px 3px 0;
+  background-image: url(images/phy.gif);
+}
+*html ul.quicktabs-tabs.quicktabs-style-phylactere li{  /* image for IE6  */
+  background-image: url(images/phy.gif);
+}

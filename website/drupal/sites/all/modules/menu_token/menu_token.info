@@ -1,0 +1,14 @@
+name = Menu Token
+description = Provides tokens in menu items (links).
+core = 7.x
+dependencies[] = menu
+dependencies[] = token
+dependencies[] = ctools
+files[] = menu_token.test
+
+; Information added by drupal.org packaging script on 2012-03-24
+version = "7.x-1.0-beta1"
+core = "7.x"
+project = "menu_token"
+datestamp = "1332549048"
+

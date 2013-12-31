@@ -1,0 +1,80 @@
+<?php
+
+/**
+ * @file
+ * Add phone number fields to Location address.
+ */
+
+/**
+ * Implements hook_locationapi().
+ */
+function location_phone_locationapi(&$location, $op, $a3 = NULL, $a4 = NULL) {
+  switch ($op) {
+    case 'fields':
+      return array('phone' => t('Phone number'));
+
+    case 'defaults':
+      return array(
+        'phone' => array('default' => '', 'collect' => 0, 'weight' => 25),
+      );
+
+    case 'field_expand':
+      if ($a3 == 'phone') {
+        return array(
+          '#type' => 'textfield',
+          '#title' => t('Phone number'),
+          '#size' => 31,
+          '#maxlength' => 31,
+          '#description' => NULL,
+          '#required' => ($a4 == 2),
+          '#default_value' => $location,
+        );
+      }
+      break;
+
+    case 'save':
+      db_delete('location_phone')
+        ->condition('lid', $location['lid'])
+        ->execute();
+      if (!empty($location['phone'])) {
+        db_insert('location_phone')
+          ->fields(array(
+            'lid' => $location['lid'],
+            'phone' => $location['phone'],
+          ))
+          ->execute();
+      }
+      break;
+
+    case 'load':
+      $fields = array();
+      $phone = db_query('SELECT phone FROM {location_phone} WHERE lid = :lid', array(':lid' => $location['lid']))->fetchField();
+      $fields['phone'] = $phone ? $phone : '';
+      return $fields;
+
+    case 'delete':
+      db_delete('location_phone')
+        ->condition('lid', $location['lid'])
+        ->execute();
+      break;
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function location_phone_views_api() {
+  return array(
+    'api' => 3,
+  );
+}
+
+/**
+ * Implements hook_token_list().
+ */
+function location_phone_token_list($type = 'all') {
+  if ($type == 'node' || $type == 'user' || $type == 'all') {
+    $tokens['location']['location-phone_N'] = t('Location Phone number (If there are multiple locations per node, N is the iteration, starting with 0)');
+    return $tokens;
+  }
+}

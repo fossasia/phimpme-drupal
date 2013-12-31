@@ -1,0 +1,30 @@
+$items = array();
+$quicktabs = new stdClass;
+$quicktabs->disabled = FALSE; /* Edit this to true to make a default quicktabs disabled initially */
+$quicktabs->api_version = 1;
+$quicktabs->machine_name = 'follow_tab';
+$quicktabs->ajax = 0;
+$quicktabs->hide_empty_tabs = TRUE;
+$quicktabs->default_tab = 0;
+$quicktabs->title = 'Follow tab';
+$quicktabs->tabs = array(
+  0 => array(
+    'bid' => 'views_delta_who_follow_me-block',
+    'hide_title' => 1,
+    'title' => 'Following',
+    'weight' => '-100',
+    'type' => 'block',
+  ),
+  1 => array(
+    'bid' => 'views_delta_who_i_follow-block',
+    'hide_title' => 1,
+    'title' => 'Follower',
+    'weight' => '-99',
+    'type' => 'block',
+  ),
+);
+$quicktabs->renderer = 'quicktabs';
+$quicktabs->style = 'Garland';
+$quicktabs->options = array();
+$items["follow_tab"] = $quicktabs;
+return $items; 

@@ -1,0 +1,62 @@
+/* Resource Table */
+#resource-form-table th.select-all {
+  width: 1em;
+}
+th.resource_test {
+  width: 16em;
+}
+
+.resource-image {
+  display: inline-block;
+  cursor: pointer;
+  width: 1em;
+}
+.resource-group-label label {
+  display: inline;
+  font-weight: bold;
+}
+.resource-test-label label {
+  margin-left: 1em; /* LTR */
+}
+.resource-test-description .description {
+  margin: 0;
+}
+#resource-form-table tr td {
+  background-color: white;
+  color: #494949;
+}
+#resource-form-table tr.resource-group td {
+  background-color: #EDF5FA;
+  color: #494949;
+}
+
+table#resource-form-table tr.resource-group label {
+  display: inline;
+}
+
+div.message > div.item-list {
+  font-weight: normal;
+}
+a.resource-collapse {
+  height: 0;
+  width: 0;
+  top: -99em;
+  position: absolute;
+}
+a.resource-collapse:focus,
+a.resource-collapse:hover {
+  font-size: 80%;
+  top: 0px;
+  height: auto;
+  width: auto;
+  overflow: visible;
+  position: relative;
+  z-index: 1000;
+}
+td.resource-group-alias {
+  width:130px;
+}
+/* Zebra colors for resources admin table */
+#resource-form-table tr.resource-even td {
+  background: none repeat scroll 0 0 #F3F4EE;
+}

@@ -1,0 +1,274 @@
+<?php
+
+/**
+ * @file
+ * - Provides a Google maps location picker widget for Geo cck fields.
+ * - Provides a field formatter for Geo fields that displays point, line, or
+ *   polygon data on a Google map.
+ */
+
+/**
+ * Implementation of FAPI hook_elements().
+ */
+function gmap_geo_elements() {
+  return array(
+    'gmap_geo_picker' => array(
+      '#input' => TRUE,
+      '#columns' => array('lat', 'lon', 'wkt'),
+      '#delta' => 0,
+      '#process' => array('gmap_geo_picker_process'),
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_widget_info().
+ */
+function gmap_geo_widget_info() {
+  return array(
+    'gmap_geo_picker' => array(
+      'label' => t('GMap picker'),
+      'field types' => array('geo'),
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_widget().
+ */
+function gmap_geo_widget(&$form, &$form_state, $field, $items, $delta = 0) {
+  return array(
+    '#type' => $field['widget']['type'],
+    '#default_value' => isset($items[$delta]) ? $items[$delta] : '',
+  );
+}
+
+/**
+ * Implementation of hook_widget_settings().
+ * Adds a place to set a GMap macro for the initial location picker map.
+ */
+function gmap_geo_widget_settings($op, $widget) {
+  switch ($op) {
+    case 'form':
+      $form = array();
+      $form['gmap_geo_picker_macro'] = array(
+        '#type' => 'textfield',
+        '#title' => 'GMap macro',
+        '#default_value' => $widget['gmap_geo_picker_macro'] ? $widget['gmap_geo_picker_macro'] : '[gmap]',
+        '#description' => t("A GMap macro describing the initial location picker map. <em>[gmap]</em> displays a map with the settings from !gmap-admin.", array('!gmap-admin' => l('admin/settings/gmap', 'admin/settings/gmap'))),
+      );
+      return $form;
+    case 'save':
+      return array('gmap_geo_picker_macro');
+  }
+}
+
+/**
+ * See the gmap_set_location() function in gmap.module and its' companion location_latlon_form() in location.inc
+ */
+function gmap_geo_picker_process($element, $edit, $form_state, $form) {
+  $field = $form['#field_info'][$element['#field_name']];
+  
+  $element['#title'] = $field['widget']['label'];
+  $element['#type'] = 'fieldset';
+
+  $element['map'] = array();  // reserve spot at top of form for map
+
+  $element['lat'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Latitude'),
+    '#default_value' => isset($element['#value']['lat']) ? $element['#value']['lat'] : NULL,
+    '#required' => $field['required'],
+    '#size' => 15,
+    '#prefix' => '<div class="container-inline">',
+  );
+  $element['lon'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Longitude'),
+    '#default_value' => isset($element['#value']['lon']) ? $element['#value']['lon'] : NULL,
+    '#required' => $field['required'],
+    '#size' => 15,
+    '#suffix' => '</div>',
+  );
+  $element['wkt'] = array(
+    '#type' => 'value',
+    '#value' => isset($element['#value']['wkt']) ? $element['#value']['wkt'] : NULL,
+  );
+
+  $element['map']['gmap']['#value'] = gmap_set_location($field['widget']['gmap_geo_picker_macro'], $element, array('latitude' => 'lat', 'longitude' => 'lon'));
+  $element['map_instructions'] = array(
+    '#type' => 'markup',
+    '#weight' => 2,
+    '#prefix' => '<div class=\'description\'>',
+    '#value' => t('You may set the location by clicking on the map, or dragging the location marker.  To clear the location, click on the marker.'), 
+    '#suffix' => '</div>',
+  );
+
+  return $element;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function gmap_geo_theme() {
+  return array(
+    'gmap_geo_picker' => array(
+      'arguments' => array('element' => NULL),
+    ),
+    'gmap_geo_formatter_gmap_geo' => array(
+      'function' => 'theme_gmap_geo_formatter',
+      'arguments' => array('element' => NULL),
+    ),
+    'gmap_geo_formatter_gmap_geo_simplify' => array(
+      'function' => 'theme_gmap_geo_formatter',
+      'arguments' => array('element' => NULL),
+    ),
+  );
+}
+
+/**
+ * Theme the gmap_picker widget.
+ */
+function theme_gmap_geo_picker($element) {
+  return $element['#children'];
+}
+
+/**
+ * Implementation of hook_field_formatter_info().
+ * Note that the formatters don't actually work for geo_data fields yet, because
+ * that field type doesn't (yet) provide its data in WKT.
+ */
+function gmap_geo_field_formatter_info() {
+  return array(
+    'gmap_geo' => array(
+      'label' => t('GMap'),
+      'field types' => array('geo', 'geo_data'),
+      'multiple values' => CONTENT_HANDLE_MODULE,
+    ),
+    'gmap_geo_simplify' => array(
+      'label' => t('Simplified Polygon on a GMap'),
+      'field types' => array('geo', 'geo_data'),
+      'multiple values' => CONTENT_HANDLE_MODULE,
+    ),
+  );
+}
+
+/**
+ * Themes a geo field as a gmap.
+ * 
+ * Wasn't sure what to use as the base map settings. GMap default settings? GMap
+ * picker macro settings? Bdragon and I (Bec) have talked about a "gmap profile"
+ * setup, in which case we could provide a field formatter for each gmap profile 
+ * ("GMap: profile_name"). This would be ideal.
+ *
+ * - Right now this map's settings are based on the gmap_picker widget settings,
+ * if present.
+ *
+ * - Should this be checking to make sure that the WKT is well-formed?
+ * Possibly with geo_wkt_validate()?
+ *
+ * - This field formatter is not useful with geodata  from most shapefiles, 
+ * because these shapes often have more points than JavaScript-based can handle
+ * (generally 1,000 points/vertices is a reasonable maximum).
+ *
+ * - Autozoom doesn't yet zoom for polygons and lines; this field formatter 
+ * doesn't provide any autozoom stuff either.
+ *
+ * - Polygons don't get drawn at all by gmap unless at least one of their
+ * vertices is within the visible area. If not all of a polygon's vertices are
+ * within the visible area, they may be rendered incorrectly.
+ */
+function theme_gmap_geo_formatter($element) {
+  $i = 0;
+  $total_points = 0;
+  while (isset($element[$i])) {
+    $item = $element[$i]['#item'];
+    $i++;
+  
+    if ($total_points > 1000) {
+      $i = -1;
+      drupal_set_message(t('Some data is not displayed on the map because there are too many items.'), 'warning');
+      break;
+    }
+
+    // get the feature's coordinates
+    $geodata = _gmap_geo_from_wkt($item['wkt']);
+  
+    switch ($geodata['type']) {
+      case 'POINT':
+        foreach($geodata['data'] as $point) {
+          $coords = explode(' ', $point);
+          $map['markers'][] = array('longitude' => $coords[0], 'latitude' => $coords[1]);
+          $total_points++;
+        }
+        break;
+      case 'POLYGON':
+      case 'LINESTRING':
+        if (isset($item['centroid'])) {
+          $centroid_raw = _gmap_geo_from_wkt($item['centroid']);
+          $centroid = explode(' ', reset($centroid_raw['data']));
+          // autozoom for polygons is coming in GMap 1.1 (2008-12-30)
+          $map['latitude'] = $centroid[0];
+          $map['longitude'] = $centroid[1];
+        }
+
+        // get feature coordinates
+        $shape_coords = array();
+        foreach($geodata['data'] as $point) {
+          $shape_coords[] = explode(' ', $point);
+        }
+        
+        // polygon simplification is resource intensive.
+        // I am not sure how well this handles line data -- quite possibly it
+        // would be fine, if you provide a centroid.
+        if ($element['#formatter'] == 'gmap_geo_simplify' && isset($centroid)) {
+          module_load_include('inc', 'gmap_geo', 'simplify');
+          $shape_coords = gmap_geo_simplify($shape_coords, $centroid);
+        }
+
+        // if the poly/line is too complex, let's not crash the browser...
+        if (count($shape_coords) < 200) {
+          $map['shapes'][] = array(
+            'type' => ($geodata['type'] == 'POLYGON' ? 'polygon' : 'line'),
+            'points' => $shape_coords,
+          );
+          $total_points += count($shape_coords);
+        }
+        else {
+          $map['markers'][] = array(
+            'longitude' => $centroid[0],
+            'latitude' => $centroid[1],
+            'text' => t('This shape has too many points to display on a Google Map')
+          );
+          $total_points++;
+        }
+        break;
+    }
+  }
+  
+  if ($map) {
+    // Load field instance info. If the field uses the gmap_picker widget, use
+    // the widget's gmap macro to build the map array.
+    module_load_include('inc', 'content', 'includes/content.crud');
+    $field = content_field_instance_read(array('type_name' => $element['#type_name'], 'field_name' => $element['#field_name']));
+    if ($field[0]['widget']['type'] == 'gmap_picker') {
+      $field_map = gmap_parse_macro($field[0]['widget']['gmap_picker_macro']);
+      $map = array_merge($field_map, $map);
+    }
+  
+    $map['behavior'] = array('autozoom');
+    if (isset($field_map['zoom'])) {
+      $map['maxzoom'] = $field_map['zoom'];
+    }
+    return theme('gmap', $map);
+  }
+}
+
+/**
+ * Split WKT into an array.
+ */
+function _gmap_geo_from_wkt($wkt) {
+  $geodata = preg_split('/ *\(|,|\)/', $wkt, -1, PREG_SPLIT_NO_EMPTY);
+  $geodata_type = array_shift($geodata);
+  return array('type' => $geodata_type, 'data' => $geodata);
+}

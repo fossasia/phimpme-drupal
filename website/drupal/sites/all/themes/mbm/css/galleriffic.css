@@ -1,0 +1,303 @@
+
+/* Views Galleriffic
+ * Based off of css from original: http://www.twospy.com/galleriffic/index.html
+ */
+
+#galleriffic {
+  margin-left: auto;
+  margin-right: auto;
+  width: 960px;
+}
+
+#galleriffic .content {
+  float: left;
+  width: 550px;
+  margin-top: 3px;
+}
+#galleriffic .content a, #galleriffic .navigation a {
+  text-decoration: none;
+  color: #777;
+}
+#galleriffic div#slideshow {
+  background: #555753;
+  border-radius: 4px;
+}
+#galleriffic .image-wrapper a {
+  display: block;
+  text-align: center;
+}
+#galleriffic .content  a:focus, #galleriffic .content  a:hover, #galleriffic .content  a:active {
+  text-decoration: underline;
+}
+#galleriffic .content img {
+  margin-left: auto;
+  margin-right: auto;
+}
+#galleriffic .controls {
+  width: 550px;
+  overflow: hidden;
+}
+#galleriffic .controls a {
+  padding: 0 5px;
+  color:transparent!important;
+}
+#galleriffic .ss-controls {
+  float: left;
+}
+#galleriffic .nav-controls {
+  float: right;
+}
+
+#galleriffic .loader {
+  background-image: url('loader.gif');
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 510px;
+  height: 350px
+}
+#galleriffic .slideshow {
+  height: 350px;
+  position: relative;
+}
+#galleriffic .slideshow img {
+  border: none;
+  display: block;
+}
+#galleriffic .download {
+  float: right;
+}
+#galleriffic .image-title {
+  font-size: 1.4em;
+}
+#galleriffic .image-desc {
+  line-height: 1.3em;
+  padding-top: 12px;
+}
+#galleriffic .image-desc div.phototag {
+  margin-bottom: 10px;
+}
+#galleriffic .image-desc div.photodesc {
+  font-size: 12px;
+}
+#galleriffic #thumbs {
+  float: right;
+  width: 390px;
+  /*margin-top:90px*/
+}
+#galleriffic ul.thumbs {
+  clear: both;
+  margin: 0;
+  padding: 0;
+}
+#galleriffic ul.thumbs li {
+  float: left;
+  padding: 0;
+  margin: 5px 10px 5px 0;
+  list-style: none;
+}
+#galleriffic a.thumb {
+  padding: 2px;
+  display: block;
+  border: 1px solid #ccc;
+}
+#galleriffic ul.thumbs li.selected a.thumb {
+   background: #000;
+}
+#galleriffic a.thumb:focus {
+  outline: none;
+}
+#galleriffic ul.thumbs img {
+  border: none;
+  display: block;
+  width: 75px;
+  height: 75px
+}
+#galleriffic .pagination {
+  clear: both;
+}
+#galleriffic .navigation.top {
+  margin-bottom: 12px;
+  height: 11px;
+}
+#galleriffic .navigation.bottom {
+  margin-top: 12px;
+}
+#galleriffic .pagination a, #galleriffic .pagination span.current {
+  display: block;
+  float: left;
+  margin-right: 2px;
+  padding: 4px 7px 2px 7px;
+  border: 1px solid #ccc;
+}
+#galleriffic .pagination a:hover {
+  background-color: #eee;
+  text-decoration: none;
+}
+#galleriffic .pagination span.current {
+  font-weight: bold;
+  background-color: #000;
+  border-color: #000;
+  color: #fff;
+}
+#galleriffic .slideshow,
+#galleriffic .loader,
+#galleriffic .slideshow a.advance-link,
+#galleriffic .caption-container {
+  clear: both;
+}
+#galleriffic .slideshow-container {
+  position: relative;
+  clear: both;
+  float: left;
+}
+#galleriffic .loader {
+  position: absolute;
+  background-image: url('loader.gif');
+  background-repeat: no-repeat;
+  background-position: center;
+}
+#galleriffic .slideshow span.image-wrapper {
+  display: block;
+  position: absolute;
+  left: 0;
+}
+#galleriffic .slideshow a.advance-link {
+  display: block;
+  line-height: 402px; /* This should be set to be at least the height of the largest image in the slideshow with padding */
+  text-align: center;
+  display: block;
+}
+#galleriffic .slideshow a.advance-link img {
+  padding: 2px;
+  border: 1px solid #ccc;
+}
+#galleriffic .slideshow a.advance-link:hover,
+#galleriffic .slideshow a.advance-link:active,
+#galleriffic .slideshow a.advance-link:visited {
+  text-decoration: none;
+}
+#galleriffic .caption-container {
+  padding: 0 0 0 2px;
+  /*position: relative;*/
+  margin-top: 10px;
+}
+#galleriffic #caption {
+  /*position: relative;*/
+}
+#galleriffic .caption {
+}
+#galleriffic span.image-wrapper {
+  top: 0;
+  width: 100%;
+  position: relative;
+}
+
+#galleriffic span.image-caption {
+  top: 0;
+  left: 0;
+  width: 100%;
+  /*position: absolute;*/
+  display: block;
+}
+#galleriffic .ellipsis {
+  float: left;
+}
+div#galleriffic a.play
+{
+  background:url('../images/play.png') no-repeat;
+  display:block;
+  width:32px;
+  height:32px;
+}
+div#galleriffic a.pause
+{
+  background:url('../images/pause.png') no-repeat;
+  display:block;
+  width:32px;
+  height:32px;
+}
+
+div#galleriffic a.prev
+{
+  background:url('../images/previous.png') no-repeat;
+  display:block;
+  width:32px;
+  height:32px;
+  position:absolute;
+  margin-left:-65px;
+}
+div#galleriffic a.next
+{
+  background:url('../images/next.png') no-repeat;
+  display:block;
+  width:32px;
+  height:32px;
+  position:absolute;
+  margin-left:-30px;
+}
+
+div.image-edit a{
+  color:transparent!important;
+}
+
+div.image-edit div{
+}
+
+div.image-edit{
+  background:url('../images/edit.png') no-repeat;
+  position:absolute;
+  top: 50px;
+  left: 20px;
+}
+
+.exif-data {
+  font-size: 11px;
+}
+.exif-data span.label {
+  font-weight: bold;
+  margin-right: 6px;
+}
+.exif-data span:not(.label) {
+}
+
+div#block-views-author-block
+{
+  margin-left: 618px;
+  position: absolute;
+}
+div#block-views-author-block div.content
+{
+  margin-top: 0;
+}
+div#block-views-author-block div.view-author
+{
+  width: 240px;
+  overflow: hidden;
+  padding: 8px;
+  background: #f2bb88;
+  border-radius: 4px;
+}
+div#block-views-author-block a.username
+{
+  display: block;
+  float: left;
+  color: #ac4311;
+  width: 85px;
+  font-size: 13px;
+}
+
+div#block-views-author-block div.user-picture
+{
+  float: right;
+}
+
+div#block-views-author-block div.user-picture a
+{
+  display: block;
+}
+
+div#block-views-author-block .user-picture img
+{
+  margin: 0 auto 0 auto;
+  vertical-align: bottom;
+}

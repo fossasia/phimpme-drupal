@@ -1,0 +1,3 @@
+The Drupal default Login function is replaced with LoginToboggan & Password Hustle because of a rarely-happened bug in Drupal core, which ask for current password in case the password is unknown!
+
+The LoginToboggan come with its instruction in the admin page. Just follow it to configure.

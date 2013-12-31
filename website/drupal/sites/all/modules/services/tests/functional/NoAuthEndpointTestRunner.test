@@ -1,0 +1,31 @@
+<?php
+
+
+/**
+ * @file
+ * This subclass runs the tests with setUp set for services using no
+ * authentication. Tests are to be held in the parent class.
+ *
+ */
+
+/**
+ * Sets conditions for a no-authentication set of endpoint test runs.
+ */
+class NoAuthEndpointTestRunner extends ServicesEndpointTests {
+
+  // Class variables
+  protected $privilegedUser = NULL;
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Services Endpoint tests, no auth'),
+      'description' =>
+      t('Test the endpoint functionality when no authentication is turned on'),
+      'group' => t('Services'),
+    );
+  }
+
+}

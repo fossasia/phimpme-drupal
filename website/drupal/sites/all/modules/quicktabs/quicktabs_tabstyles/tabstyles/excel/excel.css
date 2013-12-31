@@ -1,0 +1,79 @@
+
+/* Excel style tabs */
+
+.quicktabs_main.quicktabs-style-excel {
+  border-bottom: 1px solid #EEEEEE;
+  padding: 10px 5px 2px;
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel {
+  margin: 0;
+  padding: 0 15px;
+  font-size: 1em;
+  list-style: none;
+  height: 24px;
+  background: transparent url(images/tab-bar.png) repeat-x left bottom;
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel li {
+  float: left;
+  margin: 0 -5px -5px -5px;
+  padding: 0 0 0 10px;
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel li a {
+  font: bold 12px/170% Verdana;
+  font-size-adjust: none;
+  display: block;
+  margin: 0;
+  padding: 4px 22px 0px 12px;
+  border-width: 0;
+  font-weight: bold;
+  text-decoration: none;
+  background: transparent url(images/tab-right-sep.png) no-repeat right -38px;
+}
+
+/*override hover*/
+ul.quicktabs-tabs.quicktabs-style-excel li:hover {
+  /*background: transparent url(images/tab-left-sep.png) no-repeat left -76px;*/
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel li a:hover {
+  color: #000;
+  /*background: transparent url(images/tab-right-sep.png) no-repeat right -76px;*/
+}
+
+/*override active tab*/
+ul.quicktabs-tabs.quicktabs-style-excel li.active {
+  background: transparent url(images/tab-left-sep.png) no-repeat left 0;
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel li.active a {
+  background: transparent url(images/tab-right-sep.png) no-repeat right 0;
+}
+
+/*override first tab*/
+ul.quicktabs-tabs.quicktabs-style-excel li.first {
+  background: transparent url(images/tab-left.png) no-repeat left -38px;
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel li.first:hover {
+  /*background: transparent url(images/tab-left.png) no-repeat left -76px;*/
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel li.first.active {
+  background: transparent url(images/tab-left.png) no-repeat left 0px;
+}
+
+/*override last tab*/
+ul.quicktabs-tabs.quicktabs-style-excel li.last a {
+  background: transparent url(images/tab-right.png) no-repeat right -38px;
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel li.last a:hover {
+  /*background: transparent url(images/tab-right.png) no-repeat right -76px;*/
+}
+
+ul.quicktabs-tabs.quicktabs-style-excel li.last.active a {
+  background:transparent url(images/tab-right.png) no-repeat right 0px;
+}

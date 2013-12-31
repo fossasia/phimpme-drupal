@@ -1,0 +1,63 @@
+
+div.toboggan-container {
+  text-align: center;
+}
+
+div.toboggan-login-link-container {
+  text-align: left;
+}
+
+div.toboggan-login-link-container a {
+  text-decoration: none;
+}
+
+div.toboggan-block-message {
+  text-align: left;
+}
+
+div.user-login-block {
+  text-align: left;
+}
+
+div.user-login-block a {
+  text-align: left;
+}
+
+/* Unified login */
+
+.toboggan-unified #login-message {
+  text-align: center;
+  font-size: 2em;
+  line-height: 1.2;
+}
+
+.toboggan-unified #login-links {
+  text-align: center;
+  font-size: 1.5em;
+  line-height: 2.7;
+}
+
+.toboggan-unified #login-links a {
+  padding: .5em;
+  border: 1px #666 solid;
+  background-color: #EEE;
+}
+
+.toboggan-unified #login-links a:hover {
+  background-color: #DDD;
+}
+
+.toboggan-unified #login-links a.lt-active,
+.toboggan-unified #login-links a.lt-active:hover {
+  background-color: #FFF19A;
+  border: 2px #333 solid;
+}
+
+.toboggan-unified.login #register-form {
+  display: none;
+}
+
+.toboggan-unified.register #login-form {
+  display: none;
+}
+

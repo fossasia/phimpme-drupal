@@ -1,0 +1,9 @@
+
+ul.quicktabs-tabs.quicktabs-style-sky li {
+  float: right;
+}
+
+ul.quicktabs-tabs.quicktabs-style-sky li a,
+ul.quicktabs-tabs.quicktabs-style-sky li a:visited {
+  float: right;
+}

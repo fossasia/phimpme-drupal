@@ -1,0 +1,9 @@
+
+ul.quicktabs-tabs.quicktabs-style-arrows{
+  padding:0 0 0 10px!important;
+  height:25px;
+}
+
+ul.quicktabs-tabs.quicktabs-style-arrows li{
+  float:right;
+}

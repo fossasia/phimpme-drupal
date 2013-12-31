@@ -1,0 +1,7 @@
+Go to admin/structure/services
+Add new endpoint: api
+Enable the resources:
+- File
+- Node
+- Own_nodes
+Note that the endpoint name must be exactly "api", or the Android app cannot upload photo.

@@ -1,0 +1,20 @@
+Project lead: bdragon
+Comaintainer: ray007
+
+--------
+gmap_cck
+--------
+Written by: ray007
+Maintainer: ray007
+
+-------------
+gmap_overlays
+-------------
+Written by: bdragon
+Maintainer: bdragon
+
+--------------------
+gmap_extrabaselayers
+--------------------
+Written by: bdragon
+Maintainer: bdragon

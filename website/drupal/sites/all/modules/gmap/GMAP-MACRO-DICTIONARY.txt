@@ -1,0 +1,89 @@
+GMAP-MACRO-DICTIONARY.txt
+This file defines the attributes available in GMap macros.
+
+----------------
+BASIC ATTRIBUTES
+----------------
+
+Attribute:		center
+Values:				lat,lon
+Description:	map center
+Example:			center=39.36827914916013,-81.5625
+
+Attribute:		width
+Values:				css dimension
+Description:	map width, in valid css dimensions (generally pixels or percent)
+Example:			width=100%
+
+Attribute:		height
+Values:				css dimension
+Description:	map height, in valid css dimensions (generally pixels)
+Example:			height=400px
+
+Attribute:		zoom
+Values:				0-17
+Description:	the initial zoom level of the map
+Example:			7
+
+Attribute:		type
+Values:				"Map", "Satellite", "Hybrid", "Terrain"
+Description:	baselayer
+Example:			type=Map
+
+Attribute:		control
+Values:				"None", "Large", "Small"
+Description:	zoom and pan controls
+Example:			control=Small
+
+Attribute:		align
+Values:				"Right", "Left", "Center"
+Description:	alignment of map on page
+Example:			align=Center
+
+Attribute:		id
+Values:				id attribute name
+Description:	id for the rendered map element, to distinguish the map from other maps on the same page. Any controls that are synced with the map require a map id.
+Example:			id=mymap
+Notes:				use if you need to access the map from a script, or if you plan to have multiple maps on a page. As of Gmap 1.0, this is no longer required.
+
+--------
+OVERLAYS
+--------
+Each of these attributes may be repeated within a GMap macro. You would repeat attributes if you wanted multiple overlays of the same type on one map.
+
+Attribute:		markers
+Values:				marker name::lat1,lon1:popup1 text + lat2,lon2:popup2 text + … + latN,lonN:popupN text
+Description:	place a point or series of points on the map
+Example:			markers=blue::39.367383358933125,-81.56906604766846 + 39.36675298114445,-81.5561056137085
+Notes:				Repeat for each different marker type that you want to use. The "marker name" may be the name of a series of markers. Popup text may contain plain text or HTML, as long as it does not have the symbols "|", "+", or "]". Use the HTML entities for these characters (&#0124;, &#0043;, and &#0093; respectively).
+
+Attribute:		feed
+Values:				GeoRSS feed
+Description:	an RSS feed with geo:lat information to be overlaid on the map. **local feeds only?
+Example:			feed=blue::/my-location-rss
+Notes:        Location.module automatically adds GeoRSS information to RSS feeds. This means that RSS feeds created with Views can be directly overlaid onto your GMaps.
+
+You can set some style attributes for lines and shapes. Where these are not set, the defaults for google are used. These styles are written directly after the "=" in a specific order, separated by a "/", and are followed by a ":". Previous versions of GMap could use Xmaps to create dashed lines and text labels for lines and polygons, but those options are no longer supported. Opacity also used to be specified as a number between 0 and 1; it is now a number between 0 and 100.
+
+Attribute:		line
+Values:				line color in hex/line width in pixels/line percent opacity:lat1,lon1 + lat2,lon2 + … + latN,lonN
+Description:	place a line on the map
+Example:			line=#0000ff/5/45:39.361942015870724,-81.5711259841919 + 39.369506694882396,-81.56558990478516 + 39.3664212010754,-81.56172752380371 + 39.368146440221935,-81.55773639678955
+Notes:				It is best to break up long lines into shorter segments, because long lines can be buggy--sometimes beginning and ending points are switched.
+
+Attribute:		circle
+Values:				line color in hex/line width in pixels/line percent opacity/fill color in hex/fill percent opacity:lat1,lon1 + lat2,lon2 + … + latN,lonN
+Description:	place a circle on the map
+Example:			circle=#000000/3/25/#ffff00/45:39.37395222041742 , -81.56816482543945 + 0.7622248729082767 |markers=big blue::47.040182144806664,-90 + 39.36827914916013,-81.5625 + 39.36827914916013,-81.5625 
+Notes:        if you draw a large circle on the map, it will not appear as a perfect circle--2D maps of the globe are necessarily distorted.
+
+Attribute:		polygon
+Values:				line color in hex/line width in pixels/line percent opacity/fill color in hex/fill percent opacity:lat1,lon1 + lat2,lon2 + … + latN,lonN
+Description:	place a filled polygon on the map
+Example:			polygon=#000000/3/25/#ff0000/45:39.37202807246466,-81.56992435455322 + 39.373686823852424,-81.55782222747803 + 39.37099962681384,-81.55486106872559 + 39.37046881022853,-81.56636238098145 + 39.37202807246466,-81.56992435455322 |markers=big blue::47.040182144806664,-90 + 39.36827914916013,-81.5625 + 39.36827914916013,-81.5625
+
+Attribute:		rpolygon
+Values:				line color in hex/line width in pixels/line percent opacity/fill color in hex/fill percent opacity: center lat,center lon + vertex lat,vertex lon + num sides
+Description:	place a filled regular polygon on the map
+Example:			rpolygon=#000000/3/25/#ff0000/45:44.20583500104184,-70.367431640625 + 44.315987905196906,-68.609619140625 + 4
+

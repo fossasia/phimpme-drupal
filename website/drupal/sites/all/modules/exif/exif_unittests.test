@@ -1,0 +1,11 @@
+<?php
+class ExifUnitTestCase extends DrupalUnitTestCase {
+  public static function getInfo() {
+    return array(
+      'name' => 'Exif Unit test of Metadata functions',
+      'description' => 'Ensure that the exif functions properly.',
+      'group' => 'Exif',
+    );
+  }
+}
+?>

@@ -1,0 +1,557 @@
+<?php
+
+/**
+ * @file
+ *  Provides a generic but powerful API for web services.
+ */
+
+/**
+ * Minimum CTools version needed.
+ */
+define('SERVICES_REQUIRED_CTOOLS_API', '1.7');
+
+/**
+ * Implements hook_help().
+ */
+function services_help($path, $arg) {
+  $output = NULL;
+
+  switch ($path) {
+    case 'admin/help#services':
+      $output = '<p>' . t('Visit the <a href="@handbook_url">Services Handbook</a> for help and information.', array('@handbook_url' => 'http://drupal.org/node/109782')) . '</p>';
+      break;
+    case 'admin/structure/services':
+      $output = '<p>' . t('Services are collections of methods available to remote applications. They are defined in modules, and may be accessed in a number of ways through server modules. Visit the <a href="@handbook_url">Services Handbook</a> for help and information.', array('@handbook_url' => 'http://drupal.org/node/109782')) . '</p>';
+      $output .= '<p>' . t('All enabled services and methods are shown. Click on any method to view information or test.') . '</p>';
+      break;
+  }
+
+  return $output;
+}
+
+/**
+ * Implements hook_perm().
+ */
+function services_permission() {
+  return array(
+    'administer services' => array(
+      'title' => t('Administer services'),
+      'description' => t('Configure and setup services module.'),
+    ),
+    // File resource permissions
+    'get any binary files' => array(
+      'title' => t('Get any binary files'),
+      'description' => t(''),
+    ),
+    'get own binary files' => array(
+      'title' => t('Get own binary files'),
+      'description' => t(''),
+    ),
+    'save file information' => array(
+      'title' => t('Save file information'),
+      'description' => t(''),
+    ),
+    // System resource permissions
+    'get a system variable' => array(
+      'title' => t('Get a system variable'),
+      'description' => t(''),
+    ),
+    'set a system variable' => array(
+      'title' => t('Set a system variable'),
+      'description' => t(''),
+    ),
+    // Query-limiting permissions
+    'perform unlimited index queries' => array(
+      'title' => t('Perform unlimited index queries'),
+      'description' => t(''),
+    ),
+  );
+}
+
+/**
+ * Implements hook_hook_info().
+ */
+function services_hook_info() {
+  $hooks['services_resources'] = array(
+    'group' => 'services',
+  );
+  return $hooks;
+}
+
+/**
+ * Implements hook_menu().
+ *
+ * Services UI is defined in the export-ui plugin.
+ */
+function services_menu() {
+  $items = array();
+  if (module_exists('ctools')) {
+    $endpoints = services_endpoint_load_all();
+    foreach ($endpoints as $endpoint) {
+      if (empty($endpoint->disabled)) {
+        $items[$endpoint->path] = array(
+          'title'             => 'Services endpoint',
+          'access callback'   => 'services_access_menu',
+          'page callback'     => 'services_endpoint_callback',
+          'page arguments'    => array($endpoint->name),
+          'type'              => MENU_CALLBACK,
+        );
+      }
+    }
+  }
+  return $items;
+}
+/**
+ * Implements of hook_ctools_plugin_api().
+ */
+function services_ctools_plugin_api($module, $api) {
+  if ($module == 'services' && $api == 'plugins') {
+    return array('version' => 3);
+  }
+}
+
+/**
+ * Implement of hook_ctools_plugin_directory().
+ */
+function services_ctools_plugin_directory($module, $type) {
+  // Safety: go away if CTools is not at an appropriate version.
+  if (!module_invoke('ctools', 'api_version', SERVICES_REQUIRED_CTOOLS_API)) {
+    return;
+  }
+  if ($type =='export_ui') {
+    return 'plugins/export_ui';
+  }
+}
+
+/**
+ * Access callback that always returns TRUE.
+ *
+ * This callback is necessary for services like login and logout that should
+ * always be wide open and accessible.
+ *
+ * *** USE THIS WITH GREAT CAUTION ***
+ *
+ * If you think you need it you are almost certainly wrong.
+ */
+function services_access_menu() {
+  return TRUE;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function services_theme() {
+  return array(
+    'services_endpoint_index' => array(
+      'template'  => 'services_endpoint_index',
+      'arguments' => array('endpoints' => NULL),
+    ),
+    'services_resource_table' => array(
+     'render element' => 'table',
+      'file' => 'services.admin.inc',
+    ),
+  );
+}
+
+/**
+ * Returns information about the installed server modules on the system.
+ *
+ * @return array
+ *  An associative array keyed after module name containing information about
+ *  the installed server implementations.
+ */
+function services_get_servers() {
+  static $servers;
+
+  if (!$servers) {
+    $servers = array();
+    foreach (module_implements('server_info') as $module) {
+      $servers[$module] = call_user_func($module . '_server_info');
+    }
+  }
+
+  return $servers;
+}
+
+/**
+ * Menu system page callback for server endpoints.
+ *
+ * @param string $endpoint
+ *  The endpoint name.
+ * @return void
+ */
+function services_endpoint_callback($endpoint_name) {
+  module_load_include('runtime.inc', 'services');
+
+  $endpoint = services_endpoint_load($endpoint_name);
+  $server = $endpoint->server;
+
+  if (function_exists($server . '_server')) {
+    // call the server
+    services_set_server_info_from_array(array(
+      'module'        => $server,
+      'endpoint'      => $endpoint_name,
+      'endpoint_path' => $endpoint->path,
+      'debug'         => $endpoint->debug,
+      'settings'      => $endpoint->server_settings[$server],
+    ));
+    if ($endpoint->debug) {
+      watchdog('services', 'Calling server: %server', array('%server' => $server . '_server'), WATCHDOG_DEBUG);
+      watchdog('services', 'Server info main object: <pre>@info</pre>', array('@info' => print_r(services_server_info_object(), TRUE)), WATCHDOG_DEBUG);
+    }
+    print call_user_func($server . '_server');
+
+    // Do not let this output
+    module_invoke_all('exit');
+    exit;
+  }
+  // return 404 if the server doesn't exist
+  drupal_not_found();
+}
+
+
+
+/**
+ * Create a new endpoint with defaults appropriately set from schema.
+ *
+ * @return stdClass
+ *  An endpoint initialized with the default values.
+ */
+function services_endpoint_new() {
+  ctools_include('export');
+  return ctools_export_new_object('services_endpoint');
+}
+
+/**
+ * Load a single endpoint.
+ *
+ * @param string $name
+ *  The name of the endpoint.
+ * @return stdClass
+ *  The endpoint configuration.
+ */
+function services_endpoint_load($name) {
+  ctools_include('export');
+  $result = ctools_export_load_object('services_endpoint', 'names', array($name));
+  if (isset($result[$name])) {
+    return $result[$name];
+  }
+  return FALSE;
+}
+
+/**
+ * Load all endpoints.
+ *
+ * @return array
+ *  Array of endpoint objects keyed by endpoint names.
+ */
+function services_endpoint_load_all() {
+  ctools_include('export');
+  return ctools_export_load_object('services_endpoint');
+}
+
+/**
+ * Saves an endpoint in the database.
+ *
+ * @return void
+ */
+function services_endpoint_save($endpoint) {
+  if (is_array($endpoint) && isset($endpoint['build_info'])) {
+    $endpoint = $endpoint['build_info']['args'][0];
+  }
+
+  // Set a default of an array if the value is not present.
+  foreach (array('server_settings', 'resources', 'authenication') as $endpoint_field) {
+    if (empty($endpoint->{$endpoint_field})) {
+      $endpoint->{$endpoint_field} = array();
+    }
+  }
+
+  ctools_export_crud_save('services_endpoint', $endpoint);
+  ctools_export_load_object_reset('services_endpoint');
+  menu_rebuild();
+  cache_clear_all('services:' . $endpoint->name . ':', 'cache', TRUE);
+}
+
+/**
+ * Remove an endpoint.
+ *
+ * @return void
+ */
+function services_endpoint_delete($endpoint) {
+  ctools_export_crud_delete('services_endpoint', $endpoint);
+  ctools_export_load_object_reset('services_endpoint');
+  menu_rebuild();
+  cache_clear_all('services:' . $endpoint->name . ':', 'cache', TRUE);
+}
+
+/**
+ * Export an endpoint.
+ *
+ * @return string
+ */
+function services_endpoint_export($endpoint, $indent = '') {
+  ctools_include('export');
+  return ctools_export_object('services_endpoint', $endpoint, $indent);
+}
+
+
+/**
+ * Gets all resource definitions.
+ *
+ * @param string $endpoint_name
+ *   Optional. The endpoint endpoint that's being used.
+ * @return array
+ *  An array containing all resources.
+ */
+function services_get_resources($endpoint_name = '') {
+  $cache_key = 'services:' . $endpoint_name . ':resources';
+
+  $resources = array();
+  if (($cache = cache_get($cache_key)) && isset($cache->data)) {
+    $resources = $cache->data;
+  }
+  else {
+    module_load_include('resource_build.inc', 'services');
+    $resources = _services_build_resources($endpoint_name);
+    cache_set($cache_key, $resources);
+  }
+
+  return $resources;
+}
+
+/**
+ * Implements hook_services_resources().
+ */
+function services_services_resources() {
+  module_load_include('resource_build.inc', 'services');
+  // Return resources representing legacy services
+  return _services_core_resources();
+}
+
+/**
+ * Implementation of hook_services_authentication().
+ */
+function services_services_authentication_info() {
+  return array(
+    'title'             => t('Session authentication'),
+    'description'       => t("Uses Drupal's built in sessions to authenticate."),
+    'authenticate_call' => '_services_sessions_authenticate_call',
+  );
+}
+
+/**
+ * Authenticates a call using Drupal's built in sessions
+ *
+ * @return void
+ */
+function _services_sessions_authenticate_call() {
+  global $user;
+  $user = services_get_server_info('original_user');
+}
+
+/**
+ * Returns all the controller names for a endpoint.
+ *
+ * @param string $endpoint
+ *  The endpoint that should be used.
+ * @return array
+ *  Either a non associative array containing all controller names. Or, if
+ *  $key_by_resource was set to TRUE, a associative array where the resource
+ *  name is the key and the value is a non-associative array containing the
+ *  resource's controller names.
+ */
+function services_controllers_list($endpoint) {
+  $controllers = array();
+  $ops = array('actions', 'relationships', 'targeted_actions');
+  $resources = services_get_resources($endpoint);
+  foreach ($resources as $resource_name => $res) {
+    // Get all basic operations
+    foreach (array('create', 'retrieve', 'update', 'delete', 'index') as $op) {
+      if (isset($res[$op])) {
+        $controllers[] = $resource_name . '.' . $op;
+      }
+    }
+
+    // Handle extended operatios
+    foreach ($ops as $op) {
+      if (isset($res[$op])) {
+        foreach ($res[$op] as $name => $def) {
+          // Append prefix if it isn't empty
+          $controllers[] = $resource_name . '.' . $name;
+        }
+      }
+    }
+  }
+  return $controllers;
+}
+
+/**
+ * Returns the requested controller.
+ *
+ * @param string $name
+ *  The name of the controller in the format: {resource}.{name} or
+ *  {resource}.{operation}. Examples: "node.retrieve", "system.getVariable".
+ * @param string $endpoint
+ *  The endpoint that should be used.
+ */
+function services_controller_get($name, $endpoint) {
+  list($resource_name, $method) = explode('.', $name);
+  $ops = array('actions', 'relationships', 'targeted_actions');
+  $resources = services_get_resources($endpoint);
+
+  if (isset($resources[$resource_name])) {
+    $res = $resources[$resource_name];
+
+    if (isset($res[$method])) {
+      return $res[$method];
+    }
+    else {
+      // Handle extended operatios
+      foreach ($ops as $op) {
+        if (isset($res[$op]) && isset($res[$op][$method])) {
+          return $res[$op][$method];
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Convert a resource to RPC-style methods.
+ *
+ * @param array $resource
+ *   A resource definition.
+ *
+ * @return array
+ *   An array of RPC method definitions
+ */
+function services_resources_as_procedures($resource) {
+  static $controllers = array('create', 'retrieve', 'update', 'delete', 'index');
+  static $subcontrollers = array('actions', 'relationships', 'targeted_actions');
+
+  $methods = array();
+
+  foreach ($controllers as $name) {
+    if (isset($resource[$name])) {
+      $methods[] = _services_resource_controller_as_procedure($resource['name'], $name, $resource[$name]);
+    }
+  }
+
+  foreach ($subcontrollers as $name) {
+    if (isset($resource[$name])) {
+      foreach ($resource[$name] as $sc_name => $controller) {
+        $methods[] = _services_resource_controller_as_procedure($resource['name'], $sc_name, $controller);
+      }
+    }
+  }
+
+  return $methods;
+}
+
+/**
+ * Helper function for _services_resources_as_procedures() that turns a resource
+ * controller into an RPC method.
+ *
+ * @param $resource
+ *   The resource being converted (node, user, etc.)
+ * @param $name
+ *   The method name (retrieve, create, etc.)
+ * @param $controller
+ *   Associative array defining the method's properties and callbacks.
+ *
+ */
+function _services_resource_controller_as_procedure($resource, $name, $controller) {
+  $method = array_merge($controller, array(
+    'method' => $resource .'.'. $name,
+  ));
+
+  return $method;
+}
+
+/**
+ * Helper function to build index queries.
+ *
+ * @param $query
+ *   Object database query object.
+ * @param $page
+ *   Integer page number we are requesting.
+ * @param $fields
+ *   Array fields to return.
+ * @param $parameter
+ *   Array parameters to add to the index query.
+ * @param $page_size
+ *   Integer number of items to be returned.
+ * @param $resource
+ *   String name of the resource building the index query
+ */
+function services_resource_build_index_query($query, $page, $fields, $parameters, $page_size, $resource) {
+  $default_limit = variable_get("services_{$resource}_index_page_size", 20);
+  if (!user_access('perform unlimited index queries') && $page_size > $default_limit) {
+    $page_size = $default_limit;
+  }
+  $query->range($page * $page_size, $page_size);
+  if ($fields == '*') {
+    $query->fields('t');
+  }
+  else {
+    $query->fields('t', explode(',', $fields));
+  }
+  if (isset($parameters) && is_array($parameters)) {
+    foreach ($parameters as $parameter => $parameter_value) {
+      $query->condition($parameter, explode(',', $parameter_value), 'IN');
+    }
+  }
+}
+
+/**
+ * Helper function to build a list of items satisfying the index query.
+ *
+ * @param $results
+ *   Object database query results object.
+ * @param $type
+ *   String type of index that is being processed.
+ * @param $field
+ *   String field to use for looking up uri.
+ */
+function services_resource_build_index_list($results, $type, $field) {
+  // Put together array of matching items to return.
+  $items = array();
+  foreach ($results as $result) {
+    if ($uri = services_resource_uri(array($type, $result->{$field}))) {
+      $result->uri = $uri;
+      if ($type == 'user') {
+        services_remove_user_data($result);
+      }
+    }
+    $items[] = $result;
+  }
+
+  return $items;
+}
+
+/**
+ *  Helper function to remove data from the user object.
+ *
+ *  @param $account
+ *    Object user object.
+ */
+function services_remove_user_data(&$account) {
+  // Remove the users password from the account object.
+  unset($account->pass);
+}
+
+/**
+ * Helper function to execute a index query.
+ *
+ * @param $query
+ *   Object dbtng query object.
+ */
+function services_resource_execute_index_query($query) {
+  try {
+    return $query->execute();
+  }
+  catch (Exception $e) {
+    return services_error(t('Invalid query provided, double check that the fields and parameters you defined are correct and exist. ' . $e->message()), 406);
+  }
+}

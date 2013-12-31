@@ -1,0 +1,45 @@
+<?php
+
+/**
+ * Implements hook_install().
+ */
+function services_oauth_install() {
+  drupal_install_schema('services_oauth');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function services_oauth_uninstall() {
+  drupal_uninstall_schema('services_oauth');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function services_oauth_schema() {
+  $schema = array();
+
+  return $schema;
+}
+
+function services_oauth_update_6001() {
+  $ret = array();
+
+  // Rename the authentication and authorization settings variables
+  $authentication = variable_get('services_oauth_authentication_levels', array());
+  $authorization = variable_get('services_oauth_authorization_settings', array());
+  variable_del('services_oauth_authentication_levels');
+  variable_del('services_oauth_authorization_settings');
+  variable_set('services_oauth_authentication_levels_', $authentication);
+  variable_set('services_oauth_authorization_settings_', $authorization);
+
+  return $ret;
+}
+
+function services_oauth_update_6200() {
+  variable_del('services_oauth_authentication_levels_');
+  variable_del('services_oauth_authorization_settings_');
+
+  return array();
+}
