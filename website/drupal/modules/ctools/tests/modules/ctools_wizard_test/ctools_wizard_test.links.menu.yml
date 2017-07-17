@@ -1,0 +1,7 @@
+# Example config entity menu items definition
+entity.ctools_wizard_test_config_entity.collection:
+  title: 'Example config entity'
+  route_name: entity.ctools_wizard_test_config_entity.collection
+  description: 'List Example config entity'
+  parent: system.admin_structure
+

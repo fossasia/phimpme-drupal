@@ -1,0 +1,66 @@
+{#
+/**
+ * @file
+ * Default theme implementation for a two column layout.
+ *
+ * This template provides a two column display layout with full width areas at
+ * the top, bottom and in the middle.
+ *
+ * Available variables:
+ * - content: The content for this layout.
+ * - attributes: HTML attributes for the layout <div>.
+ *
+ * @ingroup themeable
+ */
+#}
+{%
+  set classes = [
+    'layout',
+    'layout--twocol-bricks',
+  ]
+%}
+{% if content %}
+  <div{{ attributes.addClass(classes) }}>
+    {% if content.top %}
+      <div class="layout__region layout__region--top">
+        {{ content.top }}
+      </div>
+    {% endif %}
+
+    {% if content.first_above %}
+      <div class="layout__region layout__region--first-above">
+        {{ content.first_above }}
+      </div>
+    {% endif %}
+
+    {% if content.second_above %}
+      <div class="layout__region layout__region--second-above">
+        {{ content.second_above }}
+      </div>
+    {% endif %}
+
+    {% if content.middle %}
+      <div class="layout__region layout__region--middle">
+        {{ content.middle }}
+      </div>
+    {% endif %}
+
+    {% if content.first_below %}
+      <div class="layout__region layout__region--first-below">
+        {{ content.first_below }}
+      </div>
+    {% endif %}
+
+    {% if content.second_below %}
+      <div class="layout__region layout__region--second-below">
+        {{ content.second_below }}
+      </div>
+    {% endif %}
+
+    {% if content.bottom %}
+      <div class="layout__region layout__region--bottom">
+        {{ content.bottom }}
+      </div>
+    {% endif %}
+  </div>
+{% endif %}

@@ -1,0 +1,40 @@
+{
+  "name": "drupal/ctools",
+  "description": "Provides a number of utility and helper APIs for Drupal developers and site builders.",
+  "type": "drupal-module",
+  "license": "GPL-2.0+",
+  "minimum-stability": "dev",
+  "homepage": "https://www.drupal.org/project/ctools",
+  "authors": [
+    {
+      "name": "Kris Vanderwater (EclipseGc)",
+      "homepage": "https://www.drupal.org/u/eclipsegc",
+      "role": "Maintainer"
+    },
+    {
+      "name": "Jakob Perry (japerry)",
+      "homepage": "https://www.drupal.org/u/japerry",
+      "role": "Maintainer"
+    },
+    {
+      "name": "Tim Plunkett (tim.plunkett)",
+      "homepage": "https://www.drupal.org/u/timplunkett",
+      "role": "Maintainer"
+    },
+    {
+      "name": "James Gilliland (neclimdul)",
+      "homepage": "https://www.drupal.org/u/neclimdul",
+      "role": "Maintainer"
+    },
+    {
+      "name": "Daniel Wehner (dawehner)",
+      "homepage": "https://www.drupal.org/u/dawehner",
+      "role": "Maintainer"
+    }
+  ],
+  "support": {
+    "issues": "https://www.drupal.org/project/issues/ctools",
+    "source": "http://cgit.drupalcode.org/ctools"
+  },
+  "require": {}
+}

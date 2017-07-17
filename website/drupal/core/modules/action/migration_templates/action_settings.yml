@@ -1,0 +1,14 @@
+id: action_settings
+label: Action configuration
+migration_tags:
+  - Drupal 6
+  - Drupal 7
+source:
+  plugin: variable
+  variables:
+    - actions_max_stack
+process:
+  recursion_limit: actions_max_stack
+destination:
+  plugin: config
+  config_name: action.settings

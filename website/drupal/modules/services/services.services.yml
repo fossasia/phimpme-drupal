@@ -1,0 +1,19 @@
+services:
+  services.entity_access:
+    class: Drupal\services\Entity\ServicesEntityCreateAccessCheck
+    arguments: ['@entity.manager', '@serializer']
+    tags:
+      - { name: access_check, applies_to: _services_entity_access_create }
+
+  plugin.manager.services.service_definition:
+    class: Drupal\services\ServiceDefinitionPluginManager
+    parent: default_plugin_manager
+  http_middleware.format_setter:
+    class: Drupal\services\StackMiddleware\FormatSetter
+    tags:
+      - { name: http_middleware, priority: 201, responder: true }
+  services.csrf_token_access_check:
+    class: \Drupal\services\Access\CSRFTokenAccessCheck
+    arguments: ['@session_configuration']
+    tags:
+      - { name: access_check }

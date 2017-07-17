@@ -1,0 +1,14 @@
+name: Chaos tools blocks
+type: module
+description: 'Provides improvements to blocks that will one day be added to Drupal core.'
+package: Chaos tool suite (Experimental)
+# version: 3.x
+# core: 8.x
+dependencies:
+  - ctools
+
+# Information added by Drupal.org packaging script on 2017-04-28
+version: '8.x-3.0'
+core: '8.x'
+project: 'ctools'
+datestamp: 1493401747

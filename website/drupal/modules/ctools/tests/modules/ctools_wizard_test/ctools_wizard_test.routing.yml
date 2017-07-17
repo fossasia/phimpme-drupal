@@ -1,0 +1,82 @@
+ctools.wizard.test:
+  path: '/ctools/wizard'
+  defaults:
+    _wizard: '\Drupal\ctools_wizard_test\Wizard\WizardTest'
+    _title: 'Wizard Test'
+    tempstore_id: 'ctools.wizard.test'
+    machine_name: 'WizardTest'
+  requirements:
+    _access: 'TRUE'
+ctools.wizard.test.step:
+  path: '/ctools/wizard/{step}'
+  defaults:
+    _wizard: '\Drupal\ctools_wizard_test\Wizard\WizardTest'
+    _title: 'Wizard Test'
+    tempstore_id: 'ctools.wizard.test'
+    machine_name: 'WizardTest'
+  requirements:
+    _access: 'TRUE'
+
+# ExampleConfigEntity routing definition
+entity.ctools_wizard_test_config_entity.collection:
+  path: '/admin/structure/ctools_wizard_test_config_entity'
+  defaults:
+    _entity_list: 'ctools_wizard_test_config_entity'
+    _title: 'Example config entity'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE
+
+entity.ctools_wizard_test_config_entity.add_form:
+  path: '/admin/structure/ctools_wizard_test_config_entity/add'
+  defaults:
+    _entity_wizard: 'ctools_wizard_test_config_entity.add'
+    _title: 'Add Example config entity'
+    tempstore_id: 'ctools_wizard_test.config_entity'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE
+
+entity.ctools_wizard_test_config_entity.add_step_form:
+  path: '/admin/structure/ctools_wizard_test_config_entity/add/{machine_name}/{step}'
+  defaults:
+    _entity_wizard: 'ctools_wizard_test_config_entity.add'
+    _title: 'Add Example config entity'
+    tempstore_id: 'ctools_wizard_test.config_entity'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE
+
+entity.ctools_wizard_test_config_entity.edit_form:
+  path: '/admin/structure/ctools_wizard_test_config_entity/{machine_name}/{step}'
+  defaults:
+    _entity_wizard: 'ctools_wizard_test_config_entity.edit'
+    _title: 'Edit Example config entity'
+    tempstore_id: 'ctools_wizard_test.config_entity'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE
+
+entity.ctools_wizard_test_config_entity.external_form:
+  path: '/admin/structure/ctools_wizard_test_config_entity/{machine_name}/external'
+  defaults:
+    _title: 'Edit Example config entity'
+    _form: '\Drupal\ctools_wizard_test\Form\ExampleConfigEntityExternalForm'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE
+
+entity.ctools_wizard_test_config_entity.delete_form:
+  path: '/admin/structure/ctools_wizard_test_config_entity/{ctools_wizard_test_config_entity}/delete'
+  defaults:
+    _entity_form: 'ctools_wizard_test_config_entity.delete'
+    _title: 'Delete Example config entity'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE

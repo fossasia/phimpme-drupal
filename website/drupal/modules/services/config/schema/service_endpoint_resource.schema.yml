@@ -1,0 +1,28 @@
+services.endpoint_resource.*:
+  type: config_entity
+  label: 'Endpoint Resource'
+  mapping:
+    id:
+      type: 'string'
+      label: 'Resource unique ID'
+    service_plugin_id:
+      type: 'string'
+      label: 'Service plugin ID'
+    service_endpoint_id:
+      type: 'string'
+      label: 'Service endpoint ID'
+    formats:
+      type: sequence
+      label: 'Resource formats'
+      sequence:
+        type: string
+        label: 'Allowed format'
+    authentication:
+      type: sequence
+      label: 'Resource authentication'
+      sequence:
+        type: string
+        label: 'Allowed authentication methods'
+    no_cache:
+      type: 'boolean'
+      label: 'Do not cache this response'

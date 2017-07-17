@@ -1,0 +1,15 @@
+name: 'Dblog test views'
+type: module
+description: 'Provides default views for views dblog tests.'
+package: Testing
+# version: VERSION
+# core: 8.x
+dependencies:
+  - dblog
+  - views
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

@@ -1,0 +1,868 @@
+<?php
+
+/**
+ * @file
+ * External library handling for Drupal modules.
+ */
+
+use Drupal\Core\DrupalKernel;
+use Drupal\Core\Extension\ModuleHandler;
+use Drupal\libraries\ExternalLibrary\Asset\AttachableAssetLibraryRegistrationInterface;
+use Drupal\libraries\ExternalLibrary\Utility\LibraryAccessorInterface;
+use Drupal\libraries\ExternalLibrary\Utility\LibraryIdAccessorInterface;
+use Symfony\Component\Yaml\Parser;
+
+/**
+ * Implements hook_library_info_build().
+ *
+ * Register external asset libraries with Drupal core's library APIs.
+ */
+function libraries_library_info_build() {
+  /** @var \Drupal\libraries\ExternalLibrary\LibraryManagerInterface $library_manager */
+  $library_manager = \Drupal::service('libraries.manager');
+  $attachable_libraries = [];
+  $libraries_with_errors = [];
+  foreach ($library_manager->getRequiredLibraryIds() as $external_library_id) {
+    try {
+      $external_library = $library_manager->getLibrary($external_library_id);
+      $library_type = $external_library->getType();
+      if ($library_type instanceof AttachableAssetLibraryRegistrationInterface) {
+        $attachable_libraries += $library_type->getAttachableAssetLibraries($external_library, $library_manager);
+      }
+    }
+    catch (\Exception $e) {
+      // Library-specific exceptions should not be allowed to kill the rest of
+      // the build process, but should be logged.
+      if ($e instanceof LibraryIdAccessorInterface || $e instanceof LibraryAccessorInterface) {
+        $libraries_with_errors[] = $external_library_id;
+        watchdog_exception('libraries', $e);
+      }
+      else {
+        // Re-throw exceptions that are not library-specific.
+        throw $e;
+      }
+    }
+  }
+  // If we had library specific errors also log an informative message to
+  // tell admins that detection will not be run again without a cache clear.
+  if ($libraries_with_errors) {
+    \Drupal::logger('libraries')->error('The following external libraries could not successfully be registered with Drupal core: @libs. See earlier log entries for more details. Once these issues are addressed please be sure to clear your Drupal library cache to ensure external library detection is run again.', ['@libs' => implode(',', $libraries_with_errors)]);
+  }
+  return $attachable_libraries;
+}
+
+/**
+ * Gets the path of a library.
+ *
+ * @param $name
+ *   The machine name of a library to return the path for.
+ * @param $base_path
+ *   Whether to prefix the resulting path with base_path().
+ *
+ * @return
+ *   The path to the specified library or FALSE if the library wasn't found.
+ *
+ * @ingroup libraries
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_get_path($name, $base_path = FALSE) {
+  $libraries = &drupal_static(__FUNCTION__);
+
+  if (!isset($libraries)) {
+    $libraries = libraries_get_libraries();
+  }
+
+  $path = ($base_path ? base_path() : '');
+  if (!isset($libraries[$name])) {
+    return FALSE;
+  }
+  else {
+    $path .= $libraries[$name];
+  }
+
+  return $path;
+}
+
+/**
+ * Returns an array of library directories.
+ *
+ * Returns an array of library directories from the all-sites directory
+ * (i.e. sites/all/libraries/), the profiles directory, and site-specific
+ * directory (i.e. sites/somesite/libraries/). The returned array will be keyed
+ * by the library name. Site-specific libraries are prioritized over libraries
+ * in the default directories. That is, if a library with the same name appears
+ * in both the site-wide directory and site-specific directory, only the
+ * site-specific version will be listed.
+ *
+ * @return
+ *   A list of library directories.
+ *
+ * @ingroup libraries
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_get_libraries() {
+  $searchdir = array();
+  $config = DrupalKernel::findSitePath(\Drupal::request());
+
+  // @todo core/libraries
+
+  // Similar to 'modules' and 'themes' directories inside an installation
+  // profile, installation profiles may want to place libraries into a
+  // 'libraries' directory.
+  if ($profile = drupal_get_profile()) {
+    $profile_path = drupal_get_path('profile', $profile);
+    $searchdir[] = "$profile_path/libraries";
+  };
+
+  // Search sites/all/libraries for backwards-compatibility.
+  $searchdir[] = 'sites/all/libraries';
+
+  // Always search the root 'libraries' directory.
+  $searchdir[] = 'libraries';
+
+  // Also search sites/<domain>/*.
+  $searchdir[] = "$config/libraries";
+
+  // Retrieve list of directories.
+  $directories = array();
+  $nomask = array('CVS');
+  foreach ($searchdir as $dir) {
+    if (is_dir($dir) && $handle = opendir($dir)) {
+      while (FALSE !== ($file = readdir($handle))) {
+        if (!in_array($file, $nomask) && $file[0] != '.') {
+          if (is_dir("$dir/$file")) {
+            $directories[$file] = "$dir/$file";
+          }
+        }
+      }
+      closedir($handle);
+    }
+  }
+
+  return $directories;
+}
+
+/**
+ * Looks for library info files.
+ *
+ * This function scans the following directories for info files:
+ * - libraries
+ * - profiles/$profilename/libraries
+ * - sites/all/libraries
+ * - sites/$sitename/libraries
+ * - any directories specified via hook_libraries_info_file_paths()
+ *
+ * @return
+ *   An array of info files, keyed by library name. The values are the paths of
+ *   the files.
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_scan_info_files() {
+  $profile = drupal_get_path('profile', drupal_get_profile());
+  $config = DrupalKernel::findSitePath(\Drupal::request());
+
+  // Build a list of directories.
+  $directories = \Drupal::moduleHandler()->invokeAll('libraries_info_file_paths', $args = array());
+  $directories[] = "$profile/libraries";
+  $directories[] = 'sites/all/libraries';
+  $directories[] = 'libraries';
+  $directories[] = "$config/libraries";
+
+  // Scan for info files.
+  $files = array();
+  foreach ($directories as $dir) {
+    if (file_exists($dir)) {
+      $files = array_merge($files, file_scan_directory($dir, '@^[a-z0-9._-]+\.libraries\.info\.yml$@', array(
+        'key' => 'name',
+        'recurse' => FALSE,
+      )));
+    }
+  }
+
+  foreach ($files as $filename => $file) {
+    $files[basename($filename, '.libraries.info')] = $file;
+    unset($files[$filename]);
+  }
+
+  return $files;
+}
+
+/**
+ * Invokes library callbacks.
+ *
+ * @param $group
+ *   A string containing the group of callbacks that is to be applied. Should be
+ *   either 'info', 'pre-detect', 'post-detect', or 'load'.
+ * @param $library
+ *   An array of library information, passed by reference.
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_invoke($group, &$library) {
+  foreach ($library['callbacks'][$group] as $callback) {
+    libraries_traverse_library($library, $callback);
+  }
+}
+
+/**
+ * Helper function to apply a callback to all parts of a library.
+ *
+ * Because library declarations can include variants and versions, and those
+ * version declarations can in turn include variants, modifying e.g. the 'files'
+ * property everywhere it is declared can be quite cumbersome, in which case
+ * this helper function is useful.
+ *
+ * @param $library
+ *   An array of library information, passed by reference.
+ * @param $callback
+ *   A string containing the callback to apply to all parts of a library.
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_traverse_library(&$library, $callback) {
+  // Always apply the callback to the top-level library.
+  $callback($library, NULL, NULL);
+
+  // Apply the callback to versions.
+  if (isset($library['versions'])) {
+    foreach ($library['versions'] as $version_string => &$version) {
+      $callback($version, $version_string, NULL);
+      // Versions can include variants as well.
+      if (isset($version['variants'])) {
+        foreach ($version['variants'] as $version_variant_name => &$version_variant) {
+          $callback($version_variant, $version_string, $version_variant_name);
+        }
+      }
+    }
+  }
+
+  // Apply the callback to variants.
+  if (isset($library['variants'])) {
+    foreach ($library['variants'] as $variant_name => &$variant) {
+      $callback($variant, NULL, $variant_name);
+    }
+  }
+}
+
+/**
+ * Library info callback to make all 'files' properties consistent.
+ *
+ * This turns libraries' file information declared as e.g.
+ * @code
+ * $library['files']['js'] = array('example_1.js', 'example_2.js');
+ * @endcode
+ * into
+ * @code
+ * $library['files']['js'] = array(
+ *   'example_1.js' => array(),
+ *   'example_2.js' => array(),
+ * );
+ * @endcode
+ * It does the same for the 'integration files' property.
+ *
+ * @param $library
+ *   An associative array of library information or a part of it, passed by
+ *   reference.
+ * @param $version
+ *   If the library information belongs to a specific version, the version
+ *   string. NULL otherwise.
+ * @param $variant
+ *   If the library information belongs to a specific variant, the variant name.
+ *   NULL otherwise.
+ *
+ * @see libraries_info()
+ * @see libraries_invoke()
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_prepare_files(&$library, $version = NULL, $variant = NULL) {
+  // Both the 'files' property and the 'integration files' property contain file
+  // declarations, and we want to make both consistent.
+  $file_types = array();
+  if (isset($library['files'])) {
+    $file_types[] = &$library['files'];
+  }
+  if (isset($library['integration files'])) {
+    // Integration files are additionally keyed by module.
+    foreach ($library['integration files'] as &$integration_files) {
+      $file_types[] = &$integration_files;
+    }
+  }
+  foreach ($file_types as &$files) {
+    // Go through all supported types of files.
+    foreach (array('js', 'css', 'php') as $type) {
+      if (isset($files[$type])) {
+        foreach ($files[$type] as $key => $value) {
+          // Unset numeric keys and turn the respective values into keys.
+          if (is_numeric($key)) {
+            $files[$type][$value] = array();
+            unset($files[$type][$key]);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Library post-detect callback to process and detect dependencies.
+ *
+ * It checks whether each of the dependencies of a library are installed and
+ * available in a compatible version.
+ *
+ * @param $library
+ *   An associative array of library information or a part of it, passed by
+ *   reference.
+ * @param $version
+ *   If the library information belongs to a specific version, the version
+ *   string. NULL otherwise.
+ * @param $variant
+ *   If the library information belongs to a specific variant, the variant name.
+ *   NULL otherwise.
+ *
+ * @see libraries_info()
+ * @see libraries_invoke()
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_detect_dependencies(&$library, $version = NULL, $variant = NULL) {
+  if (isset($library['dependencies'])) {
+    foreach ($library['dependencies'] as &$dependency_string) {
+      $dependency_info = ModuleHandler::parseDependency($dependency_string);
+      $dependency = libraries_detect($dependency_info['name']);
+      if (!$dependency['installed']) {
+        $library['installed'] = FALSE;
+        $library['error'] = 'missing dependency';
+        $library['error message'] = t('The %dependency library, which the %library library depends on, is not installed.', array(
+          '%dependency' => $dependency['name'],
+          '%library' => $library['name'],
+        ));
+      }
+      elseif (drupal_check_incompatibility($dependency_info, $dependency['version'])) {
+        $library['installed'] = FALSE;
+        $library['error'] = 'incompatible dependency';
+        $library['error message'] = t('The version %dependency_version of the %dependency library is not compatible with the %library library.', array(
+          '%dependency_version' => $dependency['version'],
+          '%dependency' => $dependency['name'],
+          '%library' => $library['name'],
+        ));
+      }
+
+      // Remove the version string from the dependency, so libraries_load() can
+      // load the libraries directly.
+      $dependency_string = $dependency_info['name'];
+    }
+  }
+}
+
+/**
+ * Returns information about registered libraries.
+ *
+ * The returned information is unprocessed; i.e., as registered by modules.
+ *
+ * @param $name
+ *   (optional) The machine name of a library to return registered information
+ *   for. If omitted, information about all registered libraries is returned.
+ *
+ * @return array|false
+ *   An associative array containing registered information for all libraries,
+ *   the registered information for the library specified by $name, or FALSE if
+ *   the library $name is not registered.
+ *
+ * @see hook_libraries_info()
+ *
+ * @todo Re-introduce support for include file plugin system - either by copying
+ *   Wysiwyg's code, or directly switching to CTools.
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function &libraries_info($name = NULL) {
+  // This static cache is re-used by libraries_detect() to save memory.
+  $libraries = &drupal_static(__FUNCTION__);
+
+  if (!isset($libraries)) {
+    $libraries = array();
+    // Gather information from hook_libraries_info().
+    $module_handler = \Drupal::moduleHandler();
+    foreach ($module_handler->getImplementations('libraries_info') as $module) {
+      foreach ($module_handler->invoke($module, 'libraries_info') as $machine_name => $properties) {
+        $properties['module'] = $module;
+        $libraries[$machine_name] = $properties;
+      }
+    }
+    // Gather information from hook_libraries_info() in enabled themes.
+    // @see drupal_alter()
+    global $theme, $base_theme_info;
+    if (isset($theme)) {
+      $theme_keys = array();
+      foreach ($base_theme_info as $base) {
+        $theme_keys[] = $base->name;
+      }
+      $theme_keys[] = $theme;
+      foreach ($theme_keys as $theme_key) {
+        $function = $theme_key . '_' . 'libraries_info';
+        if (function_exists($function)) {
+          foreach ($function() as $machine_name => $properties) {
+            $properties['theme'] = $theme_key;
+            $libraries[$machine_name] = $properties;
+          }
+        }
+      }
+    }
+
+    // Gather information from .info files.
+    // .info files override module definitions.
+    // In order to stop Drupal's extension and the Drupal.org packaging
+    // system from finding library info files we use the 'libraries.info.yml'
+    // file extension. Therefore, having a 'type' key, like info files of
+    // modules, themes, and profiles have, is superfluous.
+    // \Drupal\Core\Extension\InfoParser, however, enforces the existence of a
+    // 'type' key in info files. We therefore use Symfony's YAML parser
+    // directly.
+    // @todo Consider creating a dedicating InfoParser for library info files
+    //   similar to \Drupal\Core\Extension\InfoParser
+    $parser = new Parser();
+    foreach (libraries_scan_info_files() as $machine_name => $file) {
+      $properties = $parser->parse(file_get_contents($file->uri));
+      $properties['info file'] = $file->uri;
+      $libraries[$machine_name] = $properties;
+    }
+
+    // Provide defaults.
+    foreach ($libraries as $machine_name => &$properties) {
+      libraries_info_defaults($properties, $machine_name);
+    }
+
+    // Allow modules to alter the registered libraries.
+    $module_handler->alter('libraries_info', $libraries);
+
+    // Invoke callbacks in the 'info' group.
+    foreach ($libraries as &$properties) {
+      libraries_invoke('info', $properties);
+    }
+  }
+
+  if (isset($name)) {
+    if (!empty($libraries[$name])) {
+      return $libraries[$name];
+    }
+    else {
+      $false = FALSE;
+      return $false;
+    }
+  }
+  return $libraries;
+}
+
+/**
+ * Applies default properties to a library definition.
+ *
+ * @library
+ *   An array of library information, passed by reference.
+ * @name
+ *   The machine name of the passed-in library.
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_info_defaults(&$library, $name) {
+  $library += array(
+    'machine name' => $name,
+    'name' => $name,
+    'vendor url' => '',
+    'download url' => '',
+    'path' => '',
+    'library path' => NULL,
+    'version callback' => 'libraries_get_version',
+    'version arguments' => array(),
+    'files' => array(),
+    'dependencies' => array(),
+    'variants' => array(),
+    'versions' => array(),
+    'integration files' => array(),
+    'callbacks' => array(),
+  );
+  $library['callbacks'] += array(
+    'info' => array(),
+    'pre-detect' => array(),
+    'post-detect' => array(),
+    'pre-load' => array(),
+    'post-load' => array(),
+  );
+
+  // Add our own callbacks before any others.
+  array_unshift($library['callbacks']['info'], 'libraries_prepare_files');
+  array_unshift($library['callbacks']['post-detect'], 'libraries_detect_dependencies');
+
+  return $library;
+}
+
+/**
+ * Tries to detect a library and its installed version.
+ *
+ * @param $name
+ *   The machine name of a library to return registered information for.
+ *
+ * @return array|false
+ *   An associative array containing registered information for the library
+ *   specified by $name, or FALSE if the library $name is not registered.
+ *   In addition to the keys returned by libraries_info(), the following keys
+ *   are contained:
+ *   - installed: A boolean indicating whether the library is installed. Note
+ *     that not only the top-level library, but also each variant contains this
+ *     key.
+ *   - version: If the version could be detected, the full version string.
+ *   - error: If an error occurred during library detection, one of the
+ *     following error statuses: "not found", "not detected", "not supported".
+ *   - error message: If an error occurred during library detection, a detailed
+ *     error message.
+ *
+ * @see libraries_info()
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_detect($name) {
+  // Re-use the statically cached value of libraries_info() to save memory.
+  $library = &libraries_info($name);
+
+  if ($library === FALSE) {
+    return $library;
+  }
+  // If 'installed' is set, library detection ran already.
+  if (isset($library['installed'])) {
+    return $library;
+  }
+
+  $library['installed'] = FALSE;
+
+  // Check whether the library exists.
+  if (!isset($library['library path'])) {
+    $library['library path'] = libraries_get_path($library['machine name']);
+  }
+  if ($library['library path'] === FALSE || !file_exists($library['library path'])) {
+    $library['error'] = 'not found';
+    $library['error message'] = t('The %library library could not be found.', array(
+      '%library' => $library['name'],
+    ));
+    return $library;
+  }
+
+  // Invoke callbacks in the 'pre-detect' group.
+  libraries_invoke('pre-detect', $library);
+
+  // Detect library version, if not hardcoded.
+  if (!isset($library['version'])) {
+    // We support both a single parameter, which is an associative array, and an
+    // indexed array of multiple parameters.
+    if (isset($library['version arguments'][0])) {
+      // Add the library as the first argument.
+      $library['version'] = call_user_func_array($library['version callback'], array_merge(array($library), $library['version arguments']));
+    }
+    else {
+      $library['version'] = $library['version callback']($library, $library['version arguments']);
+    }
+    if (empty($library['version'])) {
+      $library['error'] = 'not detected';
+      $library['error message'] = t('The version of the %library library could not be detected.', array(
+        '%library' => $library['name'],
+      ));
+      return $library;
+    }
+  }
+
+  // Determine to which supported version the installed version maps.
+  if (!empty($library['versions'])) {
+    ksort($library['versions']);
+    $version = 0;
+    foreach ($library['versions'] as $supported_version => $version_properties) {
+      if (version_compare($library['version'], $supported_version, '>=')) {
+        $version = $supported_version;
+      }
+    }
+    if (!$version) {
+      $library['error'] = 'not supported';
+      $library['error message'] = t('The installed version %version of the %library library is not supported.', array(
+        '%version' => $library['version'],
+        '%library' => $library['name'],
+      ));
+      return $library;
+    }
+
+    // Apply version specific definitions and overrides.
+    $library = array_merge($library, $library['versions'][$version]);
+    unset($library['versions']);
+  }
+
+  // Check each variant if it is installed.
+  if (!empty($library['variants'])) {
+    foreach ($library['variants'] as $variant_name => &$variant) {
+      // If no variant callback has been set, assume the variant to be
+      // installed.
+      if (!isset($variant['variant callback'])) {
+        $variant['installed'] = TRUE;
+      }
+      else {
+        // We support both a single parameter, which is an associative array,
+        // and an indexed array of multiple parameters.
+        if (isset($variant['variant arguments'][0])) {
+          // Add the library as the first argument, and the variant name as the second.
+          $variant['installed'] = call_user_func_array($variant['variant callback'], array_merge(array($library, $variant_name), $variant['variant arguments']));
+        }
+        else {
+          $variant['installed'] = $variant['variant callback']($library, $variant_name, $variant['variant arguments']);
+        }
+        if (!$variant['installed']) {
+          $variant['error'] = 'not found';
+          $variant['error message'] = t('The %variant variant of the %library library could not be found.', array(
+            '%variant' => $variant_name,
+            '%library' => $library['name'],
+          ));
+        }
+      }
+    }
+  }
+
+  // If we end up here, the library should be usable.
+  $library['installed'] = TRUE;
+
+  // Invoke callbacks in the 'post-detect' group.
+  libraries_invoke('post-detect', $library);
+
+  return $library;
+}
+
+/**
+ * Loads a library.
+ *
+ * @param $name
+ *   The name of the library to load.
+ * @param $variant
+ *   The name of the variant to load. Note that only one variant of a library
+ *   can be loaded within a single request. The variant that has been passed
+ *   first is used; different variant names in subsequent calls are ignored.
+ *
+ * @return
+ *   An associative array of the library information as returned from
+ *   libraries_info(). The top-level properties contain the effective definition
+ *   of the library (variant) that has been loaded. Additionally:
+ *   - installed: Whether the library is installed, as determined by
+ *     libraries_detect_library().
+ *   - loaded: Either the amount of library files that have been loaded, or
+ *     FALSE if the library could not be loaded.
+ *   See hook_libraries_info() for more information.
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_load($name, $variant = NULL) {
+  $loaded = &drupal_static(__FUNCTION__, array());
+
+  if (!isset($loaded[$name])) {
+    $library = \Drupal::cache('libraries')->get($name);
+    if ($library) {
+      $library = $library->data;
+    }
+    else {
+      $library = libraries_detect($name);
+      \Drupal::cache('libraries')->set($name, $library);
+    }
+    // If a variant was specified, override the top-level properties with the
+    // variant properties.
+    if (isset($variant)) {
+      // Ensure that the $variant key exists, and if it does not, set its
+      // 'installed' property to FALSE by default. This will prevent the loading
+      // of the library files below.
+      $library['variants'] += array($variant => array('installed' => FALSE));
+      $library = array_merge($library, $library['variants'][$variant]);
+    }
+    // Regardless of whether a specific variant was requested or not, there can
+    // only be one variant of a library within a single request.
+    unset($library['variants']);
+
+    // If the library (variant) is installed, load it.
+    $library['loaded'] = FALSE;
+    if ($library['installed']) {
+      // Load library dependencies.
+      if (isset($library['dependencies'])) {
+        foreach ($library['dependencies'] as $dependency) {
+          libraries_load($dependency);
+        }
+      }
+
+      // Invoke callbacks in the 'pre-load' group.
+      libraries_invoke('pre-load', $library);
+
+      // Load all the files associated with the library.
+      $library['loaded'] = libraries_load_files($library);
+
+      // Invoke callbacks in the 'post-load' group.
+      libraries_invoke('post-load', $library);
+    }
+    $loaded[$name] = $library;
+  }
+
+  return $loaded[$name];
+}
+
+/**
+ * Loads a library's files.
+ *
+ * @param $library
+ *   An array of library information as returned by libraries_info().
+ *
+ * @return
+ *   The number of loaded files.
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_load_files($library) {
+
+  // Construct the full path to the library for later use.
+  $path = $library['library path'];
+  $path = ($library['path'] !== '' ? $path . '/' . $library['path'] : $path);
+
+  // Count the number of loaded files for the return value.
+  $count = 0;
+
+  // Load both the JavaScript and the CSS files.
+  // The parameters for drupal_add_js() and drupal_add_css() require special
+  // handling.
+  // @see drupal_process_attached()
+  foreach (array('js', 'css') as $type) {
+    // Given the removal of core functions like _drupal_add_js and
+    // _drupal_add_css the logic below cannot safely be run anymore.
+    // @see https://www.drupal.org/node/2702563
+    break;
+    if (!empty($library['files'][$type])) {
+      foreach ($library['files'][$type] as $data => $options) {
+        // If the value is not an array, it's a filename and passed as first
+        // (and only) argument.
+        if (!is_array($options)) {
+          $data = $options;
+          $options = array();
+        }
+        // In some cases, the first parameter ($data) is an array. Arrays can't
+        // be passed as keys in PHP, so we have to get $data from the value
+        // array.
+        if (is_numeric($data)) {
+          $data = $options['data'];
+          unset($options['data']);
+        }
+        // Prepend the library path to the file name.
+        $data = "$path/$data";
+        // Apply the default group if the group isn't explicitly given.
+        if (!isset($options['group'])) {
+          $options['group'] = ($type == 'js') ? JS_DEFAULT : CSS_AGGREGATE_DEFAULT;
+        }
+        if ($type === 'js') {
+          $options['version'] = -1;
+        }
+        // @todo Avoid the usage of _drupal_add_js() and _drupal_add_css()
+        call_user_func('_drupal_add_' . $type, $data, $options);
+        $count++;
+      }
+    }
+  }
+
+  // Load PHP files.
+  if (!empty($library['files']['php'])) {
+    foreach ($library['files']['php'] as $file => $array) {
+      $file_path = DRUPAL_ROOT . '/' . $path . '/' . $file;
+      if (file_exists($file_path)) {
+        require_once $file_path;
+        $count++;
+      }
+    }
+  }
+
+  // Load integration files.
+  if (!empty($library['integration files'])) {
+    foreach ($library['integration files'] as $module => $files) {
+      libraries_load_files(array(
+        'files' => $files,
+        'path' => '',
+        'library path' => drupal_get_path('module', $module),
+      ));
+    }
+  }
+
+  return $count;
+}
+
+/**
+ * Gets the version information from an arbitrary library.
+ *
+ * @param $library
+ *   An associative array containing all information about the library.
+ * @param $options
+ *   An associative array containing with the following keys:
+ *   - file: The filename to parse for the version, relative to the library
+ *     path. For example: 'docs/changelog.txt'.
+ *   - pattern: A string containing a regular expression (PCRE) to match the
+ *     library version. For example: '@version\s+([0-9a-zA-Z\.-]+)@'. Note that
+ *     the returned version is not the match of the entire pattern (i.e.
+ *     '@version 1.2.3' in the above example) but the match of the first
+ *     sub-pattern (i.e. '1.2.3' in the above example).
+ *   - lines: (optional) The maximum number of lines to search the pattern in.
+ *     Defaults to 20.
+ *   - cols: (optional) The maximum number of characters per line to take into
+ *     account. Defaults to 200. In case of minified or compressed files, this
+ *     prevents reading the entire file into memory.
+ *
+ * @return
+ *   A string containing the version of the library.
+ *
+ * @see libraries_get_path()
+ *
+ * @deprecated Will be removed before a stable Drupal 8 release. Please use the
+ * new library load and managment concepts described at:
+ * https://www.drupal.org/node/2170763
+ */
+function libraries_get_version($library, $options) {
+  // Provide defaults.
+  $options += array(
+    'file' => '',
+    'pattern' => '',
+    'lines' => 20,
+    'cols' => 200,
+  );
+
+  $file = DRUPAL_ROOT . '/' . $library['library path'] . '/' . $options['file'];
+  if (empty($options['file']) || !file_exists($file)) {
+    return;
+  }
+  $file = fopen($file, 'r');
+  while ($options['lines'] && $line = fgets($file, $options['cols'])) {
+    if (preg_match($options['pattern'], $line, $version)) {
+      fclose($file);
+      return $version[1];
+    }
+    $options['lines']--;
+  }
+  fclose($file);
+}

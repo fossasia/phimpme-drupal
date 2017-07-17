@@ -1,0 +1,20 @@
+name: 'Chaos tools blocks test'
+type: module
+description: 'Support module for Chaos tools blocks tests.'
+# core: 8.x
+package: Testing
+# version: 8.0.1
+dependencies:
+  - image
+  - menu_ui
+  - node
+  - path
+  - text
+  - user
+features: true
+
+# Information added by Drupal.org packaging script on 2017-04-28
+version: '8.x-3.0'
+core: '8.x'
+project: 'ctools'
+datestamp: 1493401747

@@ -1,0 +1,15 @@
+name: Filter
+type: module
+description: 'Filters content in preparation for display.'
+package: Core
+# version: VERSION
+# core: 8.x
+configure: filter.admin_overview
+dependencies:
+  - user
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

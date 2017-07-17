@@ -1,0 +1,63 @@
+ctools.context:
+  type: mapping
+  label: Context
+  mapping:
+    label:
+      type: label
+      label: 'Label of the context'
+    type:
+      type: string
+      label: 'Context type'
+    description:
+      type: string
+      label: 'Description of the context'
+    value:
+      type: string
+      label: 'Context value'
+
+ctools.relationship:
+  type: mapping
+  label: 'Relationship'
+  mapping:
+    id:
+      type: string
+      label: 'ID'
+    label:
+      type: label
+      label: 'Label'
+
+condition.plugin.entity_bundle:*:
+  type: condition.plugin
+  mapping:
+    bundles:
+      type: sequence
+      sequence:
+        type: string
+
+ctools.block_plugin.*:
+  type: block.settings.[id]
+  mapping:
+    region:
+      type: string
+      label: 'Region'
+    weight:
+      type: integer
+      label: 'Weight'
+    uuid:
+      type: string
+      label: 'UUID'
+    context_mapping:
+      type: sequence
+      label: 'Context assignments'
+      sequence:
+        - type: string
+
+ctools.block_display_variant:
+  type: display_variant.plugin
+  label: 'Block display variant'
+  mapping:
+    blocks:
+      type: sequence
+      label: 'Blocks'
+      sequence:
+        - type: ctools.block_plugin.[id]

@@ -1,0 +1,497 @@
+<?php
+
+/**
+ * @file
+ * Tests the library detection and loading.
+ */
+
+use Drupal\Component\Utility\SafeMarkup;
+
+/**
+ * Implements hook_libraries_info().
+ */
+function libraries_test_libraries_info() {
+  // Test library detection.
+  $libraries['example_missing'] = array(
+    'name' => 'Example missing',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/missing',
+  );
+  $libraries['example_undetected_version'] = array(
+    'name' => 'Example undetected version',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests',
+    'version callback' => '_libraries_test_return_version',
+    'version arguments' => array(FALSE),
+  );
+  $libraries['example_unsupported_version'] = array(
+    'name' => 'Example unsupported version',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests',
+    'version callback' => '_libraries_test_return_version',
+    'version arguments' => array('1'),
+    'versions' => array(
+      '2' => array(),
+    ),
+  );
+
+  $libraries['example_supported_version'] = array(
+    'name' => 'Example supported version',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests',
+    'version callback' => '_libraries_test_return_version',
+    'version arguments' => array('1'),
+    'versions' => array(
+      '1' => array(),
+    ),
+  );
+
+  // Test the default version callback.
+  $libraries['example_default_version_callback'] = array(
+    'name' => 'Example default version callback',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version arguments' => array(
+      'file' => 'README.txt',
+      // Version 1
+      'pattern' => '/Version (\d+)/',
+      'lines' => 5,
+    ),
+  );
+
+  // Test a multiple-parameter version callback.
+  $libraries['example_multiple_parameter_version_callback'] = array(
+    'name' => 'Example multiple parameter version callback',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    // Version 1
+    'version callback' => '_libraries_test_get_version',
+    'version arguments' => array('README.txt', '/Version (\d+)/', 5),
+  );
+
+  // Test a top-level files property.
+  $libraries['example_files'] = array(
+    'name' => 'Example files',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1',
+    'files' => array(
+      'js' => array('example_1.js'),
+      'css' => array('example_1.css'),
+      'php' => array('example_1.php'),
+    ),
+  );
+
+  // Test loading of integration files.
+  // Normally added by the corresponding module via hook_libraries_info_alter(),
+  // these files should be automatically loaded when the library is loaded.
+  $libraries['example_integration_files'] = array(
+    'name' => 'Example integration files',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1',
+    'integration files' => array(
+      'libraries_test' => array(
+        'js' => array('libraries_test.js'),
+        'css' => array('libraries_test.css'),
+        'php' => array('libraries_test.inc'),
+      ),
+    ),
+  );
+
+  // Test version overloading.
+  $libraries['example_versions'] = array(
+    'name' => 'Example versions',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '2',
+    'versions' => array(
+      '1' => array(
+        'files' => array(
+          'js' => array('example_1.js'),
+          'css' => array('example_1.css'),
+          'php' => array('example_1.php'),
+        ),
+      ),
+      '2' => array(
+        'files' => array(
+          'js' => array('example_2.js'),
+          'css' => array('example_2.css'),
+          'php' => array('example_2.php'),
+        ),
+      ),
+    ),
+  );
+
+  // Test variant detection.
+  $libraries['example_variant_missing'] = array(
+    'name' => 'Example variant missing',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1',
+    'variants' => array(
+      'example_variant' => array(
+        'files' => array(
+          'js' => array('example_3.js'),
+          'css' => array('example_3.css'),
+          'php' => array('example_3.php'),
+        ),
+        'variant callback' => '_libraries_test_return_installed',
+        'variant arguments' => array(FALSE),
+      ),
+    ),
+  );
+
+  $libraries['example_variant'] = array(
+    'name' => 'Example variant',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1',
+    'variants' => array(
+      'example_variant' => array(
+        'files' => array(
+          'js' => array('example_3.js'),
+          'css' => array('example_3.css'),
+          'php' => array('example_3.php'),
+        ),
+        'variant callback' => '_libraries_test_return_installed',
+        'variant arguments' => array(TRUE),
+      ),
+    ),
+  );
+
+  // Test correct behaviour with multiple versions and multiple variants.
+  $libraries['example_versions_and_variants'] = array(
+    'name' => 'Example versions and variants',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '2',
+    'versions' => array(
+      '1' => array(
+        'variants' => array(
+          'example_variant_1' => array(
+            'files' => array(
+              'js' => array('example_1.js'),
+              'css' => array('example_1.css'),
+              'php' => array('example_1.php'),
+            ),
+            'variant callback' => '_libraries_test_return_installed',
+            'variant arguments' => array(TRUE),
+          ),
+          'example_variant_2' => array(
+            'files' => array(
+              'js' => array('example_2.js'),
+              'css' => array('example_2.css'),
+              'php' => array('example_2.php'),
+            ),
+            'variant callback' => '_libraries_test_return_installed',
+            'variant arguments' => array(TRUE),
+          ),
+        ),
+      ),
+      '2' => array(
+        'variants' => array(
+          'example_variant_1' => array(
+            'files' => array(
+              'js' => array('example_3.js'),
+              'css' => array('example_3.css'),
+              'php' => array('example_3.php'),
+            ),
+            'variant callback' => '_libraries_test_return_installed',
+            'variant arguments' => array(TRUE),
+          ),
+          'example_variant_2' => array(
+            'files' => array(
+              'js' => array('example_4.js'),
+              'css' => array('example_4.css'),
+              'php' => array('example_4.php'),
+            ),
+            'variant callback' => '_libraries_test_return_installed',
+            'variant arguments' => array(TRUE),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  // Test dependency loading.
+  // We add one file to each library to be able to verify if it was loaded with
+  // libraries_load().
+  // This library acts as a dependency for the libraries below.
+  $libraries['example_dependency'] = array(
+    'name' => 'Example dependency',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1.1',
+    'files' => array('js' => array('example_1.js')),
+  );
+  $libraries['example_dependency_missing'] = array(
+    'name' => 'Example dependency missing',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1',
+    'dependencies' => array('example_missing'),
+    'files' => array('js' => array('example_1.js')),
+  );
+  $libraries['example_dependency_incompatible'] = array(
+    'name' => 'Example dependency incompatible',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1',
+    'dependencies' => array('example_dependency (>1.1)'),
+    'files' => array('js' => array('example_1.js')),
+  );
+  $libraries['example_dependency_compatible'] = array(
+    'name' => 'Example dependency compatible',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1',
+    'dependencies' => array('example_dependency (>=1.1)'),
+    'files' => array('js' => array('example_1.js')),
+  );
+
+  // Test the applying of callbacks.
+  $libraries['example_callback'] = array(
+    'name' => 'Example callback',
+    'library path' => drupal_get_path('module', 'libraries') . '/tests/example',
+    'version' => '1',
+    'versions' => array(
+      '1' => array(
+        'variants' => array(
+          'example_variant' => array(
+            // These keys are for testing purposes only.
+            'info callback' => 'not applied',
+            'pre-detect callback' => 'not applied',
+            'post-detect callback' => 'not applied',
+            'pre-load callback' => 'not applied',
+            'post-load callback' => 'not applied',
+          ),
+        ),
+        // These keys are for testing purposes only.
+        'info callback' => 'not applied',
+        'pre-detect callback' => 'not applied',
+        'post-detect callback' => 'not applied',
+        'pre-load callback' => 'not applied',
+        'post-load callback' => 'not applied',
+      ),
+    ),
+    'variants' => array(
+      'example_variant' => array(
+        // These keys are for testing purposes only.
+        'info callback' => 'not applied',
+        'pre-detect callback' => 'not applied',
+        'post-detect callback' => 'not applied',
+        'pre-load callback' => 'not applied',
+        'post-load callback' => 'not applied',
+      ),
+    ),
+    'callbacks' => array(
+      'info' => array('_libraries_test_info_callback'),
+      'pre-detect' => array('_libraries_test_pre_detect_callback'),
+      'post-detect' => array('_libraries_test_post_detect_callback'),
+      'pre-load' => array('_libraries_test_pre_load_callback'),
+      'post-load' => array('_libraries_test_post_load_callback'),
+    ),
+    // These keys are for testing purposes only.
+    'info callback' => 'not applied',
+    'pre-detect callback' => 'not applied',
+    'post-detect callback' => 'not applied',
+    'pre-load callback' => 'not applied',
+    'post-load callback' => 'not applied',
+  );
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_libraries_info_file_paths()
+ */
+function libraries_test_libraries_info_file_paths() {
+  return array(drupal_get_path('module', 'libraries') . '/tests/example');
+}
+
+/**
+ * Gets the version of an example library.
+ *
+ * Returns exactly the version string entered as the $version parameter. This
+ * function cannot be collapsed with _libraries_test_return_installed(), because
+ * of the different arguments that are passed automatically.
+ */
+function _libraries_test_return_version($library, $version) {
+  return $version;
+}
+
+/**
+ * Gets the version information from an arbitrary library.
+ *
+ * Test function for a version callback with multiple arguments. This is an
+ * exact copy of libraries_get_version(), which uses a single $option argument,
+ * except for the fact that it uses multiple arguments. Since we support both
+ * type of version callbacks, detecting the version of a test library with this
+ * function ensures that the arguments are passed correctly. This function might
+ * be a useful reference for a custom version callback that uses multiple
+ * parameters.
+ *
+ * @param $library
+ *   An associative array containing all information about the library.
+ * @param $file
+ *   The filename to parse for the version, relative to the library path. For
+ *   example: 'docs/changelog.txt'.
+ * @param pattern
+ *   A string containing a regular expression (PCRE) to match the library
+ *   version. For example: '/@version (\d+)\.(\d+)/'.
+ * @param lines
+ *   (optional) The maximum number of lines to search the pattern in. Defaults
+ *   to 20.
+ * @param cols
+ *   (optional) The maximum number of characters per line to take into account.
+ *   Defaults to 200. In case of minified or compressed files, this prevents
+ *   reading the entire file into memory.
+ *
+ * @return
+ *   A string containing the version of the library.
+ *
+ * @see libraries_get_version()
+ */
+function _libraries_test_get_version($library, $file, $pattern, $lines = 20, $cols = 200) {
+
+  $file = DRUPAL_ROOT . '/' . $library['library path'] . '/' . $file;
+  if (!file_exists($file)) {
+    return;
+  }
+  $file = fopen($file, 'r');
+  while ($lines && $line = fgets($file, $cols)) {
+    if (preg_match($pattern, $line, $version)) {
+      fclose($file);
+      return $version[1];
+    }
+    $lines--;
+  }
+  fclose($file);
+}
+
+/**
+ * Detects the variant of an example library.
+ *
+ * Returns exactly the value of $installed, either TRUE or FALSE. This function
+ * cannot be collapsed with _libraries_test_return_version(), because of the
+ * different arguments that are passed automatically.
+ */
+function _libraries_test_return_installed($library, $name, $installed) {
+  return $installed;
+}
+
+/**
+ * Sets the 'info callback' key.
+ *
+ * This function is used as a test callback for the 'info' callback group.
+ *
+ * @see _libraries_test_callback()
+ */
+function _libraries_test_info_callback(&$library, $version, $variant) {
+  _libraries_test_callback($library, $version, $variant, 'info');
+}
+
+/**
+ * Sets the 'pre-detect callback' key.
+ *
+ * This function is used as a test callback for the 'pre-detect' callback group.
+ *
+ * @see _libraries_test_callback()
+ */
+function _libraries_test_pre_detect_callback(&$library, $version, $variant) {
+  _libraries_test_callback($library, $version, $variant, 'pre-detect');
+}
+
+/**
+ * Sets the 'post-detect callback' key.
+ *
+ * This function is used as a test callback for the 'post-detect callback group.
+ *
+ * @see _libraries_test_callback()
+ */
+function _libraries_test_post_detect_callback(&$library, $version, $variant) {
+  _libraries_test_callback($library, $version, $variant, 'post-detect');
+}
+
+/**
+ * Sets the 'pre-load callback' key.
+ *
+ * This function is used as a test callback for the 'pre-load' callback group.
+ *
+ * @see _libraries_test_callback()
+ */
+function _libraries_test_pre_load_callback(&$library, $version, $variant) {
+  _libraries_test_callback($library, $version, $variant, 'pre-load');
+}
+
+/**
+ * Sets the 'post-load callback' key.
+ *
+ * This function is used as a test callback for the 'post-load' callback group.
+ *
+ * @see _libraries_test_callback()
+ */
+function _libraries_test_post_load_callback(&$library, $version, $variant) {
+  _libraries_test_callback($library, $version, $variant, 'post-load');
+}
+
+/**
+ * Sets the '[group] callback' key, where [group] is prepare, detect, or load.
+ *
+ * This function is used as a test callback for the all callback groups.
+ *
+ * It sets the '[group] callback' (see above) key to 'applied ([part])' where
+ * [part] is either 'top-level', 'version x.y' (where x.y is the passed-in
+ * version string), 'variant example' (where example is the passed-in variant
+ * name), or 'version x.y, variant example' (see above), depending on the part
+ * of the library the passed-in library information belongs to.
+ *
+ * @param $library
+ *   An array of library information, which may be version- or variant-specific.
+ *   Passed by reference.
+ * @param $version
+ *   The version the library information passed in $library belongs to, or NULL
+ *   if the passed library information is not version-specific.
+ * @param $variant
+ *   The variant the library information passed in $library belongs to, or NULL
+ *   if the passed library information is not variant-specific.
+ */
+function _libraries_test_callback(&$library, $version, $variant, $group) {
+  $string = 'applied';
+  if (isset($version) && isset($variant)) {
+    $string .= " (version $version, variant $variant)";
+  }
+  elseif (isset($version)) {
+    $string .= " (version $version)";
+  }
+  elseif (isset($variant)) {
+    $string .= " (variant $variant)";
+  }
+  else {
+    $string .= ' (top-level)';
+  }
+  $library["$group callback"] = $string;
+
+  // The following is used to test caching of library information.
+  // Only set the message for the top-level library to prevent confusing,
+  // duplicate messages.
+  if (!isset($version) && !isset($variant) && \Drupal::state()->get('libraries_test.cache', FALSE)) {
+    drupal_set_message(SafeMarkup::set("The <em>$group</em> callback group was invoked."));
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function libraries_test_menu() {
+  $items['libraries_test/files'] = array(
+    'title' => 'Test files',
+    'route_name' => 'libraries_test_files',
+  );
+  $items['libraries_test/integration_files'] = array(
+    'title' => 'Test integration files',
+    'route_name' => 'libraries_test_integration_files',
+  );
+  $items['libraries_test/versions'] = array(
+    'title' => 'Test version loading',
+    'route_name' => 'libraries_test_versions',
+  );
+  $items['libraries_test/variant'] = array(
+    'title' => 'Test variant loading',
+    'route_name' => 'libraries_test_variant',
+  );
+  $items['libraries_test/versions_and_variants'] = array(
+    'title' => 'Test concurrent version and variant loading',
+    'route_name' => 'libraries_test_versions_and_variants',
+  );
+  $items['libraries_test/cache'] = array(
+    'title' => 'Test caching of library information',
+    'route_name' => 'libraries_test_cache',
+  );
+  return $items;
+}

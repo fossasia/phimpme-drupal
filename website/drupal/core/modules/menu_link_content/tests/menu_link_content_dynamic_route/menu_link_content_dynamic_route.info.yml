@@ -1,0 +1,12 @@
+name: 'Menu link content dynamic route'
+type: module
+# core: 8.x
+hidden: true
+dependencies:
+  - menu_link_content
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

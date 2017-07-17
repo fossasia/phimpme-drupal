@@ -1,0 +1,16 @@
+id: statistics_settings
+label: Statistics configuration
+migration_tags:
+  - Drupal 6
+  - Drupal 7
+source:
+  plugin: variable
+  variables:
+    - statistics_enable_access_log
+    - statistics_flush_accesslog_timer
+    - statistics_count_content_views
+process:
+  'count_content_views': statistics_count_content_views
+destination:
+  plugin: config
+  config_name: statistics.settings

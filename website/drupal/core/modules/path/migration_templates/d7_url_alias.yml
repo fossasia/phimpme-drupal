@@ -1,0 +1,34 @@
+id: d7_url_alias
+label: URL aliases
+migration_tags:
+  - Drupal 7
+source:
+  plugin: d7_url_alias
+  constants:
+    slash: '/'
+process:
+  source:
+    plugin: concat
+    source:
+      - constants/slash
+      - source
+  alias:
+    plugin: concat
+    source:
+      - constants/slash
+      - alias
+  langcode: language
+  node_translation:
+    -
+      plugin: explode
+      source: source
+      delimiter: /
+    -
+      plugin: extract
+      index:
+        - 1
+    -
+      plugin: migration_lookup
+      migration: d7_node_translation
+destination:
+  plugin: url_alias

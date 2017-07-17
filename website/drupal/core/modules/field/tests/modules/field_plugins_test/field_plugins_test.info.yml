@@ -1,0 +1,14 @@
+name: 'Field Plugins Test'
+type: module
+description: 'Support module for the field and entity display tests.'
+# core: 8.x
+package: Testing
+# version: VERSION
+dependencies:
+  - text
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

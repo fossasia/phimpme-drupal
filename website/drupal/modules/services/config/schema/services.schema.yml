@@ -1,0 +1,26 @@
+services.settings:
+  type: config_object
+  label: 'Service Settings'
+  mapping:
+    default_formats:
+      type: sequence
+      label: 'Default formats'
+      sequence:
+        type: string
+        label: 'Format type'
+    default_authentication:
+      type: sequence
+      label: 'Default authentication'
+      sequence:
+        type: string
+        label: 'Authentication type'
+    default_no_cache:
+      type: boolean
+      label: 'Default no cache'
+services.service_definition.plugin:
+  type: mapping
+  label: 'Service Definition'
+  mapping:
+    id:
+      type: string
+      label: 'ID'

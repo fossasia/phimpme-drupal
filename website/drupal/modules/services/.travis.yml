@@ -1,0 +1,46 @@
+language: php
+
+php:
+  - 5.5
+  - 5.6
+
+sudo: false
+
+env:
+  global:
+    - PATH="$PATH:$HOME/.composer/vendor/bin"
+    - TESTDIR=$(pwd)
+    - DRUPAL_TI_MODULE_NAME="services"
+    - DRUPAL_TI_SIMPLETEST_GROUP="services"
+    - DRUPAL_TI_DB="drupal_travis_$$"
+    - DRUPAL_TI_DB_URL="mysql://root@127.0.0.1/$DRUPAL_TI_DB"
+    - DRUPAL_TI_WEBSERVER_URL="http://127.0.0.1"
+    - DRUPAL_TI_WEBSERVER_PORT="8080"
+    - DRUPAL_TI_SIMPLETEST_ARGS="--verbose --color --url $DRUPAL_TI_WEBSERVER_URL:$DRUPAL_TI_WEBSERVER_PORT"
+    - DRUPAL_TI_PHPUNIT_CORE_SRC_DIRECTORY="./tests/src"
+    - DRUPAL_TI_ENVIRONMENT="drupal-8"
+
+  matrix:
+    #- DRUPAL_TI_RUNNERS="simpletest phpunit-core"
+    - DRUPAL_TI_RUNNERS="simpletest"
+
+before_install:
+  - composer self-update
+  - composer global require "lionsad/drupal_ti:1.*"
+  - drupal-ti before_install
+
+install:
+  - drupal-ti install
+
+before_script:
+  - drupal-ti before_script
+  - DRUPAL_TI_PHPUNIT_ARGS="-c $DRUPAL_TI_DRUPAL_DIR/modules/key/phpunit.xml --coverage-text"
+
+script:
+  - drupal-ti script
+
+after_script:
+  - drupal-ti after_script
+
+notifications:
+  email: false

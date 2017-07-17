@@ -1,0 +1,23 @@
+services.list:
+  title: 'List'
+  route_name: entity.service_endpoint.collection
+  base_route: entity.service_endpoint.collection
+  weight: 0
+services.settings:
+  title: 'Settings'
+  route_name: services.settings
+  base_route: entity.service_endpoint.collection
+  weight: 0
+services.edit:
+  title: 'Edit'
+  route_name: entity.service_endpoint.edit_form
+  base_route: entity.service_endpoint.edit_form
+  weight: 0
+services.resources:
+  title: 'Resources'
+  route_name: entity.service_endpoint.resources
+  base_route: entity.service_endpoint.edit_form
+  weight: 1
+
+
+

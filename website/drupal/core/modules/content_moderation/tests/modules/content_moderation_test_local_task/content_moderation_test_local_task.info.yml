@@ -1,0 +1,15 @@
+name: 'Content moderation test local task'
+type: module
+description: 'Provides a local task for testing.'
+package: Testing
+# version: VERSION
+# core: 8.x
+dependencies:
+  - content_moderation
+  - node
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

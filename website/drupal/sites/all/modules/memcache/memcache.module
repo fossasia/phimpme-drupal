@@ -1,6 +1,0 @@
-<?php
-/**
- * Provides very limited functionality such as hook_requirements().
- * memcache.inc must be configured in settings.php, and memcache.module is not
- * necessary to use memcache as a cache backend.
- */

@@ -1,0 +1,18 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - menu_ui
+third_party_settings:
+  menu_ui:
+    available_menus: {  }
+    parent: ''
+_core:
+  default_config_hash: hjC271ZF6B5XYgF6-F5Ak73sJiZWJRmSLsgk8S7Vo-8
+name: 'CTools block field test'
+type: ctools_block_field_test
+description: 'A content type used for the ctools_block field tests.'
+help: ''
+new_revision: false
+preview_mode: 0
+display_submitted: false

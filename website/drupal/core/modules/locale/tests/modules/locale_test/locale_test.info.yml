@@ -1,0 +1,15 @@
+name: 'Locale test'
+type: module
+description: 'Support module for locale module testing.'
+package: Testing
+# version: '1.2'
+# core: 8.x
+hidden: true
+'interface translation project': locale_test
+'interface translation server pattern': core/modules/locale/test/test.%language.po
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154
