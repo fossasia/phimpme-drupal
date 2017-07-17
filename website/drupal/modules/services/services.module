@@ -1,0 +1,17 @@
+<?php
+
+/**
+ * @file
+ * The hook implementations for the services module.
+ */
+
+use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Session\AccountInterface;
+
+/**
+ * Implements hook_entity_form_display_access().
+ */
+function services_entity_form_display_access(EntityInterface $entity, $operation, AccountInterface $account) {
+  return AccessResult::allowedIfHasPermission($account, 'services ' . $operation . ' form display access');
+}

@@ -1,0 +1,33 @@
+views.filter.latest_revision:
+  type: views_filter
+  label: 'Latest revision'
+  mapping:
+    value:
+      type: string
+      label: 'Value'
+
+workflow.type_settings.content_moderation:
+  type: mapping
+  mapping:
+    states:
+      type: sequence
+      label: 'Additional state configuration for content moderation'
+      sequence:
+        type: mapping
+        label: 'States'
+        mapping:
+          published:
+            type: boolean
+            label: 'Is published'
+          default_revision:
+            type: boolean
+            label: 'Is default revision'
+    entity_types:
+      type: sequence
+      label: 'Entity types'
+      sequence:
+        type: sequence
+        label: 'Bundles'
+        sequence:
+          type: string
+          label: 'Bundle ID'

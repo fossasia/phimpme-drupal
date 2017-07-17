@@ -1,0 +1,15 @@
+name: 'KeyValue tests'
+type: module
+description: 'A support module to test key value storage.'
+# core: 8.x
+package: Testing
+# version: VERSION
+hidden: true
+dependencies:
+  - entity_test
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

@@ -1,0 +1,5 @@
+services.admin:
+  version: 4.x
+  css:
+    theme:
+      css/services.admin.css: {}

@@ -1,0 +1,64 @@
+<?php
+
+/**
+ * Implements hook_theme().
+ */
+function ctools_theme($existing, $type, $theme, $path) {
+  return [
+    'ctools_wizard_trail' => [
+      'variables' => [
+        'wizard' => NULL,
+        'cached_values' => [],
+        'trail' => [],
+        'divider' => ' » ',
+        'step' => NULL,
+      ],
+    ],
+    'ctools_wizard_trail_links' => [
+      'variables' => [
+        'wizard' => NULL,
+        'cached_values' => [],
+        'trail' => [],
+        'divider' => ' » ',
+        'step' => NULL,
+      ],
+    ],
+  ];
+}
+
+function template_preprocess_ctools_wizard_trail(&$variables) {
+  /** @var $wizard \Drupal\ctools\Wizard\FormWizardInterface|\Drupal\ctools\Wizard\EntityFormWizardInterface */
+  $wizard = $variables['wizard'];
+  $cached_values = $variables['cached_values'];
+  $trail = $variables['trail'];
+  $variables['step'] = $wizard->getStep($cached_values);
+  foreach ($wizard->getOperations($cached_values) as $step => $operation) {
+    $trail[$step] = !empty($operation['title']) ? $operation['title'] : '';
+  }
+  $variables['trail'] = $trail;
+}
+
+function template_preprocess_ctools_wizard_trail_links(&$variables) {
+  /** @var $wizard \Drupal\ctools\Wizard\FormWizardInterface|\Drupal\ctools\Wizard\EntityFormWizardInterface */
+  $wizard = $variables['wizard'];
+  $cached_values = $variables['cached_values'];
+  $trail = $variables['trail'];
+  $variables['step'] = $wizard->getStep($cached_values);
+  foreach ($wizard->getOperations($cached_values) as $step => $operation) {
+    $parameters = $wizard->getNextParameters($cached_values);
+    // Override step to be the step we want.
+    $parameters['step'] = $step;
+    $trail[$step] = [
+      'title' => !empty($operation['title']) ? $operation['title'] : '',
+      'url' => new \Drupal\Core\Url($wizard->getRouteName(), $parameters),
+    ];
+  }
+  $variables['trail'] = $trail;
+}
+
+function ctools_condition_info_alter(&$definitions) {
+  // If the node_type's class is unaltered, use a custom ctools implementation.
+  if (isset($definitions['node_type']) && $definitions['node_type']['class'] == 'Drupal\node\Plugin\Condition\NodeType') {
+    $definitions['node_type']['class'] = 'Drupal\ctools\Plugin\Condition\NodeType';
+  }
+}

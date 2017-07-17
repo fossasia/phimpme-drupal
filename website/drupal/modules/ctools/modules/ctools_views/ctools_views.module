@@ -1,0 +1,104 @@
+<?php
+
+use Drupal\views\Plugin\views\display\Block as CoreBlock;
+use Drupal\ctools_views\Plugin\Display\Block;
+
+/**
+ * Implements hook_views_plugins_display_alter().
+ */
+function ctools_views_views_plugins_display_alter(&$displays) {
+  if (!empty($displays['block']['class']) && $displays['block']['class'] == CoreBlock::class) {
+    $displays['block']['class'] = Block::class;
+  }
+}
+
+/**
+ * Implements hook_config_schema_info_alter().
+ */
+function ctools_views_config_schema_info_alter(&$definitions) {
+  // Add to the views block plugin schema.
+  $definitions['views_block']['mapping']['pager'] = [
+    'type' => 'string',
+    'label' => 'Pager type'
+  ];
+  $definitions['views_block']['mapping']['fields'] = [
+    'type' => 'sequence',
+    'label' => 'Fields settings',
+    'sequence' => [
+      [
+        'type' => 'mapping',
+        'label' => 'Field settings',
+        'mapping' => [
+          'hide' => [
+            'type' => 'boolean',
+            'label' => 'Hide field',
+          ],
+          'weight' => [
+            'type' => 'integer',
+            'label' => 'Field weight',
+          ],
+        ],
+      ],
+    ],
+  ];
+  $definitions['views_block']['mapping']['filter'] = [
+    'type' => 'sequence',
+    'label' => 'Filters settings',
+    'sequence' => [
+      [
+        'type' => 'mapping',
+        'label' => 'Filter settings',
+        'mapping' => [
+          'type' => [
+            'type' => 'string',
+            'label' => 'Plugin id',
+          ],
+          'disable' => [
+            'type' => 'boolean',
+            'label' => 'Disable filter',
+          ],
+        ],
+      ],
+    ],
+  ];
+  $definitions['views_block']['mapping']['sort'] = [
+    'type' => 'sequence',
+    'label' => 'Sort settings',
+    'sequence' => [
+      [
+        'type' => 'string',
+        'label' => 'Sort order value',
+      ],
+    ],
+  ];
+  $definitions['views_block']['mapping']['pager_offset'] = [
+    'type' => 'integer',
+    'label' => 'Pager offset'
+  ];
+
+  // Add to the views block display plugin schema.
+  $definitions['views.display.block']['mapping']['allow']['mapping']['offset'] = [
+    'type' => 'string',
+    'label' => 'Pager offset',
+  ];
+  $definitions['views.display.block']['mapping']['allow']['mapping']['pager'] = [
+    'type' => 'string',
+    'label' => 'Pager type',
+  ];
+  $definitions['views.display.block']['mapping']['allow']['mapping']['hide_fields'] = [
+    'type' => 'string',
+    'label' => 'Hide fields',
+  ];
+  $definitions['views.display.block']['mapping']['allow']['mapping']['sort_fields'] = [
+    'type' => 'string',
+    'label' => 'Sort fields',
+  ];
+  $definitions['views.display.block']['mapping']['allow']['mapping']['disable_filters'] = [
+    'type' => 'string',
+    'label' => 'Disable filters',
+  ];
+  $definitions['views.display.block']['mapping']['allow']['mapping']['configure_sorts'] = [
+    'type' => 'string',
+    'label' => 'Configure sorts',
+  ];
+}

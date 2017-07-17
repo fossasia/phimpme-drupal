@@ -1,0 +1,15 @@
+name: Menu UI
+type: module
+description: 'Allows administrators to customize the site navigation menu.'
+package: Core
+# version: VERSION
+# core: 8.x
+configure: entity.menu.collection
+dependencies:
+  - menu_link_content
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

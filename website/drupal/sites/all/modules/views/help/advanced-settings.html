@@ -1,8 +1,0 @@
-<strong>Use AJAX: No</strong>
-If set, this view will use an AJAX mechanism for paging, table sorting and exposed filters. This prevents the entire page from refreshing. It is not recommended that you use this if this view is the main content of the page as it will prevent deep linking to specific pages, but it is very useful for side content.
-<strong>Distinct: No</strong>
-This will make the view display only distinct items. If there are multiple identical items, each will be displayed only once. You can use this to try and remove duplicates from a view, though it does not always work. Note that this can slow queries down, so use it with caution.
-<strong>Use grouping: No</strong>
-All fields that are selected for grouping will be collapsed to one record per distinct value. Other fields which are selected for aggregation will have the function run on them. For example, you can group nodes on title and count the number of nids in order to get a list of duplicate titles.
-<strong>Caching: None</strong>
-You can choose a "Time-based" Caching if you want. With it you get the option to choose the length of time raw query results should be cached and "The length of time rendered HTML output should be cached."

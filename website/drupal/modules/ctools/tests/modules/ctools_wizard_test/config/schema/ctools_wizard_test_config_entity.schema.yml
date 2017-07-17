@@ -1,0 +1,18 @@
+ctools_wizard_test.ctools_wizard_test_config_entity.*:
+  type: config_entity
+  label: 'Example config entity'
+  mapping:
+    id:
+      type: string
+      label: 'ID'
+    label:
+      type: label
+      label: 'Label'
+    uuid:
+      type: string
+    one:
+      type: string
+      label: 'The first piece of information'
+    two:
+      type: string
+      label: 'The second piece of information'

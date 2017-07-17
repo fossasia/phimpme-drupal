@@ -1,0 +1,15 @@
+name: 'Entity CRUD test module'
+type: module
+description: 'Provides entity types based upon the CRUD API.'
+package: Testing
+# version: VERSION
+# core: 8.x
+dependencies:
+  - field
+  - text
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

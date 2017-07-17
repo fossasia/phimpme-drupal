@@ -1,0 +1,38 @@
+services:
+  ctools.wizard.form:
+    class: Drupal\ctools\Controller\WizardFormController
+    arguments: ['@controller_resolver', '@form_builder', '@ctools.wizard.factory']
+  ctools.wizard.entity.form:
+    class: Drupal\ctools\Controller\WizardEntityFormController
+    arguments: ['@controller_resolver', '@form_builder', '@ctools.wizard.factory', '@entity.manager']
+  ctools.wizard_enhancer:
+    class: Drupal\ctools\Routing\Enhancer\WizardEnhancer
+    tags:
+      - { name: route_enhancer }
+  ctools.wizard.factory:
+    class: Drupal\ctools\Wizard\WizardFactory
+    arguments: ['@form_builder', '@event_dispatcher']
+  ctools.paramconverter.tempstore:
+    class: Drupal\ctools\ParamConverter\TempstoreConverter
+    arguments: ['@user.shared_tempstore', '@entity_type.manager']
+    tags:
+      - { name: paramconverter }
+  ctools.typed_data.resolver:
+    class: Drupal\ctools\TypedDataResolver
+    arguments: ['@typed_data_manager', '@string_translation']
+  ctools.access:
+    class: Drupal\ctools\Access\TempstoreAccess
+    arguments: ['@user.shared_tempstore']
+    tags:
+      - { name: access_check, applies_to: _ctools_access }
+  plugin.manager.ctools.relationship:
+    class: Drupal\ctools\Plugin\RelationshipManager
+    parent: default_plugin_manager
+  ctools.context_mapper:
+    class: Drupal\ctools\ContextMapper
+    arguments: ['@entity.repository']
+  ctools.serializable.tempstore.factory:
+    class: Drupal\ctools\SerializableTempstoreFactory
+    arguments: ['@keyvalue.expirable', '@lock', '@request_stack', '%user.tempstore.expire%']
+    tags:
+      - { name: backend_overridable }

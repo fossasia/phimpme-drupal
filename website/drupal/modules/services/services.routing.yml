@@ -1,0 +1,87 @@
+
+# ServiceEndpoint routing definition
+entity.service_endpoint.collection:
+  path: '/admin/structure/service_endpoint'
+  defaults:
+    _entity_list: 'service_endpoint'
+    _title: 'Services'
+  requirements:
+    _permission: 'manage services'
+
+entity.service_endpoint.add_form:
+  path: '/admin/structure/service_endpoint/add'
+  defaults:
+    _entity_form: 'service_endpoint.add'
+    _title: 'Add services endpoint'
+  requirements:
+    _permission: 'manage services'
+
+entity.service_endpoint.edit_form:
+  path: '/admin/structure/service_endpoint/{service_endpoint}'
+  defaults:
+    _entity_form: 'service_endpoint.edit'
+    _title: 'Edit services endpoint'
+  requirements:
+    _permission: 'manage services'
+
+entity.service_endpoint.delete_form:
+  path: '/admin/structure/service_endpoint/{service_endpoint}/delete'
+  defaults:
+    _entity_form: 'service_endpoint.delete'
+    _title: 'Delete services endpoint'
+  requirements:
+    _permission: 'manage services'
+
+entity.service_endpoint.resources:
+  path: '/admin/structure/service_endpoint/{service_endpoint}/resources'
+  defaults:
+    _title: 'Service resources'
+    _controller: \Drupal\services\Controller\ServiceEndpointResources::displayList
+  requirements:
+    _permission: 'manage services'
+  options:
+    parameters:
+      service_endpoint:
+        type: entity:service_endpoint
+
+entity.service_endpoint_resource.config_form:
+  path: '/admin/structure/service_endpoint/{service_endpoint}/resource/{plugin_id}'
+  defaults:
+    _title: 'Configure resource'
+    _entity_form: 'service_endpoint_resource.config'
+  requirements:
+    _permission: 'manage services'
+  options:
+    parameters:
+      service_endpoint:
+        type: entity:service_endpoint
+
+entity.service_endpoint_resource.delete_form:
+  path: '/admin/structure/service_endpoint/{service_endpoint}/resource/{plugin_id}/delete'
+  defaults:
+    _title: 'Delete resource'
+    _entity_form: 'service_endpoint_resource.delete'
+  requirements:
+    _permission: 'manage services'
+  options:
+    parameters:
+      service_endpoint:
+        type: entity:service_endpoint
+
+services.csrf_token:
+  path: '/services/session/token'
+  defaults:
+    _controller: '\Drupal\services\Controller\Services::csrfToken'
+  requirements:
+    _access: 'TRUE'
+
+services.settings:
+  path: '/admin/structure/service_endpoint/settings'
+  defaults:
+    _title: 'Service settings'
+    _form: '\Drupal\services\Form\ServiceSettingsForm'
+  requirements:
+    _permission: 'manage services'
+
+route_callbacks:
+  - '\Drupal\services\Routing\ServiceEndpoint::routes'

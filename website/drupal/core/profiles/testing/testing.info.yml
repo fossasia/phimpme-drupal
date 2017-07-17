@@ -1,0 +1,20 @@
+name: Testing
+type: profile
+description: 'Minimal profile for running tests. Includes absolutely required modules only.'
+# version: VERSION
+# core: 8.x
+hidden: true
+dependencies:
+  # Enable page_cache and dynamic_page_cache in testing, to ensure that as many
+  # tests as possible run with them enabled.
+  - page_cache
+  - dynamic_page_cache
+# @todo: Remove this in https://www.drupal.org/node/2352949
+themes:
+  - classy
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

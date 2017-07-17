@@ -1,0 +1,22 @@
+<?php
+
+/**
+ * @file
+ * Provides hook implementations for the Workflow UI module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function workflows_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    // Main module help for the Workflow UI module.
+    case 'help.page.workflows':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('The Workflows module provides a UI and an API for creating workflows content. This lets site admins define workflows and their states, and then define transitions between those states. For more information, see the <a href=":workflow">online documentation for the Workflows module</a>.', [':workflow' => 'https://www.drupal.org/documentation/modules/workflows']) . '</p>';
+      return $output;
+  }
+}

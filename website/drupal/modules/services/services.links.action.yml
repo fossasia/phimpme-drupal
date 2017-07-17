@@ -1,0 +1,5 @@
+entity.service_endpoint.add_form:
+  route_name: 'entity.service_endpoint.add_form'
+  title: 'Add services endpoint'
+  appears_on:
+    - entity.service_endpoint.collection

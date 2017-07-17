@@ -1,0 +1,18 @@
+{
+  "type": "asset",
+  "version_detector": {
+    "id": "static",
+    "configuration": {
+      "version": "1.0.0"
+    }
+  },
+  "remote_url": "http://example.com",
+  "css": {
+    "base": {
+      "example.css": {}
+    }
+  },
+  "js": {
+    "example.js": {}
+  }
+}

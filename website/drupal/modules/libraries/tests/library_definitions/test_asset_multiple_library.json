@@ -1,0 +1,32 @@
+{
+  "type": "asset_multiple",
+  "version_detector": {
+    "id": "static",
+    "configuration": {
+      "version": "1.0.0"
+    }
+  },
+  "remote_url": "http://example.com",
+  "libraries": {
+    "first": {
+      "css": {
+        "base": {
+          "example.first.css": {}
+        }
+      },
+      "js": {
+        "example.first.js": {}
+      }
+    },
+    "second": {
+      "css": {
+        "base": {
+          "example.second.css": {}
+        }
+      },
+      "js": {
+        "example.second.js": {}
+      }
+    }
+  }
+}

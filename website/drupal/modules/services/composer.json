@@ -1,0 +1,19 @@
+{
+    "name": "drupal/services",
+    "description": "A standardized solution of integrating external applications with Drupal.",
+    "type": "drupal-module",
+    "license": "GPL-2.0+",
+    "minimum-stability": "stable",
+    "homepage": "https://www.drupal.org/project/services",
+    "authors": [
+        {
+            "name": "See contributors",
+            "homepage": "https://www.drupal.org/node/109640/committers",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://www.drupal.org/project/issues/services"
+    },
+    "require": {}
+}

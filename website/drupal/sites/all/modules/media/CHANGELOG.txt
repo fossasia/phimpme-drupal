@@ -1,1 +1,0 @@
-This is outdated.  For a changelog see the appropriate branch or tag on http://drupalcode.org/project/media.git/heads

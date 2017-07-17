@@ -1,0 +1,12 @@
+
+/**
+ * @file
+ * Test CSS file for Libraries loading.
+ *
+ * Color the 'libraries-test-css' div purple. See README.txt for more
+ * information.
+ */
+
+.libraries-test-css {
+  color: purple;
+}

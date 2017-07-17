@@ -1,0 +1,14 @@
+{
+  "name": "drupal/libraries",
+  "description": "Allows version-dependent and shared usage of external libraries in Drupal.",
+  "type": "drupal-module",
+  "homepage": "http://drupal.org/project/libraries",
+  "authors": [
+  ],
+  "support": {
+    "issues": "http://drupal.org/project/issues/libraries",
+    "irc": "irc://irc.freenode.org/drupal-contribute",
+    "source": "http://cgit.drupalcode.org/libraries"
+  },
+  "license": "GPL-2.0+"
+}

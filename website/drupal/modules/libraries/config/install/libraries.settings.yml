@@ -1,0 +1,10 @@
+definition:
+  local:
+    # @todo Implement a stream wrapper that finds library definitions in e.g.
+    # sites/all/libraries.
+    path: 'public://library-definitions'
+  remote:
+    enable: TRUE
+    urls:
+      - 'http://cgit.drupalcode.org/libraries_registry/plain/registry/8'
+global_locators: []

@@ -1,0 +1,73 @@
+services:
+  libraries.manager:
+    class: Drupal\libraries\ExternalLibrary\LibraryManager
+    arguments:
+      - '@libraries.definition.discovery'
+      - '@plugin.manager.libraries.library_type'
+
+  # By default Libraries API downloads library definitions from a number of
+  # remote library registries, the canonical one being
+  # https://www.drupal.org/project/libraries_registry, and stores them locally
+  # in the public://library-definitions directory. The URLs of the remote
+  # library registries and the local base path can be configured. The remote
+  # fetching can also be disabled altogether.
+  libraries.definition.discovery:
+    class: Drupal\libraries\ExternalLibrary\Definition\DefinitionDiscoveryInterface
+    factory: 'libraries.definition.discovery.factory:get'
+  libraries.definition.discovery.factory:
+    class: Drupal\libraries\ExternalLibrary\Definition\DefinitionDiscoveryFactory
+    arguments:
+      - '@config.factory'
+      - '@serialization.json'
+      - '@http_client'
+      - '@serialization.json'
+  # If you instead want to check your library definitions into version control
+  # and use YAML for them instead of JSON, you can place the following service
+  # definition in your site's services.yml file:
+  # libraries.definition.discovery:
+  #   class: Drupal\libraries\ExternalLibrary\Definition\FileDefinitionDiscovery
+  #   arguments:
+  #     - '@serialization.yaml'
+  #     # Replace this with the location of the library definitions in your setup.
+  #     - '../library-definitions'
+
+  plugin.manager.libraries.library_type:
+    class: Drupal\libraries\ExternalLibrary\Type\LibraryTypeFactory
+    parent: default_plugin_manager
+  plugin.manager.libraries.locator:
+    class: Drupal\libraries\ExternalLibrary\Local\LocatorManager
+    parent: default_plugin_manager
+  plugin.manager.libraries.version_detector:
+    class: Drupal\libraries\ExternalLibrary\Version\VersionDetectorManager
+    parent: default_plugin_manager
+
+  libraries.config_subscriber:
+    class: Drupal\libraries\Config\LibrariesConfigSubscriber
+    arguments: ['@service_container']
+    tags:
+      - { name: event_subscriber }
+
+  libraries.php_file_loader:
+    class: Drupal\libraries\ExternalLibrary\PhpFile\PhpRequireLoader
+
+  stream_wrapper.library_definitions:
+    class: Drupal\libraries\StreamWrapper\LibraryDefinitionsStream
+    arguments: ['@config.factory']
+    tags:
+      - { name: stream_wrapper, scheme: 'library-definitions' }
+  stream_wrapper.asset_libraries:
+    class: Drupal\libraries\StreamWrapper\AssetLibrariesStream
+    tags:
+      - { name: stream_wrapper, scheme: 'asset' }
+  stream_wrapper.php_file_libraries:
+    class: Drupal\libraries\StreamWrapper\PhpFileLibrariesStream
+    tags:
+      - { name: stream_wrapper, scheme: 'php-file' }
+
+
+  cache.libraries:
+    class: Drupal\Core\Cache\CacheBackendInterface
+    tags:
+      - { name: cache.bin }
+    factory: cache_factory:get
+    arguments: [library]

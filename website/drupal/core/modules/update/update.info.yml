@@ -1,0 +1,15 @@
+name: 'Update Manager'
+type: module
+description: 'Checks for available updates, and can securely install or update modules and themes via a web interface.'
+# version: VERSION
+package: Core
+# core: 8.x
+configure: update.settings
+dependencies:
+  - file
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

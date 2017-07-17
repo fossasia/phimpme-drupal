@@ -1,0 +1,16 @@
+name: 'Settings Tray'
+type: module
+description: 'Provides the ability to change the most common configuration from the Drupal front-end.'
+package: Core (Experimental)
+# version: VERSION
+# core: 8.x
+dependencies:
+  - block
+  - toolbar
+  - contextual
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

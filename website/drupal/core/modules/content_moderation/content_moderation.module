@@ -1,0 +1,236 @@
+<?php
+
+/**
+ * @file
+ * Contains content_moderation.module.
+ */
+
+use Drupal\content_moderation\EntityOperations;
+use Drupal\content_moderation\EntityTypeInfo;
+use Drupal\content_moderation\ContentPreprocess;
+use Drupal\content_moderation\Plugin\Action\ModerationOptOutPublishNode;
+use Drupal\content_moderation\Plugin\Action\ModerationOptOutUnpublishNode;
+use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Entity\Display\EntityViewDisplayInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Session\AccountInterface;
+use Drupal\workflows\WorkflowInterface;
+use Drupal\node\NodeInterface;
+use Drupal\node\Plugin\Action\PublishNode;
+use Drupal\node\Plugin\Action\UnpublishNode;
+use Drupal\workflows\Entity\Workflow;
+
+/**
+ * Implements hook_help().
+ */
+function content_moderation_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    // Main module help for the content_moderation module.
+    case 'help.page.content_moderation':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('The Content Moderation module provides moderation for content by applying workflows to content. For more information, see the <a href=":content_moderation">online documentation for the Content Moderation module</a>.', [':content_moderation' => 'https://www.drupal.org/documentation/modules/content_moderation']) . '</p>';
+      $output .= '<h3>' . t('Uses') . '</h3>';
+      $output .= '<dl>';
+      $output .= '<dt>' . t('Configuring workflows') . '</dt>';
+      $output .= '<dd>' . t('Enable the Workflow UI module to create, edit and delete content moderation workflows.') . '</p>';
+      $output .= '<dt>' . t('Configure Content Moderation permissions') . '</dt>';
+      $output .= '<dd>' . t('Each transition is exposed as a permission. If a user has the permission for a transition, then they can move that node from the start state to the end state') . '</p>';
+      $output .= '</dl>';
+      return $output;
+  }
+}
+
+/**
+ * Implements hook_entity_base_field_info().
+ */
+function content_moderation_entity_base_field_info(EntityTypeInterface $entity_type) {
+  return \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityTypeInfo::class)
+    ->entityBaseFieldInfo($entity_type);
+}
+
+/**
+ * Implements hook_entity_type_alter().
+ */
+function content_moderation_entity_type_alter(array &$entity_types) {
+  \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityTypeInfo::class)
+    ->entityTypeAlter($entity_types);
+}
+
+/**
+ * Implements hook_entity_operation().
+ */
+function content_moderation_entity_operation(EntityInterface $entity) {
+  return \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityTypeInfo::class)
+    ->entityOperation($entity);
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function content_moderation_entity_presave(EntityInterface $entity) {
+  return \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityOperations::class)
+    ->entityPresave($entity);
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function content_moderation_entity_insert(EntityInterface $entity) {
+  return \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityOperations::class)
+    ->entityInsert($entity);
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function content_moderation_entity_update(EntityInterface $entity) {
+  return \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityOperations::class)
+    ->entityUpdate($entity);
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function content_moderation_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityTypeInfo::class)
+    ->formAlter($form, $form_state, $form_id);
+}
+
+/**
+ * Implements hook_preprocess_HOOK().
+ *
+ * Many default node templates rely on $page to determine whether to output the
+ * node title as part of the node content.
+ */
+function content_moderation_preprocess_node(&$variables) {
+  \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(ContentPreprocess::class)
+    ->preprocessNode($variables);
+}
+
+/**
+ * Implements hook_entity_extra_field_info().
+ */
+function content_moderation_entity_extra_field_info() {
+  return \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityTypeInfo::class)
+    ->entityExtraFieldInfo();
+}
+
+/**
+ * Implements hook_entity_view().
+ */
+function content_moderation_entity_view(array &$build, EntityInterface $entity, EntityViewDisplayInterface $display, $view_mode) {
+  \Drupal::service('class_resolver')
+    ->getInstanceFromDefinition(EntityOperations::class)
+    ->entityView($build, $entity, $display, $view_mode);
+}
+
+/**
+ * Implements hook_node_access().
+ *
+ * Nodes in particular should be viewable if unpublished and the user has
+ * the appropriate permission. This permission is therefore effectively
+ * mandatory for any user that wants to moderate things.
+ */
+function content_moderation_node_access(NodeInterface $node, $operation, AccountInterface $account) {
+  /** @var \Drupal\content_moderation\ModerationInformationInterface $moderation_info */
+  $moderation_info = Drupal::service('content_moderation.moderation_information');
+
+  $access_result = NULL;
+  if ($operation === 'view') {
+    $access_result = (!$node->isPublished())
+      ? AccessResult::allowedIfHasPermission($account, 'view any unpublished content')
+      : AccessResult::neutral();
+
+    $access_result->addCacheableDependency($node);
+  }
+  elseif ($operation === 'update' && $moderation_info->isModeratedEntity($node) && $node->moderation_state) {
+    /** @var \Drupal\content_moderation\StateTransitionValidation $transition_validation */
+    $transition_validation = \Drupal::service('content_moderation.state_transition_validation');
+
+    $valid_transition_targets = $transition_validation->getValidTransitions($node, $account);
+    $access_result = $valid_transition_targets ? AccessResult::neutral() : AccessResult::forbidden();
+
+    $access_result->addCacheableDependency($node);
+    $access_result->addCacheableDependency($account);
+    $workflow = \Drupal::service('content_moderation.moderation_information')->getWorkflowForEntity($node);
+    $access_result->addCacheableDependency($workflow);
+    foreach ($valid_transition_targets as $valid_transition_target) {
+      $access_result->addCacheableDependency($valid_transition_target);
+    }
+  }
+
+  return $access_result;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function content_moderation_theme() {
+  return ['entity_moderation_form' => ['render element' => 'form']];
+}
+
+/**
+ * Implements hook_action_info_alter().
+ */
+function content_moderation_action_info_alter(&$definitions) {
+
+  // The publish/unpublish actions are not valid on moderated entities. So swap
+  // their implementations out for alternates that will become a no-op on a
+  // moderated node. If another module has already swapped out those classes,
+  // though, we'll be polite and do nothing.
+  if (isset($definitions['node_publish_action']['class']) && $definitions['node_publish_action']['class'] == PublishNode::class) {
+    $definitions['node_publish_action']['class'] = ModerationOptOutPublishNode::class;
+  }
+  if (isset($definitions['node_unpublish_action']['class']) && $definitions['node_unpublish_action']['class'] == UnpublishNode::class) {
+    $definitions['node_unpublish_action']['class'] = ModerationOptOutUnpublishNode::class;
+  }
+}
+
+/**
+ * Implements hook_entity_bundle_info_alter().
+ */
+function content_moderation_entity_bundle_info_alter(&$bundles) {
+  /** @var \Drupal\workflows\WorkflowInterface $workflow */
+  foreach (Workflow::loadMultipleByType('content_moderation') as $workflow) {
+    /** @var \Drupal\content_moderation\Plugin\WorkflowType\ContentModeration $plugin */
+    $plugin = $workflow->getTypePlugin();
+    foreach ($plugin->getEntityTypes() as $entity_type_id) {
+      foreach ($plugin->getBundlesForEntityType($entity_type_id) as $bundle_id) {
+        if (isset($bundles[$entity_type_id][$bundle_id])) {
+          $bundles[$entity_type_id][$bundle_id]['workflow'] = $workflow->id();
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ENTITY_TYPE_insert().
+ */
+function content_moderation_workflow_insert(WorkflowInterface $entity) {
+  // Clear bundle cache so workflow gets added or removed from the bundle
+  // information.
+  \Drupal::service('entity_type.bundle.info')->clearCachedBundles();
+  // Clear field cache so extra field is added or removed.
+  \Drupal::service('entity_field.manager')->clearCachedFieldDefinitions();
+}
+
+/**
+ * Implements hook_ENTITY_TYPE_update().
+ */
+function content_moderation_workflow_update(WorkflowInterface $entity) {
+  content_moderation_workflow_insert($entity);
+}

@@ -1,4 +1,0 @@
-The access URL:
-/api/own_nodes/6 to see nodes owned by user with uid=6
-/api/own_nodes/6?type=media_gallery to see nodes of media_gallery type.
-/api/own_nodes/ to see nodes owned by current user.

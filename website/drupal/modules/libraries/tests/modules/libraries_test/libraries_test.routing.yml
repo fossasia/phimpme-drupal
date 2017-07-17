@@ -1,0 +1,36 @@
+libraries_test_files:
+  path: '/libraries_test/files'
+  defaults:
+    _controller: Drupal\libraries_test\Controller\ExampleController::files
+  requirements:
+    _access: 'TRUE'
+libraries_test_integration_files:
+  path: '/libraries_test/integration_files'
+  defaults:
+    _controller: Drupal\libraries_test\Controller\ExampleController::integration
+  requirements:
+    _access: 'TRUE'
+libraries_test_versions:
+  path: '/libraries_test/versions'
+  defaults:
+    _controller: Drupal\libraries_test\Controller\ExampleController::versions
+  requirements:
+    _access: 'TRUE'
+libraries_test_variant:
+  path: '/libraries_test/variant'
+  defaults:
+    _controller: Drupal\libraries_test\Controller\ExampleController::variant
+  requirements:
+    _access: 'TRUE'
+libraries_test_versions_and_variants:
+  path: '/libraries_test/versions_and_variants'
+  defaults:
+    _controller: Drupal\libraries_test\Controller\ExampleController::versionsAndVariants
+  requirements:
+    _access: 'TRUE'
+libraries_test_cache:
+  path: '/libraries_test/cache'
+  defaults:
+    _controller: Drupal\libraries_test\Controller\ExampleController::cache
+  requirements:
+    _access: 'TRUE'

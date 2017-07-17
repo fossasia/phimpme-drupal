@@ -1,0 +1,14 @@
+id: system_maintenance
+label: Maintenance page configuration
+migration_tags:
+  - Drupal 6
+  - Drupal 7
+source:
+  plugin: variable
+  variables:
+    - site_offline_message
+process:
+  message: site_offline_message
+destination:
+  plugin: config
+  config_name: system.maintenance

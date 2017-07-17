@@ -1,0 +1,15 @@
+name: Services
+type: module
+description: A standardized solution of integrating external applications with Drupal.
+# core: 8.x
+package: Services
+dependencies:
+  - ctools
+  - serialization
+
+
+# Information added by Drupal.org packaging script on 2017-05-25
+version: '8.x-4.0-beta4'
+core: '8.x'
+project: 'services'
+datestamp: 1495725860

@@ -1,0 +1,12 @@
+name: 'Theme test with valid base theme but no grandparent base theme'
+type: theme
+description: 'Test theme which has a non-existent base theme in the base chain.'
+# version: VERSION
+# core: 8.x
+base theme: test_invalid_basetheme
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

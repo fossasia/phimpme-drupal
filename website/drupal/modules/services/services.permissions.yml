@@ -1,0 +1,9 @@
+manage services:
+  title: 'Manage services'
+  description: 'Allows configuring service endpoints.'
+services view form display access:
+  title: 'View Form Display access'
+  description: 'Allows access to view form display config entity via services'
+services update form display access:
+  title: 'Update Form Display access'
+  description: 'Allows access to update form display config entity via services'

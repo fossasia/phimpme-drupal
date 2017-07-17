@@ -1,0 +1,13 @@
+name: Testing
+type: module
+description: 'Provides a framework for unit and functional testing.'
+package: Core
+# version: VERSION
+# core: 8.x
+configure: simpletest.settings
+
+# Information added by Drupal.org packaging script on 2017-06-07
+version: '8.3.3'
+core: '8.x'
+project: 'drupal'
+datestamp: 1496858154

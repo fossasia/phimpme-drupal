@@ -1,0 +1,14 @@
+{% if trail %}
+<div class="wizard-trail">
+    {% for key, value in trail %}
+        {% if key is same as(step) %}
+            <strong>{{ value }}</strong>
+        {% else %}
+            {{ value }}
+        {% endif %}
+        {% if value is not same as(trail|last) %}
+            {{ divider }}
+        {% endif %}
+    {% endfor %}
+</div>
+{% endif %}

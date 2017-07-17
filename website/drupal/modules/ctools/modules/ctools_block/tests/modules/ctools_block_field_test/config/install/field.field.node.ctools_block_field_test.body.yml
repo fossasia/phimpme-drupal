@@ -1,0 +1,23 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.body
+    - node.type.ctools_block_field_test
+  module:
+    - text
+_core:
+  default_config_hash: fzUnwtwftRsgKExjpF6XdMqbUzP16ytkjQniBZl1Hqg
+id: node.ctools_block_field_test.body
+field_name: body
+entity_type: node
+bundle: ctools_block_field_test
+label: Body
+description: ''
+required: false
+translatable: true
+default_value: {  }
+default_value_callback: ''
+settings:
+  display_summary: true
+field_type: text_with_summary

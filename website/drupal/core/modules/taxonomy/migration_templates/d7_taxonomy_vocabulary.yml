@@ -1,0 +1,24 @@
+id: d7_taxonomy_vocabulary
+label: Taxonomy vocabularies
+migration_tags:
+  - Drupal 7
+source:
+  plugin: d7_taxonomy_vocabulary
+process:
+  vid:
+    -
+      plugin: machine_name
+      source: name
+    -
+      plugin: make_unique_entity_field
+      entity_type: taxonomy_vocabulary
+      field: vid
+      length: 32
+      migrated: true
+  label: name
+  name: name
+  description: description
+  hierarchy: hierarchy
+  weight: weight
+destination:
+  plugin: entity:taxonomy_vocabulary

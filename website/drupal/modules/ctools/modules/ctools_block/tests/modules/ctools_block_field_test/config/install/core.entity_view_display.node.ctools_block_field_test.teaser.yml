@@ -1,0 +1,27 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - core.entity_view_mode.node.teaser
+    - field.field.node.ctools_block_field_test.body
+    - node.type.ctools_block_field_test
+  module:
+    - text
+    - user
+_core:
+  default_config_hash: gQV5baI7pCIOBUtLkbJ1c2WJwM8CdlKiKOtLLIWnfy0
+id: node.ctools_block_field_test.teaser
+targetEntityType: node
+bundle: ctools_block_field_test
+mode: teaser
+content:
+  body:
+    label: hidden
+    type: text_summary_or_trimmed
+    weight: 101
+    settings:
+      trim_length: 600
+    third_party_settings: {  }
+  links:
+    weight: 100
+hidden: {  }
